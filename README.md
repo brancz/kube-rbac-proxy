@@ -55,6 +55,14 @@ On an incoming request, kube-rbac-proxy first figures out which user is performi
 
 Once a user has been authenticated, again the `authentication.k8s.io` is used to perform a `SubjectAccessReview`, in order to authorize the respective request, to ensure the authenticated user has the required RBAC roles.
 
+## Why are NetworkPolicies not enough?
+
+There are a couple of reasons why the existance of NetworkPolicies may not cover the same use case(s):
+
+* NetworkPolicies are not available in all providers, installers and distros.
+* NetworkPolicies do not apply to Pods with HostNetworking enabled, the use case I created this project with the Prometheus node-exporter requires this.
+* Once TLS/OIDC is supported, the kube-rbac-proxy can be used to perform AuthN/AuthZ on users.
+
 ## Differentiation to [Envoy](https://www.envoyproxy.io/)/[Istio](https://istio.io/)
 
 This projects is not intended to compete with Envoy or IstioMesh. Although on the surface they seem similar, the goals and usage complement each other. It's perfectly ok to use Envoy as the ingress point of traffic of a Pod, which then forwards traffic to the kube-rbac-proxy, which in turn then proxies to the actually serving application.
