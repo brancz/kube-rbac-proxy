@@ -35,11 +35,13 @@ test:
 	@go test -i $(PKGS)
 
 generate: embedmd
+	@echo ">> generating examples"
+	@./scripts/generate-examples.sh
 	@echo ">> generating docs"
 	@./scripts/generate-help-txt.sh
-	@$(GOPATH)/bin/embedmd -w `find ./ -name "*.md"`
+	@$(GOPATH)/bin/embedmd -w `find ./ -path ./vendor -prune -o -name "*.md" -print`
 
 embedmd:
 	@go get github.com/campoy/embedmd
 
-.PHONY: all check-license build crossbuild compile test
+.PHONY: all check-license crossbuild build container curl-container test generate embedmd
