@@ -74,5 +74,4 @@ Additionally, to my knowledge Envoy neither has nor plans Kubernetes specific RB
 PR are more than welcome!
 
 * Tests
-* TLS support
 * OIDC support

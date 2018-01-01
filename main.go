@@ -37,10 +37,17 @@ import (
 )
 
 type config struct {
-	listenAddress          string
+	insecureListenAddress  string
+	secureListenAddress    string
 	upstream               string
 	resourceAttributesFile string
 	auth                   AuthConfig
+	tls                    tlsConfig
+}
+
+type tlsConfig struct {
+	certFile string
+	keyFile  string
 }
 
 type AuthInterface interface {
@@ -64,9 +71,14 @@ func main() {
 	flagset.AddGoFlagSet(stdflag.CommandLine)
 
 	// kube-rbac-proxy flags
-	flagset.StringVar(&cfg.listenAddress, "listen-address", ":8080", "The address the kube-rbac-proxy HTTP server should listen on.")
+	flagset.StringVar(&cfg.insecureListenAddress, "insecure-listen-address", "", "The address the kube-rbac-proxy HTTP server should listen on.")
+	flagset.StringVar(&cfg.secureListenAddress, "secure-listen-address", "", "The address the kube-rbac-proxy HTTPs server should listen on.")
 	flagset.StringVar(&cfg.upstream, "upstream", "", "The upstream URL to proxy to once requests have successfully been authenticated and authorized.")
 	flagset.StringVar(&cfg.resourceAttributesFile, "resource-attributes-file", "", "File spec of attributes-record to use for SubjectAccessReview. If unspecified, requests will attempted to be verified through non-resource-url attributes in the SubjectAccessReview.")
+
+	// TLS flags
+	flagset.StringVar(&cfg.tls.certFile, "tls-cert-file", "server.crt", "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)")
+	flagset.StringVar(&cfg.tls.keyFile, "tls-private-key-file", "server.key", "File containing the default x509 private key matching --tls-cert-file.")
 
 	// Auth flags
 	flagset.StringVar(&cfg.auth.Authentication.X509.ClientCAFile, "client-ca-file", "", "If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.")
@@ -106,7 +118,6 @@ func main() {
 
 	proxy := httputil.NewSingleHostReverseProxy(upstreamURL)
 	mux := http.NewServeMux()
-	l, err := net.Listen("tcp", cfg.listenAddress)
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ok := AuthRequest(auth, w, req)
 		if !ok {
@@ -117,7 +128,22 @@ func main() {
 	}))
 
 	srv := &http.Server{Handler: mux}
-	go srv.Serve(l)
+
+	if cfg.secureListenAddress != "" {
+		l, err := net.Listen("tcp", cfg.secureListenAddress)
+		if err != nil {
+			glog.Fatalf("Failed listen on secure address: %v", err)
+		}
+		go srv.ServeTLS(l, cfg.tls.certFile, cfg.tls.keyFile)
+	}
+
+	if cfg.insecureListenAddress != "" {
+		l, err := net.Listen("tcp", cfg.insecureListenAddress)
+		if err != nil {
+			glog.Fatalf("Failed listen on insecure address: %v", err)
+		}
+		go srv.Serve(l)
+	}
 
 	term := make(chan os.Signal)
 	signal.Notify(term, os.Interrupt, syscall.SIGTERM)

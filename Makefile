@@ -7,6 +7,7 @@ OUT_DIR=_output
 BIN?=kube-rbac-proxy
 VERSION?=$(shell cat VERSION)
 PKGS=$(shell go list ./... | grep -v /vendor/)
+DOCKER_REPO=quay.io/brancz/kube-rbac-proxy
 
 check-license:
 	@echo ">> checking license headers"
@@ -24,7 +25,7 @@ build:
 	@CGO_ENABLED=0 go build -i --installsuffix cgo -o $(OUTPUT) $(GITHUB_URL)
 
 container: build
-	docker build -t quay.io/brancz/kube-rbac-proxy:v0.1.0 .
+	docker build -t $(DOCKER_REPO):$(VERSION) .
 
 curl-container:
 	docker build -f ./examples/example-client/Dockerfile -t quay.io/brancz/krp-curl:v0.0.1 .
