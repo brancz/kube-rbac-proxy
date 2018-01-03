@@ -35,8 +35,8 @@ Usage of _output/linux/amd64/kube-rbac-proxy:
       --resource-attributes-file string   File spec of attributes-record to use for SubjectAccessReview. If unspecified, requests will attempted to be verified through non-resource-url attributes in the SubjectAccessReview.
       --secure-listen-address string      The address the kube-rbac-proxy HTTPs server should listen on.
       --stderrthreshold severity          logs at or above this threshold go to stderr (default 2)
-      --tls-cert-file string              File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert) (default "server.crt")
-      --tls-private-key-file string       File containing the default x509 private key matching --tls-cert-file. (default "server.key")
+      --tls-cert-file string              File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)
+      --tls-private-key-file string       File containing the default x509 private key matching --tls-cert-file.
       --upstream string                   The upstream URL to proxy to once requests have successfully been authenticated and authorized.
   -v, --v Level                           log level for V logs
       --vmodule moduleSpec                comma-separated list of pattern=N settings for file-filtered logging

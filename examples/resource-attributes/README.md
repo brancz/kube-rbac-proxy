@@ -56,9 +56,9 @@ metadata:
   name: kube-rbac-proxy
 spec:
   ports:
-  - name: http
-    port: 8080
-    targetPort: http
+  - name: https
+    port: 8443
+    targetPort: https
   selector:
     app: kube-rbac-proxy
 ---
@@ -90,14 +90,14 @@ spec:
       - name: kube-rbac-proxy
         image: quay.io/brancz/kube-rbac-proxy:v0.2.0
         args:
-        - "--insecure-listen-address=0.0.0.0:8080"
+        - "--secure-listen-address=0.0.0.0:8443"
         - "--upstream=http://127.0.0.1:8081/"
         - "--resource-attributes-file=/etc/kube-rbac-proxy/resource-attributes.yaml"
         - "--logtostderr=true"
         - "--v=10"
         ports:
-        - containerPort: 8080
-          name: http
+        - containerPort: 8443
+          name: https
         volumeMounts:
         - name: config
           mountPath: /etc/kube-rbac-proxy

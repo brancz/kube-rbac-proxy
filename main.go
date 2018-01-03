@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"crypto/tls"
 	stdflag "flag"
 	"io/ioutil"
 	"net"
@@ -34,6 +35,7 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	certutil "k8s.io/client-go/util/cert"
 )
 
 type config struct {
@@ -77,8 +79,8 @@ func main() {
 	flagset.StringVar(&cfg.resourceAttributesFile, "resource-attributes-file", "", "File spec of attributes-record to use for SubjectAccessReview. If unspecified, requests will attempted to be verified through non-resource-url attributes in the SubjectAccessReview.")
 
 	// TLS flags
-	flagset.StringVar(&cfg.tls.certFile, "tls-cert-file", "server.crt", "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)")
-	flagset.StringVar(&cfg.tls.keyFile, "tls-private-key-file", "server.key", "File containing the default x509 private key matching --tls-cert-file.")
+	flagset.StringVar(&cfg.tls.certFile, "tls-cert-file", "", "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)")
+	flagset.StringVar(&cfg.tls.keyFile, "tls-private-key-file", "", "File containing the default x509 private key matching --tls-cert-file.")
 
 	// Auth flags
 	flagset.StringVar(&cfg.auth.Authentication.X509.ClientCAFile, "client-ca-file", "", "If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.")
@@ -130,18 +132,36 @@ func main() {
 	srv := &http.Server{Handler: mux}
 
 	if cfg.secureListenAddress != "" {
+		if cfg.tls.certFile == "" && cfg.tls.keyFile == "" {
+			glog.Info("Generating self signed cert as no cert is provided")
+			certBytes, keyBytes, err := certutil.GenerateSelfSignedCertKey("", nil, nil)
+			if err != nil {
+				glog.Fatalf("Failed to generate self signed cert and key: %v", err)
+			}
+			cert, err := tls.X509KeyPair(certBytes, keyBytes)
+			if err != nil {
+				glog.Fatalf("Failed to load generated self signed cert and key: %v", err)
+			}
+
+			srv.TLSConfig = &tls.Config{
+				Certificates: []tls.Certificate{cert},
+			}
+		}
+
 		l, err := net.Listen("tcp", cfg.secureListenAddress)
 		if err != nil {
-			glog.Fatalf("Failed listen on secure address: %v", err)
+			glog.Fatalf("Failed to listen on secure address: %v", err)
 		}
+		glog.Infof("Listening securely on %v", cfg.secureListenAddress)
 		go srv.ServeTLS(l, cfg.tls.certFile, cfg.tls.keyFile)
 	}
 
 	if cfg.insecureListenAddress != "" {
 		l, err := net.Listen("tcp", cfg.insecureListenAddress)
 		if err != nil {
-			glog.Fatalf("Failed listen on insecure address: %v", err)
+			glog.Fatalf("Failed to listen on insecure address: %v", err)
 		}
+		glog.Infof("Listening insecurely on %v", cfg.insecureListenAddress)
 		go srv.Serve(l)
 	}
 
