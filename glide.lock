@@ -1,5 +1,5 @@
-hash: 605eb0d702df8ee472595f04971f3b7c4d2b38b429af436a1fb8807fec6934cf
-updated: 2017-12-17T19:05:38.244868312+01:00
+hash: d144f8ff40f8993aa1deb5cb5448bb9ad8c4185c58235a7bf0d0ab54f1a845a4
+updated: 2018-01-12T17:30:18.980888137+09:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -59,6 +59,8 @@ imports:
   version: a0d98a5f288019575c6d1f4bb1573fef2d1fcdc4
   subpackages:
   - simplelru
+- name: github.com/hkwi/h2c
+  version: 76facb310bcf2b6ab2fd1abc04990a2ba67515e6
 - name: github.com/howeyc/gopass
   version: bf9dde6d0d2c004a008c27aaee91170c786f6db8
 - name: github.com/imdario/mergo
@@ -115,15 +117,10 @@ imports:
 - name: golang.org/x/net
   version: 1c05540f6879653db88113bc4a2b70aec4bd491f
   subpackages:
-  - context
-  - html
-  - html/atom
   - http2
   - http2/hpack
   - idna
-  - internal/timeseries
   - lex/httplex
-  - trace
   - websocket
 - name: golang.org/x/sys
   version: 7ddbeae9ae08c6a06a59597f0c9edbc5ff2444ce
