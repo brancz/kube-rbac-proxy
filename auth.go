@@ -209,6 +209,8 @@ type AuthHandler interface {
 	Handle(w http.ResponseWriter, req *http.Request) bool
 }
 
+// Handle authenticates the client and authorizes the request.
+// If the authn fails, a 401 error is returned. If the authz fails, a 403 error is returned
 func (h *kubeRBACProxyAuth) Handle(w http.ResponseWriter, req *http.Request) bool {
 	// Authenticate
 	u, ok, err := h.AuthenticateRequest(req)
