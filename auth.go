@@ -84,14 +84,16 @@ type kubeRBACProxyAuth struct {
 	authorizer.RequestAttributesGetter
 	// authorizer determines whether a given authorization.Attributes is allowed
 	authorizer.Authorizer
+	// config for kube-rbac-proxy
+	Config AuthConfig
 }
 
-func newKubeRBACProxyAuth(authenticator authenticator.Request, authorizer authorizer.Authorizer, authzConfig *AuthzConfig) AuthInterface {
-	return &kubeRBACProxyAuth{authenticator, newKubeRBACProxyAuthorizerAttributesGetter(authzConfig), authorizer}
+func newKubeRBACProxyAuth(authenticator authenticator.Request, authorizer authorizer.Authorizer, authConfig AuthConfig) AuthInterface {
+	return &kubeRBACProxyAuth{authenticator, newKubeRBACProxyAuthorizerAttributesGetter(authConfig.Authorization), authorizer, authConfig}
 }
 
 // BuildAuthHandler creates an authenticator, an authorizer, and a matching authorizer attributes getter compatible with the kube-rbac-proxy
-func BuildAuthHandler(client clientset.Interface, config AuthConfig) (*Handler, error) {
+func BuildAuthHandler(client clientset.Interface, config AuthConfig) (AuthInterface, error) {
 	// Get clients, if provided
 	var (
 		tokenClient authenticationclient.TokenReviewInterface
@@ -112,10 +114,7 @@ func BuildAuthHandler(client clientset.Interface, config AuthConfig) (*Handler, 
 		return nil, err
 	}
 
-	return &Handler{
-		newKubeRBACProxyAuth(authenticator, authorizer, config.Authorization),
-		config,
-	}, nil
+	return newKubeRBACProxyAuth(authenticator, authorizer, config), nil
 }
 
 // buildAuthn creates an authenticator compatible with the kubelet's needs
@@ -206,12 +205,11 @@ func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http
 	return attrs
 }
 
-type Handler struct {
-	AuthInterface
-	Config AuthConfig
+type Handler interface {
+	Handle(w http.ResponseWriter, req *http.Request) bool
 }
 
-func (h *Handler) Handle(w http.ResponseWriter, req *http.Request) bool {
+func (h *kubeRBACProxyAuth) Handle(w http.ResponseWriter, req *http.Request) bool {
 	// Authenticate
 	u, ok, err := h.AuthenticateRequest(req)
 	if err != nil {
