@@ -89,9 +89,10 @@ func main() {
 
 	// Auth flags
 	flagset.StringVar(&cfg.auth.Authentication.X509.ClientCAFile, "client-ca-file", "", "If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.")
-	flagset.StringVar(&cfg.auth.Authentication.Header.UserFieldName, "user-header-field-name", "x-remote-user", "The name of the field inside a http(2) request header to tell the upstream server about the user's name")
-	flagset.StringVar(&cfg.auth.Authentication.Header.GroupsFieldName, "groups-header-field-name", "x-remote-groups", "The name of the field inside a http(2) request header to tell the upstream server about the user's groups")
-	flagset.StringVar(&cfg.auth.Authentication.Header.GroupSeparator, "groups-header-field-separator", "|", "The separator string used for concatenating multiple group names in a groups header field's value")
+	flagset.BoolVar(&cfg.auth.Authentication.Header.Enabled, "auth-header-fields-enabled", false, "When set to true, kube-rbac-proxy adds auth-related fields to the headers of http requests sent to the upstream")
+	flagset.StringVar(&cfg.auth.Authentication.Header.UserFieldName, "auth-header-user-field-name", "x-remote-user", "The name of the field inside a http(2) request header to tell the upstream server about the user's name")
+	flagset.StringVar(&cfg.auth.Authentication.Header.GroupsFieldName, "auth-header-groups-field-name", "x-remote-groups", "The name of the field inside a http(2) request header to tell the upstream server about the user's groups")
+	flagset.StringVar(&cfg.auth.Authentication.Header.GroupSeparator, "auth-header-groups-field-separator", "|", "The separator string used for concatenating multiple group names in a groups header field's value")
 	flagset.Parse(os.Args[1:])
 
 	upstreamURL, err := url.Parse(cfg.upstream)

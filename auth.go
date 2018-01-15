@@ -50,6 +50,8 @@ type AuthzConfig struct {
 }
 
 type AuthnHeaderConfig struct {
+	// When set to true, kube-rbac-proxy adds auth-related fields to the headers of http requests sent to the upstream
+	Enabled bool
 	// Corresponds to the name of the field inside a http(2) request header
 	// to tell the upstream server about the user's name
 	UserFieldName string
@@ -240,11 +242,13 @@ func (h *Handler) Handle(w http.ResponseWriter, req *http.Request) bool {
 		return false
 	}
 
-	// Seemingly well-known headers to tell the upstream about user's identity
-	// so that the upstream can achieve the original goal of delegating RBAC authn/authz to kube-rbac-proxy
-	headerCfg := h.Config.Authentication.Header
-	req.Header.Set(headerCfg.UserFieldName, u.GetName())
-	req.Header.Set(headerCfg.GroupsFieldName, strings.Join(u.GetGroups(), headerCfg.GroupSeparator))
+	if h.Config.Authentication.Header.Enabled {
+		// Seemingly well-known headers to tell the upstream about user's identity
+		// so that the upstream can achieve the original goal of delegating RBAC authn/authz to kube-rbac-proxy
+		headerCfg := h.Config.Authentication.Header
+		req.Header.Set(headerCfg.UserFieldName, u.GetName())
+		req.Header.Set(headerCfg.GroupsFieldName, strings.Join(u.GetGroups(), headerCfg.GroupSeparator))
+	}
 
 	return true
 }
