@@ -205,7 +205,7 @@ func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http
 	return attrs
 }
 
-type Handler interface {
+type AuthHandler interface {
 	Handle(w http.ResponseWriter, req *http.Request) bool
 }
 

@@ -60,7 +60,7 @@ type AuthInterface interface {
 	authorizer.RequestAttributesGetter
 	authorizer.Authorizer
 	// handler for authenticating/authorizing http requests
-	Handler
+	AuthHandler
 }
 
 func main() {
