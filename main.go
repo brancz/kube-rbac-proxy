@@ -204,7 +204,7 @@ func main() {
 		// which would handle HTTP UPGRADE from http1.1 to http/2, especially in case
 		// what you wanted kube-rbac-proxy to authn/authz was gRPC over h2c calls.
 		//
-		// // Note that golang's http server requires a client(including gRPC) to send HTTP Upgrade req to
+		// Note that golang's http server requires a client(including gRPC) to send HTTP Upgrade req to
 		// property start http/2.
 		//
 		// but it isn't straight-forward to understand.
