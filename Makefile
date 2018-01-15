@@ -7,7 +7,7 @@ OUT_DIR=_output
 BIN?=kube-rbac-proxy
 VERSION?=$(shell cat VERSION)
 PKGS=$(shell go list ./... | grep -v /vendor/)
-DOCKER_REPO=quay.io/brancz/kube-rbac-proxy
+DOCKER_REPO?=quay.io/brancz/kube-rbac-proxy
 
 check-license:
 	@echo ">> checking license headers"
@@ -29,6 +29,9 @@ container: build
 
 curl-container:
 	docker build -f ./examples/example-client/Dockerfile -t quay.io/brancz/krp-curl:v0.0.1 .
+
+grpcc-container:
+	docker build -f ./examples/grpcc/Dockerfile -t mumoshu/grpcc:v0.0.1 .
 
 test:
 	@echo ">> running all tests"

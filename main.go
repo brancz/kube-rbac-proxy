@@ -36,12 +36,15 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	certutil "k8s.io/client-go/util/cert"
+	"github.com/hkwi/h2c"
+	"golang.org/x/net/http2"
 )
 
 type config struct {
 	insecureListenAddress  string
 	secureListenAddress    string
 	upstream               string
+	upstreamForceH2C       bool
 	resourceAttributesFile string
 	auth                   AuthConfig
 	tls                    tlsConfig
@@ -56,6 +59,8 @@ type AuthInterface interface {
 	authenticator.Request
 	authorizer.RequestAttributesGetter
 	authorizer.Authorizer
+	// handler for authenticating/authorizing http requests
+	AuthHandler
 }
 
 func main() {
@@ -63,6 +68,7 @@ func main() {
 		auth: AuthConfig{
 			Authentication: &AuthnConfig{
 				X509: &X509Config{},
+				Header: &AuthnHeaderConfig{},
 			},
 			Authorization: &AuthzConfig{},
 		},
@@ -76,6 +82,7 @@ func main() {
 	flagset.StringVar(&cfg.insecureListenAddress, "insecure-listen-address", "", "The address the kube-rbac-proxy HTTP server should listen on.")
 	flagset.StringVar(&cfg.secureListenAddress, "secure-listen-address", "", "The address the kube-rbac-proxy HTTPs server should listen on.")
 	flagset.StringVar(&cfg.upstream, "upstream", "", "The upstream URL to proxy to once requests have successfully been authenticated and authorized.")
+	flagset.BoolVar(&cfg.upstreamForceH2C, "upstream-force-h2c", false, "Force h2c to communiate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only")
 	flagset.StringVar(&cfg.resourceAttributesFile, "resource-attributes-file", "", "File spec of attributes-record to use for SubjectAccessReview. If unspecified, requests will attempted to be verified through non-resource-url attributes in the SubjectAccessReview.")
 
 	// TLS flags
@@ -84,6 +91,10 @@ func main() {
 
 	// Auth flags
 	flagset.StringVar(&cfg.auth.Authentication.X509.ClientCAFile, "client-ca-file", "", "If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.")
+	flagset.BoolVar(&cfg.auth.Authentication.Header.Enabled, "auth-header-fields-enabled", false, "When set to true, kube-rbac-proxy adds auth-related fields to the headers of http requests sent to the upstream")
+	flagset.StringVar(&cfg.auth.Authentication.Header.UserFieldName, "auth-header-user-field-name", "x-remote-user", "The name of the field inside a http(2) request header to tell the upstream server about the user's name")
+	flagset.StringVar(&cfg.auth.Authentication.Header.GroupsFieldName, "auth-header-groups-field-name", "x-remote-groups", "The name of the field inside a http(2) request header to tell the upstream server about the user's groups")
+	flagset.StringVar(&cfg.auth.Authentication.Header.GroupSeparator, "auth-header-groups-field-separator", "|", "The separator string used for concatenating multiple group names in a groups header field's value")
 	flagset.Parse(os.Args[1:])
 
 	upstreamURL, err := url.Parse(cfg.upstream)
@@ -113,7 +124,7 @@ func main() {
 		}
 	}
 
-	auth, err := BuildAuth(kubeClient, cfg.auth)
+	auth, err := BuildAuthHandler(kubeClient, cfg.auth)
 	if err != nil {
 		glog.Fatalf("Failed to create auth: %v", err)
 	}
@@ -121,7 +132,7 @@ func main() {
 	proxy := httputil.NewSingleHostReverseProxy(upstreamURL)
 	mux := http.NewServeMux()
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		ok := AuthRequest(auth, w, req)
+		ok := auth.Handle(w, req)
 		if !ok {
 			return
 		}
@@ -129,9 +140,13 @@ func main() {
 		proxy.ServeHTTP(w, req)
 	}))
 
-	srv := &http.Server{Handler: mux}
-
 	if cfg.secureListenAddress != "" {
+		srv := &http.Server{Handler: mux}
+
+		// To enable http/2
+		// See net/http.Server.shouldConfigureHTTP2ForServe for more context
+		srv.TLSConfig.NextProtos = append(srv.TLSConfig.NextProtos, "h2")
+
 		if cfg.tls.certFile == "" && cfg.tls.keyFile == "" {
 			glog.Info("Generating self signed cert as no cert is provided")
 			certBytes, keyBytes, err := certutil.GenerateSelfSignedCertKey("", nil, nil)
@@ -157,6 +172,55 @@ func main() {
 	}
 
 	if cfg.insecureListenAddress != "" {
+		if cfg.upstreamForceH2C {
+			// Force http/2 for connections to the upstream i.e. do not start with HTTP1.1 UPGRADE req to
+			// initialize http/2 session.
+			// See https://github.com/golang/go/issues/14141#issuecomment-219212895 for more context
+			proxy.Transport = &http2.Transport{
+				// Allow http schema. This doesn't automatically disable TLS
+				AllowHTTP: true,
+				// Do disable TLS.
+				// In combination with the schema check above. We could enforce h2c against the upstream server
+				DialTLS: func(netw, addr string, cfg *tls.Config) (net.Conn, error) {
+					return net.Dial(netw, addr)
+				},
+			}
+		}
+
+		// Background:
+		//
+		// golang's http2 server doesn't support h2c
+		// https://github.com/golang/go/issues/16696
+		//
+		//
+		// Action:
+		//
+		// Use hkwi/h2c so that you can properly handle HTTP Upgrade requests over plain TCP,
+		// which is one of consequences for a h2c support.
+		//
+		// See https://github.com/golang/go/issues/14141 for more context.
+		//
+		// Possible alternative:
+		//
+		// We could potentially use grpc-go server's HTTP handler support
+		// which would handle HTTP UPGRADE from http1.1 to http/2, especially in case
+		// what you wanted kube-rbac-proxy to authn/authz was gRPC over h2c calls.
+		//
+		// Note that golang's http server requires a client(including gRPC) to send HTTP Upgrade req to
+		// property start http/2.
+		//
+		// but it isn't straight-forward to understand.
+		// Also note that at time of writing this, grpc-go's server implementation still lacks
+		// a h2c support for communication against the upstream.
+		//
+		// See belows for more information:
+		// - https://github.com/grpc/grpc-go/pull/1406/files
+		// - https://github.com/grpc/grpc-go/issues/549#issuecomment-191458335
+		// - https://github.com/golang/go/issues/14141#issuecomment-176465220
+		h2cHandler := &h2c.Server{Handler: mux}
+
+		srv := &http.Server{Handler: h2cHandler}
+
 		l, err := net.Listen("tcp", cfg.insecureListenAddress)
 		if err != nil {
 			glog.Fatalf("Failed to listen on insecure address: %v", err)

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -40,11 +41,25 @@ type X509Config struct {
 }
 
 type AuthnConfig struct {
-	X509 *X509Config
+	X509   *X509Config
+	Header *AuthnHeaderConfig
 }
 
 type AuthzConfig struct {
 	ResourceAttributes *ResourceAttributes
+}
+
+type AuthnHeaderConfig struct {
+	// When set to true, kube-rbac-proxy adds auth-related fields to the headers of http requests sent to the upstream
+	Enabled bool
+	// Corresponds to the name of the field inside a http(2) request header
+	// to tell the upstream server about the user's name
+	UserFieldName string
+	// Corresponds to the name of the field inside a http(2) request header
+	// to tell the upstream server about the user's groups
+	GroupsFieldName string
+	// The separator string used for concatenating multiple group names in a groups header field's value
+	GroupSeparator string
 }
 
 type ResourceAttributes struct {
@@ -57,8 +72,8 @@ type ResourceAttributes struct {
 }
 
 type AuthConfig struct {
-	Authentication *AuthnConfig
-	Authorization  *AuthzConfig
+	Authentication    *AuthnConfig
+	Authorization     *AuthzConfig
 }
 
 // kubeRBACProxyAuth implements AuthInterface
@@ -69,14 +84,16 @@ type kubeRBACProxyAuth struct {
 	authorizer.RequestAttributesGetter
 	// authorizer determines whether a given authorization.Attributes is allowed
 	authorizer.Authorizer
+	// config for kube-rbac-proxy
+	Config AuthConfig
 }
 
-func newKubeRBACProxyAuth(authenticator authenticator.Request, authorizer authorizer.Authorizer, authzConfig *AuthzConfig) AuthInterface {
-	return &kubeRBACProxyAuth{authenticator, newKubeRBACProxyAuthorizerAttributesGetter(authzConfig), authorizer}
+func newKubeRBACProxyAuth(authenticator authenticator.Request, authorizer authorizer.Authorizer, authConfig AuthConfig) AuthInterface {
+	return &kubeRBACProxyAuth{authenticator, newKubeRBACProxyAuthorizerAttributesGetter(authConfig.Authorization), authorizer, authConfig}
 }
 
-// BuildAuth creates an authenticator, an authorizer, and a matching authorizer attributes getter compatible with the kube-rbac-proxy
-func BuildAuth(client clientset.Interface, config AuthConfig) (AuthInterface, error) {
+// BuildAuthHandler creates an authenticator, an authorizer, and a matching authorizer attributes getter compatible with the kube-rbac-proxy
+func BuildAuthHandler(client clientset.Interface, config AuthConfig) (AuthInterface, error) {
 	// Get clients, if provided
 	var (
 		tokenClient authenticationclient.TokenReviewInterface
@@ -97,7 +114,7 @@ func BuildAuth(client clientset.Interface, config AuthConfig) (AuthInterface, er
 		return nil, err
 	}
 
-	return newKubeRBACProxyAuth(authenticator, authorizer, config.Authorization), nil
+	return newKubeRBACProxyAuth(authenticator, authorizer, config), nil
 }
 
 // buildAuthn creates an authenticator compatible with the kubelet's needs
@@ -188,9 +205,15 @@ func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http
 	return attrs
 }
 
-func AuthRequest(auth AuthInterface, w http.ResponseWriter, req *http.Request) bool {
+type AuthHandler interface {
+	Handle(w http.ResponseWriter, req *http.Request) bool
+}
+
+// Handle authenticates the client and authorizes the request.
+// If the authn fails, a 401 error is returned. If the authz fails, a 403 error is returned
+func (h *kubeRBACProxyAuth) Handle(w http.ResponseWriter, req *http.Request) bool {
 	// Authenticate
-	u, ok, err := auth.AuthenticateRequest(req)
+	u, ok, err := h.AuthenticateRequest(req)
 	if err != nil {
 		glog.Errorf("Unable to authenticate the request due to an error: %v", err)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -202,10 +225,10 @@ func AuthRequest(auth AuthInterface, w http.ResponseWriter, req *http.Request) b
 	}
 
 	// Get authorization attributes
-	attrs := auth.GetRequestAttributes(u, req)
+	attrs := h.GetRequestAttributes(u, req)
 
 	// Authorize
-	authorized, _, err := auth.Authorize(attrs)
+	authorized, _, err := h.Authorize(attrs)
 	if err != nil {
 		msg := fmt.Sprintf("Authorization error (user=%s, verb=%s, resource=%s, subresource=%s)", u.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
 		glog.Errorf(msg, err)
@@ -217,6 +240,14 @@ func AuthRequest(auth AuthInterface, w http.ResponseWriter, req *http.Request) b
 		glog.V(2).Info(msg)
 		http.Error(w, msg, http.StatusForbidden)
 		return false
+	}
+
+	if h.Config.Authentication.Header.Enabled {
+		// Seemingly well-known headers to tell the upstream about user's identity
+		// so that the upstream can achieve the original goal of delegating RBAC authn/authz to kube-rbac-proxy
+		headerCfg := h.Config.Authentication.Header
+		req.Header.Set(headerCfg.UserFieldName, u.GetName())
+		req.Header.Set(headerCfg.GroupsFieldName, strings.Join(u.GetGroups(), headerCfg.GroupSeparator))
 	}
 
 	return true
