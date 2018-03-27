@@ -24,7 +24,7 @@ build:
 	@mkdir -p $(OUT_DIR)/$(GOOS)/$(GOARCH)
 	@CGO_ENABLED=0 go build -i --installsuffix cgo -o $(OUTPUT) $(GITHUB_URL)
 
-container: build
+container:
 	docker build -t $(DOCKER_REPO):$(VERSION) .
 
 curl-container:
