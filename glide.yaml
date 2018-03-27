@@ -6,14 +6,16 @@ import:
 - package: github.com/spf13/pflag
   version: ^1.0.0
 - package: k8s.io/apiserver
+  version: kubernetes-1.10.0
   subpackages:
   - pkg/authentication/authenticator
   - pkg/authentication/authenticatorfactory
   - pkg/authentication/user
   - pkg/authorization/authorizer
   - pkg/authorization/authorizerfactory
+  - pkg/util/flag
 - package: k8s.io/client-go
-  version: ^5.0.1
+  version: ^6.0.0
   subpackages:
   - kubernetes
   - kubernetes/typed/authentication/v1beta1
