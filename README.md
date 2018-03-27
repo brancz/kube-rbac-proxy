@@ -26,20 +26,27 @@ All command line flags:
 ```txt
 $ kube-rbac-proxy -h
 Usage of _output/linux/amd64/kube-rbac-proxy:
-      --alsologtostderr                   log to standard error as well as files
-      --client-ca-file string             If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.
-      --insecure-listen-address string    The address the kube-rbac-proxy HTTP server should listen on.
-      --log_backtrace_at traceLocation    when logging hits line file:N, emit a stack trace (default :0)
-      --log_dir string                    If non-empty, write log files in this directory
-      --logtostderr                       log to standard error instead of files
-      --resource-attributes-file string   File spec of attributes-record to use for SubjectAccessReview. If unspecified, requests will attempted to be verified through non-resource-url attributes in the SubjectAccessReview.
-      --secure-listen-address string      The address the kube-rbac-proxy HTTPs server should listen on.
-      --stderrthreshold severity          logs at or above this threshold go to stderr (default 2)
-      --tls-cert-file string              File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)
-      --tls-private-key-file string       File containing the default x509 private key matching --tls-cert-file.
-      --upstream string                   The upstream URL to proxy to once requests have successfully been authenticated and authorized.
-  -v, --v Level                           log level for V logs
-      --vmodule moduleSpec                comma-separated list of pattern=N settings for file-filtered logging
+      --alsologtostderr                             log to standard error as well as files
+      --auth-header-fields-enabled                  When set to true, kube-rbac-proxy adds auth-related fields to the headers of http requests sent to the upstream
+      --auth-header-groups-field-name string        The name of the field inside a http(2) request header to tell the upstream server about the user's groups (default "x-remote-groups")
+      --auth-header-groups-field-separator string   The separator string used for concatenating multiple group names in a groups header field's value (default "|")
+      --auth-header-user-field-name string          The name of the field inside a http(2) request header to tell the upstream server about the user's name (default "x-remote-user")
+      --client-ca-file string                       If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.
+      --insecure-listen-address string              The address the kube-rbac-proxy HTTP server should listen on.
+      --log_backtrace_at traceLocation              when logging hits line file:N, emit a stack trace (default :0)
+      --log_dir string                              If non-empty, write log files in this directory
+      --logtostderr                                 log to standard error instead of files
+      --resource-attributes-file string             File spec of attributes-record to use for SubjectAccessReview. If unspecified, requests will attempted to be verified through non-resource-url attributes in the SubjectAccessReview.
+      --secure-listen-address string                The address the kube-rbac-proxy HTTPs server should listen on.
+      --stderrthreshold severity                    logs at or above this threshold go to stderr (default 2)
+      --tls-cert-file string                        File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)
+      --tls-cipher-suites stringSlice               Comma-separated list of cipher suites for the server. Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants). If omitted, the default Go cipher suites will be used
+      --tls-min-version string                      Minimum TLS version supported. Value must match version names from https://golang.org/pkg/crypto/tls/#pkg-constants. (default "VersionTLS12")
+      --tls-private-key-file string                 File containing the default x509 private key matching --tls-cert-file.
+      --upstream string                             The upstream URL to proxy to once requests have successfully been authenticated and authorized.
+      --upstream-force-h2c                          Force h2c to communiate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only
+  -v, --v Level                                     log level for V logs
+      --vmodule moduleSpec                          comma-separated list of pattern=N settings for file-filtered logging
 ```
 
 ## Why?
