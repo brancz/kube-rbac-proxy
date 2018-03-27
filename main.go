@@ -19,6 +19,7 @@ package main
 import (
 	"crypto/tls"
 	stdflag "flag"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -51,8 +52,9 @@ type config struct {
 }
 
 type tlsConfig struct {
-	certFile string
-	keyFile  string
+	certFile   string
+	keyFile    string
+	minVersion string
 }
 
 type AuthInterface interface {
@@ -63,11 +65,24 @@ type AuthInterface interface {
 	AuthHandler
 }
 
+var versions = map[string]uint16{
+	"VersionTLS10": tls.VersionTLS10,
+	"VersionTLS11": tls.VersionTLS11,
+	"VersionTLS12": tls.VersionTLS12,
+}
+
+func tlsVersion(versionName string) (uint16, error) {
+	if version, ok := versions[versionName]; ok {
+		return version, nil
+	}
+	return 0, fmt.Errorf("unknown tls version %q", versionName)
+}
+
 func main() {
 	cfg := config{
 		auth: AuthConfig{
 			Authentication: &AuthnConfig{
-				X509: &X509Config{},
+				X509:   &X509Config{},
 				Header: &AuthnHeaderConfig{},
 			},
 			Authorization: &AuthzConfig{},
@@ -88,6 +103,7 @@ func main() {
 	// TLS flags
 	flagset.StringVar(&cfg.tls.certFile, "tls-cert-file", "", "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)")
 	flagset.StringVar(&cfg.tls.keyFile, "tls-private-key-file", "", "File containing the default x509 private key matching --tls-cert-file.")
+	flagset.StringVar(&cfg.tls.minVersion, "tls-min-version", "VersionTLS12", "Minimum TLS version supported. Value must match version names from https://golang.org/pkg/crypto/tls/#pkg-constants.")
 
 	// Auth flags
 	flagset.StringVar(&cfg.auth.Authentication.X509.ClientCAFile, "client-ca-file", "", "If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.")
@@ -158,8 +174,14 @@ func main() {
 				glog.Fatalf("Failed to load generated self signed cert and key: %v", err)
 			}
 
+			version, err := tlsVersion(cfg.tls.minVersion)
+			if err != nil {
+				glog.Fatalf("TLS version invalid: %v", err)
+			}
+
 			srv.TLSConfig = &tls.Config{
 				Certificates: []tls.Certificate{cert},
+				MinVersion:   version,
 			}
 		}
 
