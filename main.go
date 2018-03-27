@@ -162,10 +162,6 @@ func main() {
 	if cfg.secureListenAddress != "" {
 		srv := &http.Server{Handler: mux}
 
-		// To enable http/2
-		// See net/http.Server.shouldConfigureHTTP2ForServe for more context
-		srv.TLSConfig.NextProtos = append(srv.TLSConfig.NextProtos, "h2")
-
 		if cfg.tls.certFile == "" && cfg.tls.keyFile == "" {
 			glog.Info("Generating self signed cert as no cert is provided")
 			certBytes, keyBytes, err := certutil.GenerateSelfSignedCertKey("", nil, nil)
@@ -190,6 +186,9 @@ func main() {
 				CipherSuites: cipherSuiteIDs,
 				Certificates: []tls.Certificate{cert},
 				MinVersion:   version,
+				// To enable http/2
+				// See net/http.Server.shouldConfigureHTTP2ForServe for more context
+				NextProtos: []string{"h2"},
 			}
 		}
 
