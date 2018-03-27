@@ -72,8 +72,8 @@ type ResourceAttributes struct {
 }
 
 type AuthConfig struct {
-	Authentication    *AuthnConfig
-	Authorization     *AuthzConfig
+	Authentication *AuthnConfig
+	Authorization  *AuthzConfig
 }
 
 // kubeRBACProxyAuth implements AuthInterface
@@ -235,7 +235,7 @@ func (h *kubeRBACProxyAuth) Handle(w http.ResponseWriter, req *http.Request) boo
 		http.Error(w, msg, http.StatusInternalServerError)
 		return false
 	}
-	if !authorized {
+	if authorized != authorizer.DecisionAllow {
 		msg := fmt.Sprintf("Forbidden (user=%s, verb=%s, resource=%s, subresource=%s)", u.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
 		glog.V(2).Info(msg)
 		http.Error(w, msg, http.StatusForbidden)

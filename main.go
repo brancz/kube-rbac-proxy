@@ -31,14 +31,15 @@ import (
 
 	"github.com/ghodss/yaml"
 	"github.com/golang/glog"
+	"github.com/hkwi/h2c"
 	flag "github.com/spf13/pflag"
+	"golang.org/x/net/http2"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
+	k8sapiflag "k8s.io/apiserver/pkg/util/flag"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	certutil "k8s.io/client-go/util/cert"
-	"github.com/hkwi/h2c"
-	"golang.org/x/net/http2"
 )
 
 type config struct {
@@ -52,9 +53,10 @@ type config struct {
 }
 
 type tlsConfig struct {
-	certFile   string
-	keyFile    string
-	minVersion string
+	certFile     string
+	keyFile      string
+	minVersion   string
+	cipherSuites []string
 }
 
 type AuthInterface interface {
@@ -104,6 +106,7 @@ func main() {
 	flagset.StringVar(&cfg.tls.certFile, "tls-cert-file", "", "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)")
 	flagset.StringVar(&cfg.tls.keyFile, "tls-private-key-file", "", "File containing the default x509 private key matching --tls-cert-file.")
 	flagset.StringVar(&cfg.tls.minVersion, "tls-min-version", "VersionTLS12", "Minimum TLS version supported. Value must match version names from https://golang.org/pkg/crypto/tls/#pkg-constants.")
+	flagset.StringSliceVar(&cfg.tls.cipherSuites, "tls-cipher-suites", nil, "Comma-separated list of cipher suites for the server. Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants). If omitted, the default Go cipher suites will be used")
 
 	// Auth flags
 	flagset.StringVar(&cfg.auth.Authentication.X509.ClientCAFile, "client-ca-file", "", "If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.")
@@ -179,7 +182,12 @@ func main() {
 				glog.Fatalf("TLS version invalid: %v", err)
 			}
 
+			cipherSuiteIDs, err := k8sapiflag.TLSCipherSuites(cfg.tls.cipherSuites)
+			if err != nil {
+				glog.Fatalf("Failed to convert TLS cipher suite name to ID: %v", err)
+			}
 			srv.TLSConfig = &tls.Config{
+				CipherSuites: cipherSuiteIDs,
 				Certificates: []tls.Certificate{cert},
 				MinVersion:   version,
 			}
