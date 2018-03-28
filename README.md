@@ -65,6 +65,14 @@ On an incoming request, kube-rbac-proxy first figures out which user is performi
 
 Once a user has been authenticated, again the `authentication.k8s.io` is used to perform a `SubjectAccessReview`, in order to authorize the respective request, to ensure the authenticated user has the required RBAC roles.
 
+## Notes on ServiceAccount token security
+
+Note that when using tokens for authentication, the receiving side can use the token to impersonate the client. Only use token authentication, when the receiving side is already higher privileged or the token itself is super low privileged, such as when the only roles binded to it are for authorization purposes with this project. Passing around highly privileged tokens is a security risk, and is not recommended.
+
+This project was built to be used to protect metrics of cluster components. These cluster components are much higher privileged than the Prometheus Pod, so if those Pods were to use the token provided by Prometheus it would actually be lower privileged. It is not recommended to use this method for non infrastructure components.
+
+For better security properties use mTLS for authentication instead, and for user authentication, other methods have yet to be added.
+
 ## Why are NetworkPolicies not enough?
 
 There are a couple of reasons why the existance of NetworkPolicies may not cover the same use case(s):
