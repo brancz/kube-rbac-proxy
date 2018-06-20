@@ -22,7 +22,7 @@ build:
 	@$(eval OUTPUT=$(OUT_DIR)/$(GOOS)/$(GOARCH)/$(BIN))
 	@echo ">> building for $(GOOS)/$(GOARCH) to $(OUTPUT)"
 	@mkdir -p $(OUT_DIR)/$(GOOS)/$(GOARCH)
-	@CGO_ENABLED=0 go build -i --installsuffix cgo -o $(OUTPUT) $(GITHUB_URL)
+	@CGO_ENABLED=0 go build --installsuffix cgo -o $(OUTPUT) $(GITHUB_URL)
 
 container:
 	docker build -t $(DOCKER_REPO):$(VERSION) .
