@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package auth
 
 import (
 	"errors"
@@ -76,6 +76,48 @@ type AuthConfig struct {
 	Authorization  *AuthzConfig
 }
 
+func (c *AuthConfig) DeepCopy() *AuthConfig {
+	res := &AuthConfig{
+		Authentication: &AuthnConfig{},
+	}
+
+	if c.Authentication != nil {
+		res.Authentication = &AuthnConfig{}
+
+		if c.Authentication.X509 != nil {
+			res.Authentication.X509 = &X509Config{
+				ClientCAFile: c.Authentication.X509.ClientCAFile,
+			}
+		}
+
+		if c.Authentication.Header != nil {
+			res.Authentication.Header = &AuthnHeaderConfig{
+				Enabled:         c.Authentication.Header.Enabled,
+				UserFieldName:   c.Authentication.Header.UserFieldName,
+				GroupsFieldName: c.Authentication.Header.GroupsFieldName,
+				GroupSeparator:  c.Authentication.Header.GroupSeparator,
+			}
+		}
+	}
+
+	if c.Authorization != nil {
+		if c.Authorization.ResourceAttributes != nil {
+			res.Authorization = &AuthzConfig{
+				ResourceAttributes: &ResourceAttributes{
+					Namespace:   c.Authorization.ResourceAttributes.Namespace,
+					APIGroup:    c.Authorization.ResourceAttributes.APIGroup,
+					APIVersion:  c.Authorization.ResourceAttributes.APIVersion,
+					Resource:    c.Authorization.ResourceAttributes.Resource,
+					Subresource: c.Authorization.ResourceAttributes.Subresource,
+					Name:        c.Authorization.ResourceAttributes.Name,
+				},
+			}
+		}
+	}
+
+	return res
+}
+
 // kubeRBACProxyAuth implements AuthInterface
 type kubeRBACProxyAuth struct {
 	// authenticator identifies the user for requests to kube-rbac-proxy
@@ -85,15 +127,15 @@ type kubeRBACProxyAuth struct {
 	// authorizer determines whether a given authorization.Attributes is allowed
 	authorizer.Authorizer
 	// config for kube-rbac-proxy
-	Config AuthConfig
+	Config *AuthConfig
 }
 
-func newKubeRBACProxyAuth(authenticator authenticator.Request, authorizer authorizer.Authorizer, authConfig AuthConfig) AuthInterface {
+func newKubeRBACProxyAuth(authenticator authenticator.Request, authorizer authorizer.Authorizer, authConfig *AuthConfig) *kubeRBACProxyAuth {
 	return &kubeRBACProxyAuth{authenticator, newKubeRBACProxyAuthorizerAttributesGetter(authConfig.Authorization), authorizer, authConfig}
 }
 
 // BuildAuthHandler creates an authenticator, an authorizer, and a matching authorizer attributes getter compatible with the kube-rbac-proxy
-func BuildAuthHandler(client clientset.Interface, config AuthConfig) (AuthInterface, error) {
+func BuildAuthHandler(client clientset.Interface, config *AuthConfig) (*kubeRBACProxyAuth, error) {
 	// Get clients, if provided
 	var (
 		tokenClient authenticationclient.TokenReviewInterface

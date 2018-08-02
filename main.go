@@ -34,12 +34,12 @@ import (
 	"github.com/hkwi/h2c"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/net/http2"
-	"k8s.io/apiserver/pkg/authentication/authenticator"
-	"k8s.io/apiserver/pkg/authorization/authorizer"
 	k8sapiflag "k8s.io/apiserver/pkg/util/flag"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	certutil "k8s.io/client-go/util/cert"
+
+	"github.com/brancz/kube-rbac-proxy/auth"
 )
 
 type config struct {
@@ -48,7 +48,7 @@ type config struct {
 	upstream               string
 	upstreamForceH2C       bool
 	resourceAttributesFile string
-	auth                   AuthConfig
+	auth                   auth.AuthConfig
 	tls                    tlsConfig
 }
 
@@ -57,14 +57,6 @@ type tlsConfig struct {
 	keyFile      string
 	minVersion   string
 	cipherSuites []string
-}
-
-type AuthInterface interface {
-	authenticator.Request
-	authorizer.RequestAttributesGetter
-	authorizer.Authorizer
-	// handler for authenticating/authorizing http requests
-	AuthHandler
 }
 
 var versions = map[string]uint16{
@@ -82,12 +74,12 @@ func tlsVersion(versionName string) (uint16, error) {
 
 func main() {
 	cfg := config{
-		auth: AuthConfig{
-			Authentication: &AuthnConfig{
-				X509:   &X509Config{},
-				Header: &AuthnHeaderConfig{},
+		auth: auth.AuthConfig{
+			Authentication: &auth.AuthnConfig{
+				X509:   &auth.X509Config{},
+				Header: &auth.AuthnHeaderConfig{},
 			},
-			Authorization: &AuthzConfig{},
+			Authorization: &auth.AuthzConfig{},
 		},
 	}
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -143,7 +135,7 @@ func main() {
 		}
 	}
 
-	auth, err := BuildAuthHandler(kubeClient, cfg.auth)
+	auth, err := auth.BuildAuthHandler(kubeClient, &cfg.auth)
 	if err != nil {
 		glog.Fatalf("Failed to create auth: %v", err)
 	}
