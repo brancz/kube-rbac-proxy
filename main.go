@@ -20,7 +20,6 @@ import (
 	"crypto/tls"
 	stdflag "flag"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -29,7 +28,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/ghodss/yaml"
+	"k8s.io/apiserver/pkg/authentication/authenticator"
+
+	"github.com/brancz/kube-rbac-proxy/pkg/authn"
+	"github.com/brancz/kube-rbac-proxy/pkg/authz"
+	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
 	"github.com/golang/glog"
 	"github.com/hkwi/h2c"
 	flag "github.com/spf13/pflag"
@@ -37,19 +40,18 @@ import (
 	k8sapiflag "k8s.io/apiserver/pkg/util/flag"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	certutil "k8s.io/client-go/util/cert"
-
-	"github.com/brancz/kube-rbac-proxy/auth"
 )
 
 type config struct {
-	insecureListenAddress  string
-	secureListenAddress    string
-	upstream               string
-	upstreamForceH2C       bool
-	resourceAttributesFile string
-	auth                   auth.AuthConfig
-	tls                    tlsConfig
+	insecureListenAddress string
+	secureListenAddress   string
+	upstream              string
+	upstreamForceH2C      bool
+	auth                  proxy.Config
+	tls                   tlsConfig
+	kubeconfigLocation    string
 }
 
 type tlsConfig struct {
@@ -73,13 +75,15 @@ func tlsVersion(versionName string) (uint16, error) {
 }
 
 func main() {
+
 	cfg := config{
-		auth: auth.AuthConfig{
-			Authentication: &auth.AuthnConfig{
-				X509:   &auth.X509Config{},
-				Header: &auth.AuthnHeaderConfig{},
+		auth: proxy.Config{
+			Authentication: &authn.AuthnConfig{
+				X509:   &authn.X509Config{},
+				Header: &authn.AuthnHeaderConfig{},
+				OIDC:   &authn.OIDCConfig{},
 			},
-			Authorization: &auth.AuthzConfig{},
+			Authorization: &authz.Config{},
 		},
 	}
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -92,7 +96,7 @@ func main() {
 	flagset.StringVar(&cfg.secureListenAddress, "secure-listen-address", "", "The address the kube-rbac-proxy HTTPs server should listen on.")
 	flagset.StringVar(&cfg.upstream, "upstream", "", "The upstream URL to proxy to once requests have successfully been authenticated and authorized.")
 	flagset.BoolVar(&cfg.upstreamForceH2C, "upstream-force-h2c", false, "Force h2c to communiate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only")
-	flagset.StringVar(&cfg.resourceAttributesFile, "resource-attributes-file", "", "File spec of attributes-record to use for SubjectAccessReview. If unspecified, requests will attempted to be verified through non-resource-url attributes in the SubjectAccessReview.")
+	flagset.StringVar(&cfg.auth.Authorization.ResourceAttributesFile, "resource-attributes-file", "", "File spec of attributes-record to use for SubjectAccessReview. If unspecified, requests will attempted to be verified through non-resource-url attributes in the SubjectAccessReview.")
 
 	// TLS flags
 	flagset.StringVar(&cfg.tls.certFile, "tls-cert-file", "", "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)")
@@ -106,16 +110,25 @@ func main() {
 	flagset.StringVar(&cfg.auth.Authentication.Header.UserFieldName, "auth-header-user-field-name", "x-remote-user", "The name of the field inside a http(2) request header to tell the upstream server about the user's name")
 	flagset.StringVar(&cfg.auth.Authentication.Header.GroupsFieldName, "auth-header-groups-field-name", "x-remote-groups", "The name of the field inside a http(2) request header to tell the upstream server about the user's groups")
 	flagset.StringVar(&cfg.auth.Authentication.Header.GroupSeparator, "auth-header-groups-field-separator", "|", "The separator string used for concatenating multiple group names in a groups header field's value")
+
+	//Authn OIDC flags
+	flagset.StringVar(&cfg.auth.Authentication.OIDC.IssuerURL, "oidc-issuer", "", "The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).")
+	flagset.StringVar(&cfg.auth.Authentication.OIDC.ClientID, "oidc-clientID", "", "The client ID for the OpenID Connect client, must be set if oidc-issuer-url is set.")
+	flagset.StringVar(&cfg.auth.Authentication.OIDC.GroupsClaim, "oidc-groups-claim", "groups", "Identifier of groups in JWT claim, by default set to 'groups'")
+	flagset.StringVar(&cfg.auth.Authentication.OIDC.UsernameClaim, "oidc-username-claim", "email", "Identifier of the user in JWT claim, by default set to 'email'")
+	flagset.StringVar(&cfg.auth.Authentication.OIDC.GroupsPrefix, "oidc-groups-prefix", "", "If provided, all groups will be prefixed with this value to prevent conflicts with other authentication strategies.")
+	flagset.StringArrayVar(&cfg.auth.Authentication.OIDC.SupportedSigningAlgs, "oidc-sign-alg", []string{"RS256"}, "Supported signing algorithms, default RS256")
+	flagset.StringVar(&cfg.auth.Authentication.OIDC.CAFile, "oidc-ca-file", "", "If set, the OpenID server's certificate will be verified by one of the authorities in the oidc-ca-file, otherwise the host's root CA set will be used.")
+
+	//Kubeconfig flag
+	flagset.StringVar(&cfg.kubeconfigLocation, "kubeconfig", "", "Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used")
+
 	flagset.Parse(os.Args[1:])
+	kcfg := initKubeConfig(cfg.kubeconfigLocation)
 
 	upstreamURL, err := url.Parse(cfg.upstream)
 	if err != nil {
 		glog.Fatalf("Failed to build parse upstream URL: %v", err)
-	}
-
-	kcfg, err := rest.InClusterConfig()
-	if err != nil {
-		glog.Fatalf("Failed to build Kubernetes rest-config: %v", err)
 	}
 
 	kubeClient, err := kubernetes.NewForConfig(kcfg)
@@ -123,21 +136,36 @@ func main() {
 		glog.Fatalf("Failed to instantiate Kubernetes client: %v", err)
 	}
 
-	if cfg.resourceAttributesFile != "" {
-		b, err := ioutil.ReadFile(cfg.resourceAttributesFile)
+	var authenticator authenticator.Request
+	// If OIDC configuration provided, use oidc authenticator
+	if cfg.auth.Authentication.OIDC.IssuerURL != "" {
+		authenticator, err = authn.NewOIDCAuthenticator(cfg.auth.Authentication.OIDC)
 		if err != nil {
-			glog.Fatalf("Failed to read resource-attribute file: %v", err)
+			glog.Fatalf("Failed to instantiate OIDC authenticator: %v", err)
 		}
 
-		err = yaml.Unmarshal(b, &cfg.auth.Authorization.ResourceAttributes)
+	} else {
+		//Use Delegating authenticator
+
+		tokenClient := kubeClient.AuthenticationV1beta1().TokenReviews()
+		authenticator, err = authn.NewDelegatingAuthenticator(tokenClient, cfg.auth.Authentication)
 		if err != nil {
-			glog.Fatalf("Failed to parse resource-attribute file content: %v", err)
+			glog.Fatalf("Failed to instantiate delegating authenticator: %v", err)
 		}
+
 	}
 
-	auth, err := auth.BuildAuthHandler(kubeClient, &cfg.auth)
+	sarClient := kubeClient.AuthorizationV1beta1().SubjectAccessReviews()
+	authorizer, err := authz.NewAuthorizer(sarClient)
+
 	if err != nil {
-		glog.Fatalf("Failed to create auth: %v", err)
+		glog.Fatalf("Failed to create authorizer: %v", err)
+	}
+
+	auth, err := proxy.New(kubeClient, cfg.auth, authorizer, authenticator)
+
+	if err != nil {
+		glog.Fatalf("Failed to create rbac-proxy: %v", err)
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(upstreamURL)
@@ -257,4 +285,23 @@ func main() {
 	case <-term:
 		glog.Info("Received SIGTERM, exiting gracefully...")
 	}
+}
+
+// Returns intiliazed config, allows local usage (outside cluster) based on provided kubeconfig or in-cluter
+func initKubeConfig(kcLocation string) *rest.Config {
+
+	if kcLocation != "" {
+		kubeConfig, err := clientcmd.BuildConfigFromFlags("", kcLocation)
+		if err != nil {
+			glog.Fatal("unable to build rest config based on provided path to kubeconfig file")
+		}
+		return kubeConfig
+	}
+
+	kubeConfig, err := rest.InClusterConfig()
+	if err != nil {
+		glog.Fatal("cannot find Service Account in pod to build in-cluster rest config")
+	}
+
+	return kubeConfig
 }

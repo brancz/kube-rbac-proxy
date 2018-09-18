@@ -19,6 +19,7 @@ See the `examples/` directory for the following examples:
 
 * [non-resource-url example](examples/non-resource-url)
 * [resource-attributes example](examples/resource-attributes)
+* [oidc example](examples/oidc)
 
 All command line flags:
 
@@ -47,6 +48,14 @@ Usage of _output/linux/amd64/kube-rbac-proxy:
       --upstream-force-h2c                          Force h2c to communiate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only
   -v, --v Level                                     log level for V logs
       --vmodule moduleSpec                          comma-separated list of pattern=N settings for file-filtered logging
+      --oidc-issuer                                 The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).
+      --oidc-clientID                               The client ID for the OpenID Connect client, must be set if oidc-issuer-url is set.
+      --oidc-groups-claim                           Identifier of groups in JWT claim, by default set to 'groups'.
+      --oidc-username-claim                         Identifier of the user in JWT claim, by default set to 'email'.
+      --oidc-groups-prefix                          If provided, all groups will be prefixed with this value to prevent conflicts with other authentication strategies.
+      --oidc-sign-alg                               Supported signing algorithms, default RS256.
+      --oidc-ca-file                                If set, the OpenID server's certificate will be verified by one of the authorities in the oidc-ca-file, otherwise the host's root CA set will be used.
+      --kubeconfig                                  Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used.
 ```
 
 ## Why?
