@@ -22,3 +22,5 @@ import:
   - kubernetes/typed/authorization/v1beta1
   - rest
 - package: github.com/hkwi/h2c
+- package: github.com/coreos/go-oidc
+  version: ^2.0.0
