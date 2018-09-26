@@ -20,6 +20,7 @@ import (
 	"crypto/tls"
 	stdflag "flag"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -28,20 +29,21 @@ import (
 	"os/signal"
 	"syscall"
 
-	"k8s.io/apiserver/pkg/authentication/authenticator"
-
-	"github.com/brancz/kube-rbac-proxy/pkg/authn"
-	"github.com/brancz/kube-rbac-proxy/pkg/authz"
-	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
+	"github.com/ghodss/yaml"
 	"github.com/golang/glog"
 	"github.com/hkwi/h2c"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/net/http2"
+	"k8s.io/apiserver/pkg/authentication/authenticator"
 	k8sapiflag "k8s.io/apiserver/pkg/util/flag"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	certutil "k8s.io/client-go/util/cert"
+
+	"github.com/brancz/kube-rbac-proxy/pkg/authn"
+	"github.com/brancz/kube-rbac-proxy/pkg/authz"
+	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
 )
 
 type config struct {
@@ -59,6 +61,10 @@ type tlsConfig struct {
 	keyFile      string
 	minVersion   string
 	cipherSuites []string
+}
+
+type configfile struct {
+	AuthorizationConfig *authz.Config `json:"authorization,omitempty"`
 }
 
 var versions = map[string]uint16{
@@ -129,6 +135,24 @@ func main() {
 	upstreamURL, err := url.Parse(cfg.upstream)
 	if err != nil {
 		glog.Fatalf("Failed to build parse upstream URL: %v", err)
+	}
+
+	raf := cfg.auth.Authorization.ResourceAttributesFile
+	if raf != "" {
+		glog.Infof("Reading config file: %s", cfg.auth.Authorization.ResourceAttributesFile)
+		b, err := ioutil.ReadFile(raf)
+		if err != nil {
+			glog.Fatalf("Failed to read resource-attribute file: %v", err)
+		}
+
+		configfile := configfile{}
+
+		err = yaml.Unmarshal(b, &configfile)
+		if err != nil {
+			glog.Fatalf("Failed to parse config file content: %v", err)
+		}
+
+		cfg.auth.Authorization = configfile.AuthorizationConfig
 	}
 
 	kubeClient, err := kubernetes.NewForConfig(kcfg)
