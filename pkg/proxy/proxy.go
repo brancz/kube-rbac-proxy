@@ -1,15 +1,15 @@
 package proxy
 
 import (
+	"bytes"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"strings"
+	"text/template"
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
 	"github.com/golang/glog"
-	yaml "gopkg.in/yaml.v2"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/user"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
@@ -23,19 +23,18 @@ type Config struct {
 }
 
 type kubeRBACProxy struct {
-
 	// authenticator identifies the user for requests to kube-rbac-proxy
 	authenticator.Request
-	// authorizerAttributeGetter builds authorization.Attributes for a request to kube-rbac-proxy
-	authorizer.RequestAttributesGetter
 	// authorizer determines whether a given authorization.Attributes is allowed
 	authorizer.Authorizer
+	// authorizerAttributesGetter implements retrieving authorization attributes for a respective request.
+	authorizerAttributesGetter *krpAuthorizerAttributesGetter
 	// config for kube-rbac-proxy
 	Config Config
 }
 
 func new(authenticator authenticator.Request, authorizer authorizer.Authorizer, config Config) *kubeRBACProxy {
-	return &kubeRBACProxy{authenticator, newKubeRBACProxyAuthorizerAttributesGetter(config.Authorization), authorizer, config}
+	return &kubeRBACProxy{authenticator, authorizer, newKubeRBACProxyAuthorizerAttributesGetter(config.Authorization), config}
 }
 
 // New creates an authenticator, an authorizer, and a matching authorizer attributes getter compatible with the kube-rbac-proxy
@@ -59,21 +58,29 @@ func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
 	}
 
 	// Get authorization attributes
-	attrs := h.GetRequestAttributes(u, req)
-
-	// Authorize
-	authorized, _, err := h.Authorize(attrs)
-	if err != nil {
-		msg := fmt.Sprintf("Authorization error (user=%s, verb=%s, resource=%s, subresource=%s)", u.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
-		glog.Errorf(msg, err)
-		http.Error(w, msg, http.StatusInternalServerError)
+	allAttrs := h.authorizerAttributesGetter.GetRequestAttributes(u, req)
+	if len(allAttrs) == 0 {
+		msg := fmt.Sprintf("Bad Request. The request or configuration is malformed.")
+		glog.V(2).Info(msg)
+		http.Error(w, msg, http.StatusBadRequest)
 		return false
 	}
-	if authorized != authorizer.DecisionAllow {
-		msg := fmt.Sprintf("Forbidden (user=%s, verb=%s, resource=%s, subresource=%s)", u.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
-		glog.V(2).Info(msg)
-		http.Error(w, msg, http.StatusForbidden)
-		return false
+
+	for _, attrs := range allAttrs {
+		// Authorize
+		authorized, _, err := h.Authorize(attrs)
+		if err != nil {
+			msg := fmt.Sprintf("Authorization error (user=%s, verb=%s, resource=%s, subresource=%s)", u.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
+			glog.Errorf(msg, err)
+			http.Error(w, msg, http.StatusInternalServerError)
+			return false
+		}
+		if authorized != authorizer.DecisionAllow {
+			msg := fmt.Sprintf("Forbidden (user=%s, verb=%s, resource=%s, subresource=%s)", u.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
+			glog.V(2).Info(msg)
+			http.Error(w, msg, http.StatusForbidden)
+			return false
+		}
 	}
 
 	if h.Config.Authentication.Header.Enabled {
@@ -87,8 +94,8 @@ func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
 	return true
 }
 
-func newKubeRBACProxyAuthorizerAttributesGetter(authzConfig *authz.Config) authorizer.RequestAttributesGetter {
-	return krpAuthorizerAttributesGetter{authzConfig}
+func newKubeRBACProxyAuthorizerAttributesGetter(authzConfig *authz.Config) *krpAuthorizerAttributesGetter {
+	return &krpAuthorizerAttributesGetter{authzConfig}
 }
 
 type krpAuthorizerAttributesGetter struct {
@@ -96,7 +103,7 @@ type krpAuthorizerAttributesGetter struct {
 }
 
 // GetRequestAttributes populates authorizer attributes for the requests to kube-rbac-proxy.
-func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http.Request) authorizer.Attributes {
+func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http.Request) []authorizer.Attributes {
 	apiVerb := ""
 	switch r.Method {
 	case "POST":
@@ -111,52 +118,66 @@ func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http
 		apiVerb = "delete"
 	}
 
-	raf := n.authzConfig.ResourceAttributesFile
-	if raf != "" {
-		b, err := ioutil.ReadFile(raf)
-		if err != nil {
-			glog.Fatalf("Failed to read resource-attribute file: %v", err)
-		}
+	allAttrs := []authorizer.Attributes{}
 
-		err = yaml.Unmarshal(b, &n.authzConfig.ResourceAttributes)
-		if err != nil {
-			glog.Fatalf("Failed to parse resource-attribute file content: %v", err)
-		}
-	}
-
-	requestPath := r.URL.Path
-	// Default attributes mirror the API attributes that would allow this access to kube-rbac-proxy
-	attrs := authorizer.AttributesRecord{
-		User:            u,
-		Verb:            apiVerb,
-		Namespace:       "",
-		APIGroup:        "",
-		APIVersion:      "",
-		Resource:        "",
-		Subresource:     "",
-		Name:            "",
-		ResourceRequest: false,
-		Path:            requestPath,
-	}
-
-	//attributes based on configuration loaded from file
 	if n.authzConfig.ResourceAttributes != nil {
-		attrs = authorizer.AttributesRecord{
+		if n.authzConfig.Rewrites != nil && n.authzConfig.Rewrites.ByQueryParameter != nil && n.authzConfig.Rewrites.ByQueryParameter.Name != "" {
+			params, ok := r.URL.Query()[n.authzConfig.Rewrites.ByQueryParameter.Name]
+			if !ok {
+				return nil
+			}
+
+			for _, param := range params {
+				attrs := authorizer.AttributesRecord{
+					User:            u,
+					Verb:            apiVerb,
+					Namespace:       templateWithValue(n.authzConfig.ResourceAttributes.Namespace, param),
+					APIGroup:        templateWithValue(n.authzConfig.ResourceAttributes.APIGroup, param),
+					APIVersion:      templateWithValue(n.authzConfig.ResourceAttributes.APIVersion, param),
+					Resource:        templateWithValue(n.authzConfig.ResourceAttributes.Resource, param),
+					Subresource:     templateWithValue(n.authzConfig.ResourceAttributes.Subresource, param),
+					Name:            templateWithValue(n.authzConfig.ResourceAttributes.Name, param),
+					ResourceRequest: true,
+				}
+				allAttrs = append(allAttrs, attrs)
+			}
+		} else {
+			attrs := authorizer.AttributesRecord{
+				User:            u,
+				Verb:            apiVerb,
+				Namespace:       n.authzConfig.ResourceAttributes.Namespace,
+				APIGroup:        n.authzConfig.ResourceAttributes.APIGroup,
+				APIVersion:      n.authzConfig.ResourceAttributes.APIVersion,
+				Resource:        n.authzConfig.ResourceAttributes.Resource,
+				Subresource:     n.authzConfig.ResourceAttributes.Subresource,
+				Name:            n.authzConfig.ResourceAttributes.Name,
+				ResourceRequest: true,
+			}
+			allAttrs = append(allAttrs, attrs)
+		}
+	} else {
+		requestPath := r.URL.Path
+		// Default attributes mirror the API attributes that would allow this access to kube-rbac-proxy
+		attrs := authorizer.AttributesRecord{
 			User:            u,
 			Verb:            apiVerb,
-			Namespace:       n.authzConfig.ResourceAttributes.Namespace,
-			APIGroup:        n.authzConfig.ResourceAttributes.APIGroup,
-			APIVersion:      n.authzConfig.ResourceAttributes.APIVersion,
-			Resource:        n.authzConfig.ResourceAttributes.Resource,
-			Subresource:     n.authzConfig.ResourceAttributes.Subresource,
-			Name:            n.authzConfig.ResourceAttributes.Name,
-			ResourceRequest: true,
+			Namespace:       "",
+			APIGroup:        "",
+			APIVersion:      "",
+			Resource:        "",
+			Subresource:     "",
+			Name:            "",
+			ResourceRequest: false,
+			Path:            requestPath,
 		}
+		allAttrs = append(allAttrs, attrs)
 	}
 
-	glog.V(5).Infof("kube-rbac-proxy request attributes: attrs=%#v", attrs)
+	for attrs := range allAttrs {
+		glog.V(5).Infof("kube-rbac-proxy request attributes: attrs=%#v", attrs)
+	}
 
-	return attrs
+	return allAttrs
 }
 
 // DeepCopy of Proxy Configuration
@@ -200,4 +221,11 @@ func (c *Config) DeepCopy() *Config {
 	}
 
 	return res
+}
+
+func templateWithValue(templateString, value string) string {
+	tmpl, _ := template.New("valueTemplate").Parse(templateString)
+	out := bytes.NewBuffer(nil)
+	tmpl.Execute(out, struct{ Value string }{Value: value})
+	return out.String()
 }

@@ -27,8 +27,21 @@ import (
 
 // Config holds configuration enabling request authorization
 type Config struct {
-	ResourceAttributes     *ResourceAttributes
-	ResourceAttributesFile string
+	Rewrites               *SubjectAccessReviewRewrites `json:"rewrites,omitempty"`
+	ResourceAttributes     *ResourceAttributes          `json:"resourceAttributes,omitempty"`
+	ResourceAttributesFile string                       `json:"-"`
+}
+
+// SubjectAccessReviewRewrites describes how SubjectAccessReview may be
+// rewritten on a given request.
+type SubjectAccessReviewRewrites struct {
+	ByQueryParameter *QueryParameterRewriteConfig `json:"byQueryParameter,omitempty"`
+}
+
+// QueryParameterRewriteConfig describes which HTTP URL query parameter is to
+// be used to rewrite a SubjectAccessReview on a given request.
+type QueryParameterRewriteConfig struct {
+	Name string `json:"name,omitempty"`
 }
 
 // ResourceAttributes describes attributes available for resource request authorization

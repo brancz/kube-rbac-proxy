@@ -1,0 +1,22 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: node-metrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: namespace-metrics
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: namespace-metrics
+rules:
+- apiGroups: [""]
+  resources:
+  - namespace/metrics
+  verbs: ["get"]
