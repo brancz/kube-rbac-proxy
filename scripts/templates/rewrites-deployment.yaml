@@ -51,12 +51,14 @@ metadata:
 data:
   config-file.yaml: |+
     authorization:
+      rewrites:
+        byQueryParameter:
+          name: "namespace"
       resourceAttributes:
-        namespace: default
         apiVersion: v1
-        resource: services
-        subresource: proxy
-        name: kube-rbac-proxy
+        resource: namespace
+        subresource: metrics
+        namespace: "{{ .Value }}"
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment

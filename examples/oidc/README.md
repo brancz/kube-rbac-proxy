@@ -17,7 +17,7 @@ $ kubectl create -f configmap.yaml
 ```
 
 ```bash
-$ kubectl create -f client.yaml
+$ kubectl create -f client-rbac.yaml
 ```
 
 Note: The {ISSUER} and {CLIENT_ID} in the deployment have to be replaced with the issuer and client in the OIDC provider configuration.

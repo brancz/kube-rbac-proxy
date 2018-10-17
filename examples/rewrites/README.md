@@ -1,4 +1,4 @@
-# resource-attributes example
+# rewriting SubjectAccessReviews example
 
 > Note to try this out with minikube, make sure you enable RBAC correctly as explained [here](../minikube-rbac).
 
@@ -69,12 +69,14 @@ metadata:
 data:
   config-file.yaml: |+
     authorization:
+      rewrites:
+        byQueryParameter:
+          name: "namespace"
       resourceAttributes:
-        namespace: default
         apiVersion: v1
-        resource: services
-        subresource: proxy
-        name: kube-rbac-proxy
+        resource: namespace
+        subresource: metrics
+        namespace: "{{ .Value }}"
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
@@ -118,76 +120,33 @@ Once the prometheus-example-app is up and running, we can test it. In order to t
 The Dockerfile of this container can be found [here](../example-client/Dockerfile).
 
 ```bash
-$ kubectl create -f client-rbac.yaml client.yaml
+$ kubectl create -f client-rbac.yaml
 ```
 
 The content of this manifest is:
 
 [embedmd]:# (./client-rbac.yaml)
 ```yaml
-apiVersion: rbac.authorization.k8s.io/v1beta1
-kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
 metadata:
-  name: kube-rbac-proxy-client
-rules:
-- apiGroups: [""]
-  resources: ["services/proxy"]
-  verbs: ["get"]
----
-apiVersion: rbac.authorization.k8s.io/v1beta1
-kind: ClusterRoleBinding
-metadata:
-  name: kube-rbac-proxy-client
+  name: namespace-metrics
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: kube-rbac-proxy-client
+  kind: Role
+  name: namespace-metrics
 subjects:
 - kind: ServiceAccount
   name: default
   namespace: default
-```
-
-[embedmd]:# (./client.yaml)
-```yaml
-apiVersion: batch/v1
-kind: Job
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
 metadata:
-  name: krp-curl
-spec:
-  template:
-    metadata:
-      name: krp-curl
-    spec:
-      containers:
-      - name: krp-curl
-        image: quay.io/brancz/krp-curl:v0.0.1
-      restartPolicy: Never
-  backoffLimit: 4
+  name: namespace-metrics
+rules:
+- apiGroups: [""]
+  resources:
+  - namespace/metrics
+  verbs: ["get"]
 ```
-
-We can look at the logs and we should get something similar to:
-
-```
-$ kubectl logs job/krp-curl
-*   Trying 10.111.34.206...
-* TCP_NODELAY set
-* Connected to kube-rbac-proxy.default.svc (10.111.34.206) port 8080 (#0)
-> GET /metrics HTTP/1.1
-> Host: kube-rbac-proxy.default.svc:8080
-> User-Agent: curl/7.57.0
-> Accept: */*
-> Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJkZWZhdWx0Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZWNyZXQubmFtZSI6ImRlZmF1bHQtdG9rZW4tNHZxZGIiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC5uYW1lIjoiZGVmYXVsdCIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50LnVpZCI6ImQwNzU4NDE3LWUzMmUtMTFlNy1hOTQ1LTA4MDAyNzg2NjgwMCIsInN1YiI6InN5c3RlbTpzZXJ2aWNlYWNjb3VudDpkZWZhdWx0OmRlZmF1bHQifQ.eftzPb2rthIcW8Md4URFYpDhyEKuqepP7WKsWO25uBdWlN85TcPkeGSaRf7-dRp7ie5ADp-UgTZtI2lu6ssntmxsATeH_jE0zye6UlTqM-_2iLNLexgE29bYD8cqH5WMc7tE-y_Y0u0F3hjvURNvQycxfrGWICd1gNrk2jpxC6mAYVt3ldT5rylw0FWot7t8uDvorW6QScfvPPNmwh0hHsdvMuJ2e8lc9KDnTS-yRuQ1SmMNyc7L2JyZ7bphahNZNa8K7D3C1NOAmAQrDfBAr97peGbQ02yCc4hG_YQDyO2xMaQs_AFf38ZIiM-z7OnSQO4_D8FmkY2CG2jnd6ZXlw
->
-< HTTP/1.1 200 OK
-< Content-Type: text/plain; version=0.0.4
-< Date: Sun, 17 Dec 2017 13:34:26 GMT
-< Content-Length: 102
-<
-{ [102 bytes data]
-* Connection #0 to host kube-rbac-proxy.default.svc left intact
-# HELP version Version information about this binary
-# TYPE version gauge
-version{version="v0.1.0"} 0
-```
-
