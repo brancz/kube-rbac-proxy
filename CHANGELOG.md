@@ -2,7 +2,7 @@
 
 * [CHANGE] The config file flag has been renamed to `--config-file`.
 * [CHANGE] There is a breaking change in the configuration. All configuration that was previously valid, is now nested in `.authorization.resourceAttributes`.
-* [FEATURE] Add OIDC as an authentication provider.
+* [FEATURE] Add OIDC token authentication provider (note: this is not a client code flow for client authentication).
 * [FEATURE] Add ability to rewrite SubjectAccessReviews based on request query parameters.
 
 ## 0.3.1 / 2018-06-20
