@@ -30,12 +30,6 @@ rules:
   resources:
   - subjectaccessreviews
   verbs: ["create"]
-- apiGroups: ["", "apps", "extensions", "rbac.authorization.k8s.io"]
-  resources: ["*"]
-  verbs: ["*"]
-- apiGroups: ["apiextensions.k8s.io"]
-  resources: ["customresourcedefinitions"]
-  verbs: ["get", "list"]
 ---
 apiVersion: v1
 kind: Service
