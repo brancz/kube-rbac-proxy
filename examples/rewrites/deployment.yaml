@@ -49,7 +49,7 @@ kind: ConfigMap
 metadata:
   name: kube-rbac-proxy
 data:
-  resource-attributes.yaml: |+
+  config-file.yaml: |+
     authorization:
       rewrites:
         byQueryParameter:
@@ -77,8 +77,8 @@ spec:
         image: quay.io/brancz/kube-rbac-proxy:v0.3.1
         args:
         - "--secure-listen-address=0.0.0.0:8443"
-        - "--upstream=http://localhost:8080/"
-        - "--resource-attributes-file=/etc/kube-rbac-proxy/resource-attributes.yaml"
+        - "--upstream=http://127.0.0.1:8081/"
+        - "--config-file=/etc/kube-rbac-proxy/config-file.yaml"
         - "--logtostderr=true"
         - "--v=10"
         ports:
@@ -87,8 +87,10 @@ spec:
         volumeMounts:
         - name: config
           mountPath: /etc/kube-rbac-proxy
-      - name: printserver
-        image: quay.io/brancz/printserver:v0.0.1
+      - name: prometheus-example-app
+        image: quay.io/brancz/prometheus-example-app:v0.1.0
+        args:
+        - "--bind=127.0.0.1:8081"
       volumes:
       - name: config
         configMap:

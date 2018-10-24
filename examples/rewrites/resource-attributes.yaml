@@ -1,9 +1,0 @@
-authorization:
-  rewrites:
-    byQueryParameter:
-      name: "namespace"
-  resourceAttributes:
-    apiVersion: v1
-    resource: node
-    subresource: metrics
-    namespace: "{{ .Value }}"

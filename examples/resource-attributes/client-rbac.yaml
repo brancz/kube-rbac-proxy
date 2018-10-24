@@ -1,24 +1,21 @@
-# Cluster viewer role
----
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRole
 metadata:
-  name: metrics
+  name: kube-rbac-proxy-client
 rules:
-- nonResourceURLs: ["/metrics"]
-  verbs: ["get", "list"]  
-  
+- apiGroups: [""]
+  resources: ["services/proxy"]
+  verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRoleBinding
 metadata:
-  name: metrics
-  namespace: default
+  name: kube-rbac-proxy-client
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: metrics
+  name: kube-rbac-proxy-client
 subjects:
-- kind: User
-  name: admin
-  apiGroup: rbac.authorization.k8s.io  
+- kind: ServiceAccount
+  name: default
+  namespace: default

@@ -81,7 +81,6 @@ func tlsVersion(versionName string) (uint16, error) {
 }
 
 func main() {
-
 	cfg := config{
 		auth: proxy.Config{
 			Authentication: &authn.AuthnConfig{
@@ -93,6 +92,7 @@ func main() {
 		},
 	}
 	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	configFileName := ""
 
 	// Add glog flags
 	flagset.AddGoFlagSet(stdflag.CommandLine)
@@ -102,7 +102,7 @@ func main() {
 	flagset.StringVar(&cfg.secureListenAddress, "secure-listen-address", "", "The address the kube-rbac-proxy HTTPs server should listen on.")
 	flagset.StringVar(&cfg.upstream, "upstream", "", "The upstream URL to proxy to once requests have successfully been authenticated and authorized.")
 	flagset.BoolVar(&cfg.upstreamForceH2C, "upstream-force-h2c", false, "Force h2c to communiate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only")
-	flagset.StringVar(&cfg.auth.Authorization.ResourceAttributesFile, "resource-attributes-file", "", "File spec of attributes-record to use for SubjectAccessReview. If unspecified, requests will attempted to be verified through non-resource-url attributes in the SubjectAccessReview.")
+	flagset.StringVar(&configFileName, "config-file", "", "Configuration file to configure kube-rbac-proxy.")
 
 	// TLS flags
 	flagset.StringVar(&cfg.tls.certFile, "tls-cert-file", "", "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)")
@@ -137,10 +137,9 @@ func main() {
 		glog.Fatalf("Failed to build parse upstream URL: %v", err)
 	}
 
-	raf := cfg.auth.Authorization.ResourceAttributesFile
-	if raf != "" {
-		glog.Infof("Reading config file: %s", cfg.auth.Authorization.ResourceAttributesFile)
-		b, err := ioutil.ReadFile(raf)
+	if configFileName != "" {
+		glog.Infof("Reading config file: %s", configFileName)
+		b, err := ioutil.ReadFile(configFileName)
 		if err != nil {
 			glog.Fatalf("Failed to read resource-attribute file: %v", err)
 		}

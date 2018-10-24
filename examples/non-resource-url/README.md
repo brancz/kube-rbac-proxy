@@ -96,12 +96,12 @@ Once the prometheus-example-app is up and running, we can test it. In order to t
 The Dockerfile of this container can be found [here](../example-client/Dockerfile).
 
 ```bash
-$ kubectl create -f client.yaml
+$ kubectl create -f client-rbac.yaml client.yaml
 ```
 
 The content of this manifest is:
 
-[embedmd]:# (./client.yaml)
+[embedmd]:# (./client-rbac.yaml)
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRole
@@ -123,7 +123,10 @@ subjects:
 - kind: ServiceAccount
   name: default
   namespace: default
----
+```
+
+[embedmd]:# (./client.yaml)
+```yaml
 apiVersion: batch/v1
 kind: Job
 metadata:
