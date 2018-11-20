@@ -49,12 +49,14 @@ kind: ConfigMap
 metadata:
   name: kube-rbac-proxy
 data:
-  resource-attributes.yaml: |+
-    namespace: default
-    apiVersion: v1
-    resource: services
-    subresource: proxy
-    name: kube-rbac-proxy
+  config-file.yaml: |+
+    authorization:
+      resourceAttributes:
+        namespace: default
+        apiVersion: v1
+        resource: services
+        subresource: proxy
+        name: kube-rbac-proxy
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
@@ -70,11 +72,11 @@ spec:
       serviceAccountName: kube-rbac-proxy
       containers:
       - name: kube-rbac-proxy
-        image: quay.io/brancz/kube-rbac-proxy:v0.3.1
+        image: quay.io/brancz/kube-rbac-proxy:v0.4.0
         args:
         - "--secure-listen-address=0.0.0.0:8443"
         - "--upstream=http://127.0.0.1:8081/"
-        - "--resource-attributes-file=/etc/kube-rbac-proxy/resource-attributes.yaml"
+        - "--config-file=/etc/kube-rbac-proxy/config-file.yaml"
         - "--logtostderr=true"
         - "--v=10"
         ports:

@@ -1,3 +1,12 @@
+## Next release
+
+## 0.4.0 / 2018-10-24
+
+* [CHANGE] The config file flag has been renamed to `--config-file`.
+* [CHANGE] There is a breaking change in the configuration. All configuration that was previously valid, is now nested in `.authorization.resourceAttributes`.
+* [FEATURE] Add OIDC token authentication provider (note: this is not a client code flow for client authentication).
+* [FEATURE] Add ability to rewrite SubjectAccessReviews based on request query parameters.
+
 ## 0.3.1 / 2018-06-20
 
 This release is unmodified code from v0.3.0, but built with latest golang.

@@ -13,12 +13,14 @@ In Kubernetes clusters without NetworkPolicies any Pod can perform requests to e
 The kube-rbac-proxy has all [`glog`](https://github.com/golang/glog) flags for logging purposes. To use the kube-rbac-proxy there are a few flags you may want to set:
 
 * `--upstream`: This is the upstream you want to proxy to.
-* `--resource-attributes-file`: This file specifies details on the SubjectAccessReview you want to be performed on a request. For example, this could contain that an entity performing a request has to be allowed to perform a `get` on the Deployment called `my-frontend-app`.
+* `--config-file`: This file specifies details on the SubjectAccessReview you want to be performed on a request. For example, this could contain that an entity performing a request has to be allowed to perform a `get` on the Deployment called `my-frontend-app`, as well as the ability to configure whether SubjectAccessReviews are rewritten based on requests.
 
 See the `examples/` directory for the following examples:
 
 * [non-resource-url example](examples/non-resource-url)
 * [resource-attributes example](examples/resource-attributes)
+* [oidc example](examples/oidc)
+* [rewriting SubjectAccessReviews based on request query parameters](examples/rewrites)
 
 All command line flags:
 
@@ -32,15 +34,23 @@ Usage of _output/linux/amd64/kube-rbac-proxy:
       --auth-header-groups-field-separator string   The separator string used for concatenating multiple group names in a groups header field's value (default "|")
       --auth-header-user-field-name string          The name of the field inside a http(2) request header to tell the upstream server about the user's name (default "x-remote-user")
       --client-ca-file string                       If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.
+      --config-file string                          Configuration file to configure kube-rbac-proxy.
       --insecure-listen-address string              The address the kube-rbac-proxy HTTP server should listen on.
+      --kubeconfig string                           Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used
       --log_backtrace_at traceLocation              when logging hits line file:N, emit a stack trace (default :0)
       --log_dir string                              If non-empty, write log files in this directory
       --logtostderr                                 log to standard error instead of files
-      --resource-attributes-file string             File spec of attributes-record to use for SubjectAccessReview. If unspecified, requests will attempted to be verified through non-resource-url attributes in the SubjectAccessReview.
+      --oidc-ca-file string                         If set, the OpenID server's certificate will be verified by one of the authorities in the oidc-ca-file, otherwise the host's root CA set will be used.
+      --oidc-clientID string                        The client ID for the OpenID Connect client, must be set if oidc-issuer-url is set.
+      --oidc-groups-claim string                    Identifier of groups in JWT claim, by default set to 'groups' (default "groups")
+      --oidc-groups-prefix string                   If provided, all groups will be prefixed with this value to prevent conflicts with other authentication strategies.
+      --oidc-issuer string                          The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).
+      --oidc-sign-alg stringArray                   Supported signing algorithms, default RS256 (default [RS256])
+      --oidc-username-claim string                  Identifier of the user in JWT claim, by default set to 'email' (default "email")
       --secure-listen-address string                The address the kube-rbac-proxy HTTPs server should listen on.
       --stderrthreshold severity                    logs at or above this threshold go to stderr (default 2)
       --tls-cert-file string                        File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)
-      --tls-cipher-suites stringSlice               Comma-separated list of cipher suites for the server. Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants). If omitted, the default Go cipher suites will be used
+      --tls-cipher-suites strings                   Comma-separated list of cipher suites for the server. Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants). If omitted, the default Go cipher suites will be used
       --tls-min-version string                      Minimum TLS version supported. Value must match version names from https://golang.org/pkg/crypto/tls/#pkg-constants. (default "VersionTLS12")
       --tls-private-key-file string                 File containing the default x509 private key matching --tls-cert-file.
       --upstream string                             The upstream URL to proxy to once requests have successfully been authenticated and authorized.
@@ -92,4 +102,3 @@ Additionally, to my knowledge Envoy neither has nor plans Kubernetes specific RB
 PR are more than welcome!
 
 * Tests
-* OIDC support

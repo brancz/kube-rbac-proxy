@@ -4,7 +4,7 @@
 
 RBAC differentiates in two types, that need to be authorized, resources and non-resoruces. A resource request authorization, could for example be, that a requesting entity needs to be authorized to perform the `get` action on a particular Kubernetes Deployment.
 
-Take the following example. We want to deploy a [prometheus-example-app](https://github.com/brancz/prometheus-example-app), and protect it with the kube-rbac-proxy. In this example we require a requesting entity to be allowed to call the `proxy` subresource on a Kubernetes Service called `kube-rbac-proxy`. This is configured in the file passed to the kube-rbac-proxy with the `--resource-attributes-file` flag. Additionally the `--upstream` flag has to be set to configure the application that should be proxied to on successful authentication as well as authorization.
+Take the following example. We want to deploy a [prometheus-example-app](https://github.com/brancz/prometheus-example-app), and protect it with the kube-rbac-proxy. In this example we require a requesting entity to be allowed to call the `proxy` subresource on a Kubernetes Service called `kube-rbac-proxy`. This is configured in the file passed to the kube-rbac-proxy with the `--config-file` flag. Additionally the `--upstream` flag has to be set to configure the application that should be proxied to on successful authentication as well as authorization.
 
 The kube-rbac-proxy itself also requires RBAC access, in order to perform TokenReviews as well as SubjectAccessReviews. These are the APIs available from the Kubernetes API to authenticate and then validate the authorization of an entity.
 
@@ -67,12 +67,14 @@ kind: ConfigMap
 metadata:
   name: kube-rbac-proxy
 data:
-  resource-attributes.yaml: |+
-    namespace: default
-    apiVersion: v1
-    resource: services
-    subresource: proxy
-    name: kube-rbac-proxy
+  config-file.yaml: |+
+    authorization:
+      resourceAttributes:
+        namespace: default
+        apiVersion: v1
+        resource: services
+        subresource: proxy
+        name: kube-rbac-proxy
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
@@ -88,11 +90,11 @@ spec:
       serviceAccountName: kube-rbac-proxy
       containers:
       - name: kube-rbac-proxy
-        image: quay.io/brancz/kube-rbac-proxy:v0.3.1
+        image: quay.io/brancz/kube-rbac-proxy:v0.4.0
         args:
         - "--secure-listen-address=0.0.0.0:8443"
         - "--upstream=http://127.0.0.1:8081/"
-        - "--resource-attributes-file=/etc/kube-rbac-proxy/resource-attributes.yaml"
+        - "--config-file=/etc/kube-rbac-proxy/config-file.yaml"
         - "--logtostderr=true"
         - "--v=10"
         ports:
@@ -116,12 +118,12 @@ Once the prometheus-example-app is up and running, we can test it. In order to t
 The Dockerfile of this container can be found [here](../example-client/Dockerfile).
 
 ```bash
-$ kubectl create -f client.yaml
+$ kubectl create -f client-rbac.yaml client.yaml
 ```
 
 The content of this manifest is:
 
-[embedmd]:# (./client.yaml)
+[embedmd]:# (./client-rbac.yaml)
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRole
@@ -144,7 +146,10 @@ subjects:
 - kind: ServiceAccount
   name: default
   namespace: default
----
+```
+
+[embedmd]:# (./client.yaml)
+```yaml
 apiVersion: batch/v1
 kind: Job
 metadata:
