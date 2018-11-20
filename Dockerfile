@@ -6,6 +6,6 @@ RUN make build
 
 FROM alpine:3.8
 RUN apk add -U --no-cache ca-certificates && rm -rf /var/cache/apk/*
-COPY --from=build /go/src/github.com/brancz/kube-rbac-proxy/_output/linux/$(go env ARCH)/kube-rbac-proxy .
+COPY --from=build /go/src/github.com/brancz/kube-rbac-proxy/_output/linux/$(go env GOARCH)/kube-rbac-proxy .
 ENTRYPOINT ["./kube-rbac-proxy"]
 EXPOSE 8080
