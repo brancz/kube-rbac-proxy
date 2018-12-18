@@ -1,22 +1,18 @@
-FROM openshift/origin-base
+FROM registry.svc.ci.openshift.org/openshift/release:golang-1.10 AS builder
+WORKDIR /go/src/github.com/brancz/kube-rbac-proxy
+COPY . .
+RUN make build && \
+    cp _output/linux/$(go env GOARCH)/kube-rbac-proxy _output/kube-rbac-proxy
 
-ENV GOPATH /go
-RUN mkdir $GOPATH
-
-COPY . $GOPATH/src/github.com/brancz/kube-rbac-proxy
-
-RUN yum install -y golang make && \
-   cd $GOPATH/src/github.com/brancz/kube-rbac-proxy && \
-   make build && cp $GOPATH/src/github.com/brancz/kube-rbac-proxy/_output/linux/$(go env GOARCH)/kube-rbac-proxy /usr/bin/ && \
-   yum autoremove -y golang make && yum clean all
-
+FROM  registry.svc.ci.openshift.org/openshift/origin-v4.0:base
 LABEL io.k8s.display-name="kube-rbac-proxy" \
       io.k8s.description="This is a proxy, that can perform Kubernetes RBAC authorization." \
       io.openshift.tags="kubernetes" \
       maintainer="Frederic Branczyk <fbranczy@redhat.com>"
 
-# doesn't require a root user.
-USER 1001
+ARG FROM_DIRECTORY=/go/src/github.com/brancz/kube-rbac-proxy
+COPY --from=builder ${FROM_DIRECTORY}/_output/kube-rbac-proxy  /usr/bin/kube-rbac-proxy
 
-ENTRYPOINT ["/usr/bin/kube-rbac-proxy"]
+USER nobody
 EXPOSE 8080
+ENTRYPOINT ["/usr/bin/kube-rbac-proxy"]
