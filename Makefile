@@ -2,7 +2,7 @@ all: check-license build generate test
 
 GITHUB_URL=github.com/brancz/kube-rbac-proxy
 GOOS?=$(shell uname -s | tr A-Z a-z)
-GOARCH?=$(subst x86_64,amd64,$(patsubst i%86,386,$(shell uname -m)))
+GOARCH?=$(shell go env GOARCH)
 OUT_DIR=_output
 BIN?=kube-rbac-proxy
 VERSION?=$(shell cat VERSION)
