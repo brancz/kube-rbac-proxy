@@ -74,7 +74,7 @@ func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
 	}
 
 	// Get authorization attributes
-	allAttrs := h.authorizerAttributesGetter.GetRequestAttributes(u, req)
+	allAttrs := h.authorizerAttributesGetter.GetRequestAttributes(u.User, req)
 	if len(allAttrs) == 0 {
 		msg := fmt.Sprintf("Bad Request. The request or configuration is malformed.")
 		glog.V(2).Info(msg)
@@ -86,13 +86,13 @@ func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
 		// Authorize
 		authorized, _, err := h.Authorize(attrs)
 		if err != nil {
-			msg := fmt.Sprintf("Authorization error (user=%s, verb=%s, resource=%s, subresource=%s)", u.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
+			msg := fmt.Sprintf("Authorization error (user=%s, verb=%s, resource=%s, subresource=%s)", u.User.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
 			glog.Errorf(msg, err)
 			http.Error(w, msg, http.StatusInternalServerError)
 			return false
 		}
 		if authorized != authorizer.DecisionAllow {
-			msg := fmt.Sprintf("Forbidden (user=%s, verb=%s, resource=%s, subresource=%s)", u.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
+			msg := fmt.Sprintf("Forbidden (user=%s, verb=%s, resource=%s, subresource=%s)", u.User.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
 			glog.V(2).Info(msg)
 			http.Error(w, msg, http.StatusForbidden)
 			return false
@@ -103,8 +103,8 @@ func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
 		// Seemingly well-known headers to tell the upstream about user's identity
 		// so that the upstream can achieve the original goal of delegating RBAC authn/authz to kube-rbac-proxy
 		headerCfg := h.Config.Authentication.Header
-		req.Header.Set(headerCfg.UserFieldName, u.GetName())
-		req.Header.Set(headerCfg.GroupsFieldName, strings.Join(u.GetGroups(), headerCfg.GroupSeparator))
+		req.Header.Set(headerCfg.UserFieldName, u.User.GetName())
+		req.Header.Set(headerCfg.GroupsFieldName, strings.Join(u.User.GetGroups(), headerCfg.GroupSeparator))
 	}
 
 	return true
