@@ -203,7 +203,7 @@ func main() {
 	}))
 
 	if cfg.secureListenAddress != "" {
-		srv := &http.Server{Handler: mux}
+		srv := &http.Server{Handler: mux, TLSConfig: &tls.Config{}}
 
 		if cfg.tls.certFile == "" && cfg.tls.keyFile == "" {
 			glog.Info("Generating self signed cert as no cert is provided")
@@ -216,31 +216,36 @@ func main() {
 				glog.Fatalf("Failed to load generated self signed cert and key: %v", err)
 			}
 
-			version, err := tlsVersion(cfg.tls.minVersion)
-			if err != nil {
-				glog.Fatalf("TLS version invalid: %v", err)
-			}
-
-			cipherSuiteIDs, err := k8sapiflag.TLSCipherSuites(cfg.tls.cipherSuites)
-			if err != nil {
-				glog.Fatalf("Failed to convert TLS cipher suite name to ID: %v", err)
-			}
-			srv.TLSConfig = &tls.Config{
-				CipherSuites: cipherSuiteIDs,
-				Certificates: []tls.Certificate{cert},
-				MinVersion:   version,
-				// To enable http/2
-				// See net/http.Server.shouldConfigureHTTP2ForServe for more context
-				NextProtos: []string{"h2"},
-			}
+			srv.TLSConfig.Certificates = []tls.Certificate{cert}
 		}
+
+		version, err := tlsVersion(cfg.tls.minVersion)
+		if err != nil {
+			glog.Fatalf("TLS version invalid: %v", err)
+		}
+
+		cipherSuiteIDs, err := k8sapiflag.TLSCipherSuites(cfg.tls.cipherSuites)
+		if err != nil {
+			glog.Fatalf("Failed to convert TLS cipher suite name to ID: %v", err)
+		}
+
+		srv.TLSConfig.CipherSuites = cipherSuiteIDs
+		srv.TLSConfig.MinVersion = version
+		srv.TLSConfig.NextProtos = []string{"h2"}
+
+		glog.Infof("Starting TCP socket on %v", cfg.secureListenAddress)
 
 		l, err := net.Listen("tcp", cfg.secureListenAddress)
 		if err != nil {
 			glog.Fatalf("Failed to listen on secure address: %v", err)
 		}
 		glog.Infof("Listening securely on %v", cfg.secureListenAddress)
-		go srv.ServeTLS(l, cfg.tls.certFile, cfg.tls.keyFile)
+		go func() {
+			err := srv.ServeTLS(l, cfg.tls.certFile, cfg.tls.keyFile)
+			if err != nil {
+				glog.Fatalf("failed to serve TLS server: %v", err)
+			}
+		}()
 	}
 
 	if cfg.insecureListenAddress != "" {
@@ -298,10 +303,15 @@ func main() {
 			glog.Fatalf("Failed to listen on insecure address: %v", err)
 		}
 		glog.Infof("Listening insecurely on %v", cfg.insecureListenAddress)
-		go srv.Serve(l)
+		go func() {
+			err := srv.Serve(l)
+			if err != nil {
+				glog.Fatalf("failed to serve server: %v", err)
+			}
+		}()
 	}
 
-	term := make(chan os.Signal)
+	term := make(chan os.Signal, 1)
 	signal.Notify(term, os.Interrupt, syscall.SIGTERM)
 
 	select {
