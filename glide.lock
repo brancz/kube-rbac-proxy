@@ -1,5 +1,5 @@
-hash: bb25a692c9739a3f97149ce3935c4132e72516007e4d396f8806840316c51894
-updated: 2019-01-21T18:41:38.766602757+01:00
+hash: 71c4e3269e671b02a7aa861da36ccdf11da9ecc97fdac15927d938d3795120a1
+updated: 2019-01-22T16:11:41.385781607+01:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: d6e3b3328b783f23731bc4d058875b0371ff8109
@@ -69,8 +69,6 @@ imports:
   version: a0d98a5f288019575c6d1f4bb1573fef2d1fcdc4
   subpackages:
   - simplelru
-- name: github.com/hkwi/h2c
-  version: 3511cd63f456392ba97c7f2f237e8af0cbee5ae4
 - name: github.com/imdario/mergo
   version: 9316a62528ac99aaecb4e47eadd6dc8aa6533d58
 - name: github.com/json-iterator/go
@@ -137,11 +135,12 @@ imports:
   - salsa20/salsa
   - ssh/terminal
 - name: golang.org/x/net
-  version: 0ed95abb35c445290478a5348a7b38bb154135fd
+  version: ed066c81e75eba56dd9bd2139ade88125b855585
   subpackages:
   - context
   - http/httpguts
   - http2
+  - http2/h2c
   - http2/hpack
   - idna
   - websocket
