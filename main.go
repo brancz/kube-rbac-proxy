@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	stdflag "flag"
 	"fmt"
@@ -31,6 +32,7 @@ import (
 
 	"github.com/ghodss/yaml"
 	"github.com/golang/glog"
+	"github.com/oklog/run"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -202,92 +204,112 @@ func main() {
 		proxy.ServeHTTP(w, req)
 	}))
 
-	if cfg.secureListenAddress != "" {
-		srv := &http.Server{Handler: mux, TLSConfig: &tls.Config{}}
+	var gr run.Group
+	{
+		if cfg.secureListenAddress != "" {
+			srv := &http.Server{Handler: mux, TLSConfig: &tls.Config{}}
 
-		if cfg.tls.certFile == "" && cfg.tls.keyFile == "" {
-			glog.Info("Generating self signed cert as no cert is provided")
-			certBytes, keyBytes, err := certutil.GenerateSelfSignedCertKey("", nil, nil)
-			if err != nil {
-				glog.Fatalf("Failed to generate self signed cert and key: %v", err)
+			if cfg.tls.certFile == "" && cfg.tls.keyFile == "" {
+				glog.Info("Generating self signed cert as no cert is provided")
+				certBytes, keyBytes, err := certutil.GenerateSelfSignedCertKey("", nil, nil)
+				if err != nil {
+					glog.Fatalf("Failed to generate self signed cert and key: %v", err)
+				}
+				cert, err := tls.X509KeyPair(certBytes, keyBytes)
+				if err != nil {
+					glog.Fatalf("Failed to load generated self signed cert and key: %v", err)
+				}
+
+				srv.TLSConfig.Certificates = []tls.Certificate{cert}
 			}
-			cert, err := tls.X509KeyPair(certBytes, keyBytes)
+
+			version, err := tlsVersion(cfg.tls.minVersion)
 			if err != nil {
-				glog.Fatalf("Failed to load generated self signed cert and key: %v", err)
+				glog.Fatalf("TLS version invalid: %v", err)
 			}
 
-			srv.TLSConfig.Certificates = []tls.Certificate{cert}
-		}
-
-		version, err := tlsVersion(cfg.tls.minVersion)
-		if err != nil {
-			glog.Fatalf("TLS version invalid: %v", err)
-		}
-
-		cipherSuiteIDs, err := k8sapiflag.TLSCipherSuites(cfg.tls.cipherSuites)
-		if err != nil {
-			glog.Fatalf("Failed to convert TLS cipher suite name to ID: %v", err)
-		}
-
-		srv.TLSConfig.CipherSuites = cipherSuiteIDs
-		srv.TLSConfig.MinVersion = version
-
-		if err := http2.ConfigureServer(srv, nil); err != nil {
-			glog.Fatalf("failed to configure http2 server: %v", err)
-		}
-
-		glog.Infof("Starting TCP socket on %v", cfg.secureListenAddress)
-
-		l, err := net.Listen("tcp", cfg.secureListenAddress)
-		if err != nil {
-			glog.Fatalf("Failed to listen on secure address: %v", err)
-		}
-		glog.Infof("Listening securely on %v", cfg.secureListenAddress)
-		go func() {
-			err := srv.ServeTLS(l, cfg.tls.certFile, cfg.tls.keyFile)
+			cipherSuiteIDs, err := k8sapiflag.TLSCipherSuites(cfg.tls.cipherSuites)
 			if err != nil {
-				glog.Fatalf("failed to serve TLS server: %v", err)
+				glog.Fatalf("Failed to convert TLS cipher suite name to ID: %v", err)
 			}
-		}()
+
+			srv.TLSConfig.CipherSuites = cipherSuiteIDs
+			srv.TLSConfig.MinVersion = version
+
+			if err := http2.ConfigureServer(srv, nil); err != nil {
+				glog.Fatalf("failed to configure http2 server: %v", err)
+			}
+
+			glog.Infof("Starting TCP socket on %v", cfg.secureListenAddress)
+			l, err := net.Listen("tcp", cfg.secureListenAddress)
+			if err != nil {
+				glog.Fatalf("failed to listen on secure address: %v", err)
+			}
+
+			gr.Add(func() error {
+				glog.Infof("Listening securely on %v", cfg.secureListenAddress)
+				return srv.ServeTLS(l, cfg.tls.certFile, cfg.tls.keyFile)
+			}, func(err error) {
+				if err := srv.Shutdown(context.Background()); err != nil {
+					glog.Errorf("failed to gracefully shutdown server: %v", err)
+				}
+				if err := l.Close(); err != nil {
+					glog.Errorf("failed to gracefully close secure listener: %v", err)
+				}
+			})
+		}
+	}
+	{
+		if cfg.insecureListenAddress != "" {
+			if cfg.upstreamForceH2C {
+				// Force http/2 for connections to the upstream i.e. do not start with HTTP1.1 UPGRADE req to
+				// initialize http/2 session.
+				// See https://github.com/golang/go/issues/14141#issuecomment-219212895 for more context
+				proxy.Transport = &http2.Transport{
+					// Allow http schema. This doesn't automatically disable TLS
+					AllowHTTP: true,
+					// Do disable TLS.
+					// In combination with the schema check above. We could enforce h2c against the upstream server
+					DialTLS: func(netw, addr string, cfg *tls.Config) (net.Conn, error) {
+						return net.Dial(netw, addr)
+					},
+				}
+			}
+
+			srv := &http.Server{Handler: h2c.NewHandler(mux, &http2.Server{})}
+
+			l, err := net.Listen("tcp", cfg.insecureListenAddress)
+			if err != nil {
+				glog.Fatalf("Failed to listen on insecure address: %v", err)
+			}
+
+			gr.Add(func() error {
+				glog.Infof("Listening insecurely on %v", cfg.insecureListenAddress)
+				return srv.Serve(l)
+			}, func(err error) {
+				if err := srv.Shutdown(context.Background()); err != nil {
+					glog.Errorf("failed to gracefully shutdown server: %v", err)
+				}
+				if err := l.Close(); err != nil {
+					glog.Errorf("failed to gracefully close listener: %v", err)
+				}
+			})
+		}
+	}
+	{
+		sig := make(chan os.Signal)
+		gr.Add(func() error {
+			signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+			<-sig
+			glog.Info("received interrupt, shutting down")
+			return nil
+		}, func(err error) {
+			close(sig)
+		})
 	}
 
-	if cfg.insecureListenAddress != "" {
-		if cfg.upstreamForceH2C {
-			// Force http/2 for connections to the upstream i.e. do not start with HTTP1.1 UPGRADE req to
-			// initialize http/2 session.
-			// See https://github.com/golang/go/issues/14141#issuecomment-219212895 for more context
-			proxy.Transport = &http2.Transport{
-				// Allow http schema. This doesn't automatically disable TLS
-				AllowHTTP: true,
-				// Do disable TLS.
-				// In combination with the schema check above. We could enforce h2c against the upstream server
-				DialTLS: func(netw, addr string, cfg *tls.Config) (net.Conn, error) {
-					return net.Dial(netw, addr)
-				},
-			}
-		}
-
-		srv := &http.Server{Handler: h2c.NewHandler(mux, &http2.Server{})}
-
-		l, err := net.Listen("tcp", cfg.insecureListenAddress)
-		if err != nil {
-			glog.Fatalf("Failed to listen on insecure address: %v", err)
-		}
-		glog.Infof("Listening insecurely on %v", cfg.insecureListenAddress)
-		go func() {
-			err := srv.Serve(l)
-			if err != nil {
-				glog.Fatalf("failed to serve server: %v", err)
-			}
-		}()
-	}
-
-	term := make(chan os.Signal, 1)
-	signal.Notify(term, os.Interrupt, syscall.SIGTERM)
-
-	select {
-	case <-term:
-		glog.Info("Received SIGTERM, exiting gracefully...")
+	if err := gr.Run(); err != nil {
+		glog.Fatalf("failed to run groups: %v", err)
 	}
 }
 
