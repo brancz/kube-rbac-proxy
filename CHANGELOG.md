@@ -1,5 +1,13 @@
 ## Next release
 
+## 0.4.1 / 2019-01-23
+
+* [ENHANCEMENT] Use golang.org/x/net http2 server. #29
+* [ENHANCEMENT] Update Kubernetes to 1.13.2 #28
+* [ENHANCEMENT] Make multi-arch builds possible. #21
+* [BUGFIX] Log when server isn't able to start. #27
+* [BUGFIX] Set user specified TLS configuration when explicit TLS certificates are provided.
+
 ## 0.4.0 / 2018-10-24
 
 * [CHANGE] The config file flag has been renamed to `--config-file`.
