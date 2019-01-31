@@ -22,6 +22,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"fmt"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -146,46 +147,6 @@ func TestNewManagerNoRotation(t *testing.T) {
 	}
 }
 
-func TestShouldRotate(t *testing.T) {
-	now := time.Now()
-	tests := []struct {
-		name         string
-		notBefore    time.Time
-		notAfter     time.Time
-		shouldRotate bool
-	}{
-		{"just issued, still good", now.Add(-1 * time.Hour), now.Add(99 * time.Hour), false},
-		{"half way expired, still good", now.Add(-24 * time.Hour), now.Add(24 * time.Hour), false},
-		{"mostly expired, still good", now.Add(-69 * time.Hour), now.Add(31 * time.Hour), false},
-		{"just about expired, should rotate", now.Add(-91 * time.Hour), now.Add(9 * time.Hour), true},
-		{"nearly expired, should rotate", now.Add(-99 * time.Hour), now.Add(1 * time.Hour), true},
-		{"already expired, should rotate", now.Add(-10 * time.Hour), now.Add(-1 * time.Hour), true},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			m := manager{
-				cert: &tls.Certificate{
-					Leaf: &x509.Certificate{
-						NotBefore: test.notBefore,
-						NotAfter:  test.notAfter,
-					},
-				},
-				template: &x509.CertificateRequest{},
-				usages:   []certificates.KeyUsage{},
-			}
-			m.setRotationDeadline()
-			if m.shouldRotate() != test.shouldRotate {
-				t.Errorf("Time %v, a certificate issued for (%v, %v) should rotate should be %t.",
-					now,
-					m.cert.Leaf.NotBefore,
-					m.cert.Leaf.NotAfter,
-					test.shouldRotate)
-			}
-		})
-	}
-}
-
 type gaugeMock struct {
 	calls     int
 	lastValue float64
@@ -226,27 +187,191 @@ func TestSetRotationDeadline(t *testing.T) {
 						NotAfter:  tc.notAfter,
 					},
 				},
-				template:              &x509.CertificateRequest{},
+				getTemplate:           func() *x509.CertificateRequest { return &x509.CertificateRequest{} },
 				usages:                []certificates.KeyUsage{},
 				certificateExpiration: &g,
 			}
 			jitteryDuration = func(float64) time.Duration { return time.Duration(float64(tc.notAfter.Sub(tc.notBefore)) * 0.7) }
 			lowerBound := tc.notBefore.Add(time.Duration(float64(tc.notAfter.Sub(tc.notBefore)) * 0.7))
 
-			m.setRotationDeadline()
+			deadline := m.nextRotationDeadline()
 
-			if !m.rotationDeadline.Equal(lowerBound) {
+			if !deadline.Equal(lowerBound) {
 				t.Errorf("For notBefore %v, notAfter %v, the rotationDeadline %v should be %v.",
 					tc.notBefore,
 					tc.notAfter,
-					m.rotationDeadline,
+					deadline,
 					lowerBound)
 			}
 			if g.calls != 1 {
 				t.Errorf("%d metrics were recorded, wanted %d", g.calls, 1)
 			}
 			if g.lastValue != float64(tc.notAfter.Unix()) {
-				t.Errorf("%d value for metric was recorded, wanted %d", g.lastValue, tc.notAfter.Unix())
+				t.Errorf("%f value for metric was recorded, wanted %d", g.lastValue, tc.notAfter.Unix())
+			}
+		})
+	}
+}
+
+func TestCertSatisfiesTemplate(t *testing.T) {
+	testCases := []struct {
+		name          string
+		cert          *x509.Certificate
+		template      *x509.CertificateRequest
+		shouldSatisfy bool
+	}{
+		{
+			name:          "No certificate, no template",
+			cert:          nil,
+			template:      nil,
+			shouldSatisfy: false,
+		},
+		{
+			name:          "No certificate",
+			cert:          nil,
+			template:      &x509.CertificateRequest{},
+			shouldSatisfy: false,
+		},
+		{
+			name: "No template",
+			cert: &x509.Certificate{
+				Subject: pkix.Name{
+					CommonName: "system:node:fake-node-name",
+				},
+			},
+			template:      nil,
+			shouldSatisfy: true,
+		},
+		{
+			name: "Mismatched common name",
+			cert: &x509.Certificate{
+				Subject: pkix.Name{
+					CommonName: "system:node:fake-node-name-2",
+				},
+			},
+			template: &x509.CertificateRequest{
+				Subject: pkix.Name{
+					CommonName: "system:node:fake-node-name",
+				},
+			},
+			shouldSatisfy: false,
+		},
+		{
+			name: "Missing orgs in certificate",
+			cert: &x509.Certificate{
+				Subject: pkix.Name{
+					Organization: []string{"system:nodes"},
+				},
+			},
+			template: &x509.CertificateRequest{
+				Subject: pkix.Name{
+					Organization: []string{"system:nodes", "foobar"},
+				},
+			},
+			shouldSatisfy: false,
+		},
+		{
+			name: "Extra orgs in certificate",
+			cert: &x509.Certificate{
+				Subject: pkix.Name{
+					Organization: []string{"system:nodes", "foobar"},
+				},
+			},
+			template: &x509.CertificateRequest{
+				Subject: pkix.Name{
+					Organization: []string{"system:nodes"},
+				},
+			},
+			shouldSatisfy: true,
+		},
+		{
+			name: "Missing DNS names in certificate",
+			cert: &x509.Certificate{
+				Subject:  pkix.Name{},
+				DNSNames: []string{"foo.example.com"},
+			},
+			template: &x509.CertificateRequest{
+				Subject:  pkix.Name{},
+				DNSNames: []string{"foo.example.com", "bar.example.com"},
+			},
+			shouldSatisfy: false,
+		},
+		{
+			name: "Extra DNS names in certificate",
+			cert: &x509.Certificate{
+				Subject:  pkix.Name{},
+				DNSNames: []string{"foo.example.com", "bar.example.com"},
+			},
+			template: &x509.CertificateRequest{
+				Subject:  pkix.Name{},
+				DNSNames: []string{"foo.example.com"},
+			},
+			shouldSatisfy: true,
+		},
+		{
+			name: "Missing IP addresses in certificate",
+			cert: &x509.Certificate{
+				Subject:     pkix.Name{},
+				IPAddresses: []net.IP{net.ParseIP("192.168.1.1")},
+			},
+			template: &x509.CertificateRequest{
+				Subject:     pkix.Name{},
+				IPAddresses: []net.IP{net.ParseIP("192.168.1.1"), net.ParseIP("192.168.1.2")},
+			},
+			shouldSatisfy: false,
+		},
+		{
+			name: "Extra IP addresses in certificate",
+			cert: &x509.Certificate{
+				Subject:     pkix.Name{},
+				IPAddresses: []net.IP{net.ParseIP("192.168.1.1"), net.ParseIP("192.168.1.2")},
+			},
+			template: &x509.CertificateRequest{
+				Subject:     pkix.Name{},
+				IPAddresses: []net.IP{net.ParseIP("192.168.1.1")},
+			},
+			shouldSatisfy: true,
+		},
+		{
+			name: "Matching certificate",
+			cert: &x509.Certificate{
+				Subject: pkix.Name{
+					CommonName:   "system:node:fake-node-name",
+					Organization: []string{"system:nodes"},
+				},
+				DNSNames:    []string{"foo.example.com"},
+				IPAddresses: []net.IP{net.ParseIP("192.168.1.1")},
+			},
+			template: &x509.CertificateRequest{
+				Subject: pkix.Name{
+					CommonName:   "system:node:fake-node-name",
+					Organization: []string{"system:nodes"},
+				},
+				DNSNames:    []string{"foo.example.com"},
+				IPAddresses: []net.IP{net.ParseIP("192.168.1.1")},
+			},
+			shouldSatisfy: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var tlsCert *tls.Certificate
+
+			if tc.cert != nil {
+				tlsCert = &tls.Certificate{
+					Leaf: tc.cert,
+				}
+			}
+
+			m := manager{
+				cert:        tlsCert,
+				getTemplate: func() *x509.CertificateRequest { return tc.template },
+			}
+
+			result := m.certSatisfiesTemplate()
+			if result != tc.shouldSatisfy {
+				t.Errorf("cert: %+v, template: %+v, certSatisfiesTemplate returned %v, want %v", m.cert, tc.template, result, tc.shouldSatisfy)
 			}
 		})
 	}
@@ -261,8 +386,8 @@ func TestRotateCertCreateCSRError(t *testing.T) {
 				NotAfter:  now.Add(-1 * time.Hour),
 			},
 		},
-		template: &x509.CertificateRequest{},
-		usages:   []certificates.KeyUsage{},
+		getTemplate: func() *x509.CertificateRequest { return &x509.CertificateRequest{} },
+		usages:      []certificates.KeyUsage{},
 		certSigningRequestClient: fakeClient{
 			failureType: createError,
 		},
@@ -284,8 +409,8 @@ func TestRotateCertWaitingForResultError(t *testing.T) {
 				NotAfter:  now.Add(-1 * time.Hour),
 			},
 		},
-		template: &x509.CertificateRequest{},
-		usages:   []certificates.KeyUsage{},
+		getTemplate: func() *x509.CertificateRequest { return &x509.CertificateRequest{} },
+		usages:      []certificates.KeyUsage{},
 		certSigningRequestClient: fakeClient{
 			failureType: watchError,
 		},
@@ -321,7 +446,7 @@ func TestNewManagerBootstrap(t *testing.T) {
 	}
 	if m, ok := cm.(*manager); !ok {
 		t.Errorf("Expected a '*manager' from 'NewManager'")
-	} else if !m.shouldRotate() {
+	} else if !m.forceRotation {
 		t.Errorf("Expected rotation should happen during bootstrap, but it won't.")
 	}
 }
@@ -360,9 +485,8 @@ func TestNewManagerNoBootstrap(t *testing.T) {
 	if m, ok := cm.(*manager); !ok {
 		t.Errorf("Expected a '*manager' from 'NewManager'")
 	} else {
-		m.setRotationDeadline()
-		if m.shouldRotate() {
-			t.Errorf("Expected rotation should happen during bootstrap, but it won't.")
+		if m.forceRotation {
+			t.Errorf("Expected rotation should not happen during bootstrap, but it won't.")
 		}
 	}
 }
@@ -515,8 +639,7 @@ func TestInitializeCertificateSigningRequestClient(t *testing.T) {
 			if m, ok := certificateManager.(*manager); !ok {
 				t.Errorf("Expected a '*manager' from 'NewManager'")
 			} else {
-				m.setRotationDeadline()
-				if m.shouldRotate() {
+				if m.forceRotation {
 					if success, err := m.rotateCerts(); !success {
 						t.Errorf("Got failure from 'rotateCerts', wanted success.")
 					} else if err != nil {
@@ -614,8 +737,7 @@ func TestInitializeOtherRESTClients(t *testing.T) {
 			if m, ok := certificateManager.(*manager); !ok {
 				t.Errorf("Expected a '*manager' from 'NewManager'")
 			} else {
-				m.setRotationDeadline()
-				if m.shouldRotate() {
+				if m.forceRotation {
 					success, err := certificateManager.(*manager).rotateCerts()
 					if err != nil {
 						t.Errorf("Got error %v, expected none.", err)

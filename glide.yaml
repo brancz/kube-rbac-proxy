@@ -4,9 +4,9 @@ import:
   version: ^1.0.0
 - package: github.com/golang/glog
 - package: github.com/spf13/pflag
-  version: ^1.0.0
+  version: ^1.0.3
 - package: k8s.io/apiserver
-  version: kubernetes-1.10.0
+  version: kubernetes-1.13.2
   subpackages:
   - pkg/authentication/authenticator
   - pkg/authentication/authenticatorfactory
@@ -15,12 +15,15 @@ import:
   - pkg/authorization/authorizerfactory
   - pkg/util/flag
 - package: k8s.io/client-go
-  version: ^6.0.0
+  version: kubernetes-1.13.2
   subpackages:
   - kubernetes
   - kubernetes/typed/authentication/v1beta1
   - kubernetes/typed/authorization/v1beta1
   - rest
-- package: github.com/hkwi/h2c
 - package: github.com/coreos/go-oidc
   version: ^2.0.0
+- package: golang.org/x/net
+  version: ed066c81e75eba56dd9bd2139ade88125b855585
+- package: github.com/oklog/run
+  version: ^1.0.0

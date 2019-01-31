@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	stdflag "flag"
 	"fmt"
@@ -31,9 +32,10 @@ import (
 
 	"github.com/ghodss/yaml"
 	"github.com/golang/glog"
-	"github.com/hkwi/h2c"
+	"github.com/oklog/run"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	k8sapiflag "k8s.io/apiserver/pkg/util/flag"
 	"k8s.io/client-go/kubernetes"
@@ -202,18 +204,23 @@ func main() {
 		proxy.ServeHTTP(w, req)
 	}))
 
-	if cfg.secureListenAddress != "" {
-		srv := &http.Server{Handler: mux}
+	var gr run.Group
+	{
+		if cfg.secureListenAddress != "" {
+			srv := &http.Server{Handler: mux, TLSConfig: &tls.Config{}}
 
-		if cfg.tls.certFile == "" && cfg.tls.keyFile == "" {
-			glog.Info("Generating self signed cert as no cert is provided")
-			certBytes, keyBytes, err := certutil.GenerateSelfSignedCertKey("", nil, nil)
-			if err != nil {
-				glog.Fatalf("Failed to generate self signed cert and key: %v", err)
-			}
-			cert, err := tls.X509KeyPair(certBytes, keyBytes)
-			if err != nil {
-				glog.Fatalf("Failed to load generated self signed cert and key: %v", err)
+			if cfg.tls.certFile == "" && cfg.tls.keyFile == "" {
+				glog.Info("Generating self signed cert as no cert is provided")
+				certBytes, keyBytes, err := certutil.GenerateSelfSignedCertKey("", nil, nil)
+				if err != nil {
+					glog.Fatalf("Failed to generate self signed cert and key: %v", err)
+				}
+				cert, err := tls.X509KeyPair(certBytes, keyBytes)
+				if err != nil {
+					glog.Fatalf("Failed to load generated self signed cert and key: %v", err)
+				}
+
+				srv.TLSConfig.Certificates = []tls.Certificate{cert}
 			}
 
 			version, err := tlsVersion(cfg.tls.minVersion)
@@ -225,88 +232,84 @@ func main() {
 			if err != nil {
 				glog.Fatalf("Failed to convert TLS cipher suite name to ID: %v", err)
 			}
-			srv.TLSConfig = &tls.Config{
-				CipherSuites: cipherSuiteIDs,
-				Certificates: []tls.Certificate{cert},
-				MinVersion:   version,
-				// To enable http/2
-				// See net/http.Server.shouldConfigureHTTP2ForServe for more context
-				NextProtos: []string{"h2"},
-			}
-		}
 
-		l, err := net.Listen("tcp", cfg.secureListenAddress)
-		if err != nil {
-			glog.Fatalf("Failed to listen on secure address: %v", err)
+			srv.TLSConfig.CipherSuites = cipherSuiteIDs
+			srv.TLSConfig.MinVersion = version
+
+			if err := http2.ConfigureServer(srv, nil); err != nil {
+				glog.Fatalf("failed to configure http2 server: %v", err)
+			}
+
+			glog.Infof("Starting TCP socket on %v", cfg.secureListenAddress)
+			l, err := net.Listen("tcp", cfg.secureListenAddress)
+			if err != nil {
+				glog.Fatalf("failed to listen on secure address: %v", err)
+			}
+
+			gr.Add(func() error {
+				glog.Infof("Listening securely on %v", cfg.secureListenAddress)
+				return srv.ServeTLS(l, cfg.tls.certFile, cfg.tls.keyFile)
+			}, func(err error) {
+				if err := srv.Shutdown(context.Background()); err != nil {
+					glog.Errorf("failed to gracefully shutdown server: %v", err)
+				}
+				if err := l.Close(); err != nil {
+					glog.Errorf("failed to gracefully close secure listener: %v", err)
+				}
+			})
 		}
-		glog.Infof("Listening securely on %v", cfg.secureListenAddress)
-		go srv.ServeTLS(l, cfg.tls.certFile, cfg.tls.keyFile)
+	}
+	{
+		if cfg.insecureListenAddress != "" {
+			if cfg.upstreamForceH2C {
+				// Force http/2 for connections to the upstream i.e. do not start with HTTP1.1 UPGRADE req to
+				// initialize http/2 session.
+				// See https://github.com/golang/go/issues/14141#issuecomment-219212895 for more context
+				proxy.Transport = &http2.Transport{
+					// Allow http schema. This doesn't automatically disable TLS
+					AllowHTTP: true,
+					// Do disable TLS.
+					// In combination with the schema check above. We could enforce h2c against the upstream server
+					DialTLS: func(netw, addr string, cfg *tls.Config) (net.Conn, error) {
+						return net.Dial(netw, addr)
+					},
+				}
+			}
+
+			srv := &http.Server{Handler: h2c.NewHandler(mux, &http2.Server{})}
+
+			l, err := net.Listen("tcp", cfg.insecureListenAddress)
+			if err != nil {
+				glog.Fatalf("Failed to listen on insecure address: %v", err)
+			}
+
+			gr.Add(func() error {
+				glog.Infof("Listening insecurely on %v", cfg.insecureListenAddress)
+				return srv.Serve(l)
+			}, func(err error) {
+				if err := srv.Shutdown(context.Background()); err != nil {
+					glog.Errorf("failed to gracefully shutdown server: %v", err)
+				}
+				if err := l.Close(); err != nil {
+					glog.Errorf("failed to gracefully close listener: %v", err)
+				}
+			})
+		}
+	}
+	{
+		sig := make(chan os.Signal)
+		gr.Add(func() error {
+			signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+			<-sig
+			glog.Info("received interrupt, shutting down")
+			return nil
+		}, func(err error) {
+			close(sig)
+		})
 	}
 
-	if cfg.insecureListenAddress != "" {
-		if cfg.upstreamForceH2C {
-			// Force http/2 for connections to the upstream i.e. do not start with HTTP1.1 UPGRADE req to
-			// initialize http/2 session.
-			// See https://github.com/golang/go/issues/14141#issuecomment-219212895 for more context
-			proxy.Transport = &http2.Transport{
-				// Allow http schema. This doesn't automatically disable TLS
-				AllowHTTP: true,
-				// Do disable TLS.
-				// In combination with the schema check above. We could enforce h2c against the upstream server
-				DialTLS: func(netw, addr string, cfg *tls.Config) (net.Conn, error) {
-					return net.Dial(netw, addr)
-				},
-			}
-		}
-
-		// Background:
-		//
-		// golang's http2 server doesn't support h2c
-		// https://github.com/golang/go/issues/16696
-		//
-		//
-		// Action:
-		//
-		// Use hkwi/h2c so that you can properly handle HTTP Upgrade requests over plain TCP,
-		// which is one of consequences for a h2c support.
-		//
-		// See https://github.com/golang/go/issues/14141 for more context.
-		//
-		// Possible alternative:
-		//
-		// We could potentially use grpc-go server's HTTP handler support
-		// which would handle HTTP UPGRADE from http1.1 to http/2, especially in case
-		// what you wanted kube-rbac-proxy to authn/authz was gRPC over h2c calls.
-		//
-		// Note that golang's http server requires a client(including gRPC) to send HTTP Upgrade req to
-		// property start http/2.
-		//
-		// but it isn't straight-forward to understand.
-		// Also note that at time of writing this, grpc-go's server implementation still lacks
-		// a h2c support for communication against the upstream.
-		//
-		// See belows for more information:
-		// - https://github.com/grpc/grpc-go/pull/1406/files
-		// - https://github.com/grpc/grpc-go/issues/549#issuecomment-191458335
-		// - https://github.com/golang/go/issues/14141#issuecomment-176465220
-		h2cHandler := &h2c.Server{Handler: mux}
-
-		srv := &http.Server{Handler: h2cHandler}
-
-		l, err := net.Listen("tcp", cfg.insecureListenAddress)
-		if err != nil {
-			glog.Fatalf("Failed to listen on insecure address: %v", err)
-		}
-		glog.Infof("Listening insecurely on %v", cfg.insecureListenAddress)
-		go srv.Serve(l)
-	}
-
-	term := make(chan os.Signal)
-	signal.Notify(term, os.Interrupt, syscall.SIGTERM)
-
-	select {
-	case <-term:
-		glog.Info("Received SIGTERM, exiting gracefully...")
+	if err := gr.Run(); err != nil {
+		glog.Fatalf("failed to run groups: %v", err)
 	}
 }
 
