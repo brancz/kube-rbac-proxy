@@ -54,6 +54,7 @@ Usage of _output/linux/amd64/kube-rbac-proxy:
       --tls-min-version string                      Minimum TLS version supported. Value must match version names from https://golang.org/pkg/crypto/tls/#pkg-constants. (default "VersionTLS12")
       --tls-private-key-file string                 File containing the default x509 private key matching --tls-cert-file.
       --upstream string                             The upstream URL to proxy to once requests have successfully been authenticated and authorized.
+      --upstream-ca-file string                     The CA the upstream uses for TLS connection. This is required when the upstream uses TLS and its own CA certificate
       --upstream-force-h2c                          Force h2c to communiate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only
   -v, --v Level                                     log level for V logs
       --vmodule moduleSpec                          comma-separated list of pattern=N settings for file-filtered logging
