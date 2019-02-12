@@ -28,6 +28,9 @@ type AuthnHeaderConfig struct {
 	GroupsFieldName string
 	// The separator string used for concatenating multiple group names in a groups header field's value
 	GroupSeparator string
+	// Corresponds to the name of the field inside a http(2) request header
+	// to tell the upstream server about the proxy server(s) the request was forwarded for
+	XForwardedFor string
 }
 
 // AuthnConfig holds all configurations related to authentication options

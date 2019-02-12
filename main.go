@@ -120,6 +120,7 @@ func main() {
 	flagset.StringVar(&cfg.auth.Authentication.Header.UserFieldName, "auth-header-user-field-name", "x-remote-user", "The name of the field inside a http(2) request header to tell the upstream server about the user's name")
 	flagset.StringVar(&cfg.auth.Authentication.Header.GroupsFieldName, "auth-header-groups-field-name", "x-remote-groups", "The name of the field inside a http(2) request header to tell the upstream server about the user's groups")
 	flagset.StringVar(&cfg.auth.Authentication.Header.GroupSeparator, "auth-header-groups-field-separator", "|", "The separator string used for concatenating multiple group names in a groups header field's value")
+	flagset.StringVar(&cfg.auth.Authentication.Header.XForwardedFor, "auth-header-forwardedfor-field-name", "x-forwarded-for", "The name of the field inside a http(2) request header to tell the upstream server about the originating IP address of the client connecting through the proxy")
 
 	//Authn OIDC flags
 	flagset.StringVar(&cfg.auth.Authentication.OIDC.IssuerURL, "oidc-issuer", "", "The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).")
@@ -207,6 +208,16 @@ func main() {
 		ok := auth.Handle(w, req)
 		if !ok {
 			return
+		}
+
+		if cfg.auth.Authentication.Header.Enabled {
+			forwardedFor, err := getOutboundIP(upstreamURL.Host)
+			if err != nil {
+				glog.Errorf("Failed to find outbound IP for upstream %s: %v", upstreamURL.Host, err)
+				http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+				return
+			}
+			req.Header.Set(cfg.auth.Authentication.Header.XForwardedFor, forwardedFor)
 		}
 
 		proxy.ServeHTTP(w, req)
@@ -338,4 +349,14 @@ func initKubeConfig(kcLocation string) *rest.Config {
 	}
 
 	return kubeConfig
+}
+
+func getOutboundIP(upstreamHost string) (string, error) {
+	conn, err := net.Dial("udp", upstreamHost)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+
+	return conn.LocalAddr().String(), nil
 }
