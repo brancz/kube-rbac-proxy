@@ -39,7 +39,10 @@ grpcc-container:
 
 test:
 	@echo ">> running all tests"
+	# install test dependencies
 	@go test -i $(PKGS)
+	# run the tests
+	@go test  $(PKGS)
 
 generate: embedmd
 	@echo ">> generating examples"

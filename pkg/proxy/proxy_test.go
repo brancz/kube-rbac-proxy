@@ -17,6 +17,7 @@ limitations under the License.
 package proxy
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -127,11 +128,11 @@ func fakeJWTRequest(method, path, token string) *http.Request {
 
 func fakeOIDCAuthenticator(t *testing.T, fakeUser *user.DefaultInfo) authenticator.Request {
 
-	auth := bearertoken.New(authenticator.TokenFunc(func(token string) (user.Info, bool, error) {
+	auth := bearertoken.New(authenticator.TokenFunc(func(ctx context.Context, token string) (*authenticator.Response, bool, error) {
 		if token != "VALID" {
 			return nil, false, nil
 		}
-		return fakeUser, true, nil
+		return &authenticator.Response{User: fakeUser}, true, nil
 	}))
 	return auth
 }
