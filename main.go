@@ -197,8 +197,15 @@ func main() {
 	}
 
 	upstreamTransport, err := initTransport(cfg.upstreamCAFile)
+
 	if err != nil {
 		glog.Fatalf("Failed to set up upstream TLS connection: %v", err)
+	}
+
+	forwardedFor, err := getOutboundIP(upstreamURL.Host)
+
+	if err != nil {
+		glog.Fatalf("Failed to find outbound IP for upstream %s: %v", upstreamURL.Host, err)
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(upstreamURL)
@@ -211,12 +218,6 @@ func main() {
 		}
 
 		if cfg.auth.Authentication.Header.Enabled {
-			forwardedFor, err := getOutboundIP(upstreamURL.Host)
-			if err != nil {
-				glog.Errorf("Failed to find outbound IP for upstream %s: %v", upstreamURL.Host, err)
-				http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
-				return
-			}
 			req.Header.Set(cfg.auth.Authentication.Header.XForwardedFor, forwardedFor)
 		}
 
