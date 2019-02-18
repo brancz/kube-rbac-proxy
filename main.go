@@ -352,7 +352,23 @@ func initKubeConfig(kcLocation string) *rest.Config {
 	return kubeConfig
 }
 
+// getOutboundIP returns IP address of the interface used to communicate with upstreamHost
 func getOutboundIP(upstreamHost string) (string, error) {
+	// When net.Dial is used with UDP protocol, all internal data structures are populated
+	// with actual information, but no communication is performed yet (no TCP handshake).
+	// This is the most reliable way to get address of the interface, what will be used.
+	//
+	// There are alternative ways how to get IP address of a local interface.
+	// But none of them reliably provide address of the interface which will actually be
+	// used to talk to upstreamHost:
+	//
+	//   hostname, _ := os.Hostname()
+	//   net.LookupHost(hostname)
+	//
+	//   ifaces, _ := net.Interfaces()
+	//   for _, i := range ifaces {
+	//   	...
+	//   }
 	conn, err := net.Dial("udp", upstreamHost)
 	if err != nil {
 		return "", err
