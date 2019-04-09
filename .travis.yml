@@ -1,0 +1,18 @@
+language: go
+
+go:
+  - '1.11.x'
+
+go_import_path: github.com/brancz/kube-rbac-proxy
+
+services:
+  - docker
+
+jobs:
+  include:
+    - stage: Integration Tests
+      before_script:
+        - curl -Lo kind https://github.com/kubernetes-sigs/kind/releases/download/0.2.1/kind-linux-amd64 && chmod +x kind && sudo mv kind /usr/local/bin/
+        - kind create cluster
+        - export KUBECONFIG="$(kind get kubeconfig-path)"
+      script: make test-e2e

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -322,7 +321,10 @@ func CreateNamespace(client kubernetes.Interface, name string) error {
 			Name: name,
 		},
 	})
-	return errors.Wrap(err, fmt.Sprintf("failed to create namespace with name %v", name))
+	if err != nil {
+		return fmt.Errorf("failed to create namespace with name %v", name)
+	}
+	return nil
 }
 
 func DeleteNamespace(client kubernetes.Interface, name string) error {
