@@ -44,6 +44,9 @@ test:
 	# run the tests
 	@go test  $(PKGS)
 
+test-e2e:
+	go test -timeout 55m -v ./test/e2e/ $(TEST_RUN_ARGS) --kubeconfig=$(KUBECONFIG)
+
 generate: embedmd
 	@echo ">> generating examples"
 	@./scripts/generate-examples.sh
