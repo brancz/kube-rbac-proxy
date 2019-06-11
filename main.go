@@ -74,6 +74,7 @@ var versions = map[string]uint16{
 	"VersionTLS10": tls.VersionTLS10,
 	"VersionTLS11": tls.VersionTLS11,
 	"VersionTLS12": tls.VersionTLS12,
+	"VersionTLS13": tls.VersionTLS13,
 }
 
 func tlsVersion(versionName string) (uint16, error) {
@@ -81,6 +82,10 @@ func tlsVersion(versionName string) (uint16, error) {
 		return version, nil
 	}
 	return 0, fmt.Errorf("unknown tls version %q", versionName)
+}
+
+func init() {
+	os.Setenv("GODEBUG", os.Getenv("GODEBUG")+",tls13=1")
 }
 
 func main() {

@@ -55,6 +55,6 @@ generate: embedmd
 	@$(GOPATH)/bin/embedmd -w `find ./ -path ./vendor -prune -o -name "*.md" -print`
 
 embedmd:
-	@go get github.com/campoy/embedmd
+	@GO111MODULE=off go get github.com/campoy/embedmd
 
 .PHONY: all check-license crossbuild build container curl-container test generate embedmd

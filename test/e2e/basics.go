@@ -25,7 +25,7 @@ import (
 
 func testBasics(s *kubetest.Suite) kubetest.TestSuite {
 	return func(t *testing.T) {
-		command := `curl -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
+		command := `curl --tlsv1.3 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
 
 		kubetest.Scenario{
 			Name: "NoRBAC",
