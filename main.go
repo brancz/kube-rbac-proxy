@@ -219,7 +219,11 @@ func main() {
 
 			if cfg.tls.certFile == "" && cfg.tls.keyFile == "" {
 				glog.Info("Generating self signed cert as no cert is provided")
-				certBytes, keyBytes, err := certutil.GenerateSelfSignedCertKey("", nil, nil)
+				host, err := os.Hostname()
+				if err != nil {
+					glog.Fatalf("Failed to retrieve hostname for self-signed cert: %v", err)
+				}
+				certBytes, keyBytes, err := certutil.GenerateSelfSignedCertKey(host, nil, nil)
 				if err != nil {
 					glog.Fatalf("Failed to generate self signed cert and key: %v", err)
 				}
