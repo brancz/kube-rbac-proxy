@@ -5,6 +5,14 @@ go:
 
 go_import_path: github.com/brancz/kube-rbac-proxy
 
+env:
+  - GO111MODULE=on
+
+cache:
+  directories:
+  - $GOCACHE
+  - $GOPATH/pkg/mod
+
 services:
   - docker
 
