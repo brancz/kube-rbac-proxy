@@ -8,6 +8,7 @@ require (
 	github.com/coreos/go-oidc v0.0.0-20181101194249-66476e026701 // indirect
 	github.com/docker/docker v0.0.0-20180612054059-a9fbbdc8dd87 // indirect
 	github.com/evanphx/json-patch v0.0.0-20180908160633-36442dbdb585 // indirect
+	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-openapi/jsonpointer v0.19.0 // indirect
 	github.com/go-openapi/jsonreference v0.19.0 // indirect
@@ -41,11 +42,13 @@ require (
 	github.com/prometheus/procfs v0.0.0-20170519190837-65c1f6f8f0fc // indirect
 	github.com/sirupsen/logrus v0.0.0-20170822132746-89742aefa4b2 // indirect
 	github.com/spf13/pflag v1.0.3
-	golang.org/x/crypto v0.0.0-20180808211826-de0752318171 // indirect
-	golang.org/x/net v0.0.0-20190119204137-ed066c81e75e
+	golang.org/x/crypto v0.0.0-20190611184440-5c40567a22f8 // indirect
+	golang.org/x/net v0.0.0-20190613194153-d28f0bde5980
 	golang.org/x/oauth2 v0.0.0-20170412232759-a6bd8cefa181 // indirect
-	golang.org/x/sync v0.0.0-20190423024810-112230192c58 // indirect
+	golang.org/x/sys v0.0.0-20190616124812-15dcb6c0061f // indirect
+	golang.org/x/text v0.3.2 // indirect
 	golang.org/x/time v0.0.0-20161028155119-f51c12702a4d // indirect
+	golang.org/x/tools v0.0.0-20190614205625-5aca471b1d59 // indirect
 	google.golang.org/appengine v1.4.0 // indirect
 	gopkg.in/airbrake/gobrake.v2 v2.0.9 // indirect
 	gopkg.in/gemnasium/logrus-airbrake-hook.v2 v2.1.2 // indirect
