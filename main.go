@@ -46,6 +46,7 @@ import (
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
 	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
+	rbac_proxy_tls "github.com/brancz/kube-rbac-proxy/pkg/tls"
 )
 
 type config struct {
@@ -233,6 +234,21 @@ func main() {
 				}
 
 				srv.TLSConfig.Certificates = []tls.Certificate{cert}
+			} else {
+				glog.Info("Reading certificate files")
+				ctx, cancel := context.WithCancel(context.Background())
+				r, err := rbac_proxy_tls.NewCertReloader(cfg.tls.certFile, cfg.tls.keyFile)
+				if err != nil {
+					glog.Fatalf("Failed to initialize certificate reloader: %v", err)
+				}
+
+				srv.TLSConfig.GetCertificate = r.GetCertificate
+
+				gr.Add(func() error {
+					return r.Watch(ctx)
+				}, func(error) {
+					cancel()
+				})
 			}
 
 			version, err := tlsVersion(cfg.tls.minVersion)
@@ -260,7 +276,8 @@ func main() {
 
 			gr.Add(func() error {
 				glog.Infof("Listening securely on %v", cfg.secureListenAddress)
-				return srv.ServeTLS(l, cfg.tls.certFile, cfg.tls.keyFile)
+				tlsListener := tls.NewListener(l, srv.TLSConfig)
+				return srv.Serve(tlsListener)
 			}, func(err error) {
 				if err := srv.Shutdown(context.Background()); err != nil {
 					glog.Errorf("failed to gracefully shutdown server: %v", err)
