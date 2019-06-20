@@ -29,6 +29,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/ghodss/yaml"
 	"github.com/golang/glog"
@@ -46,6 +47,7 @@ import (
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
 	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
+	rbac_proxy_tls "github.com/brancz/kube-rbac-proxy/pkg/tls"
 )
 
 type config struct {
@@ -53,16 +55,18 @@ type config struct {
 	secureListenAddress   string
 	upstream              string
 	upstreamForceH2C      bool
+	upstreamCAFile        string
 	auth                  proxy.Config
 	tls                   tlsConfig
 	kubeconfigLocation    string
 }
 
 type tlsConfig struct {
-	certFile     string
-	keyFile      string
-	minVersion   string
-	cipherSuites []string
+	certFile       string
+	keyFile        string
+	minVersion     string
+	cipherSuites   []string
+	reloadInterval time.Duration
 }
 
 type configfile struct {
@@ -104,6 +108,7 @@ func main() {
 	flagset.StringVar(&cfg.secureListenAddress, "secure-listen-address", "", "The address the kube-rbac-proxy HTTPs server should listen on.")
 	flagset.StringVar(&cfg.upstream, "upstream", "", "The upstream URL to proxy to once requests have successfully been authenticated and authorized.")
 	flagset.BoolVar(&cfg.upstreamForceH2C, "upstream-force-h2c", false, "Force h2c to communiate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only")
+	flagset.StringVar(&cfg.upstreamCAFile, "upstream-ca-file", "", "The CA the upstream uses for TLS connection. This is required when the upstream uses TLS and its own CA certificate")
 	flagset.StringVar(&configFileName, "config-file", "", "Configuration file to configure kube-rbac-proxy.")
 
 	// TLS flags
@@ -111,6 +116,7 @@ func main() {
 	flagset.StringVar(&cfg.tls.keyFile, "tls-private-key-file", "", "File containing the default x509 private key matching --tls-cert-file.")
 	flagset.StringVar(&cfg.tls.minVersion, "tls-min-version", "VersionTLS12", "Minimum TLS version supported. Value must match version names from https://golang.org/pkg/crypto/tls/#pkg-constants.")
 	flagset.StringSliceVar(&cfg.tls.cipherSuites, "tls-cipher-suites", nil, "Comma-separated list of cipher suites for the server. Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants). If omitted, the default Go cipher suites will be used")
+	flagset.DurationVar(&cfg.tls.reloadInterval, "tls-reload-interval", time.Minute, "The interval at which to watch for TLS certificate changes, by default set to 1 minute.")
 
 	// Auth flags
 	flagset.StringVar(&cfg.auth.Authentication.X509.ClientCAFile, "client-ca-file", "", "If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.")
@@ -193,7 +199,13 @@ func main() {
 		glog.Fatalf("Failed to create rbac-proxy: %v", err)
 	}
 
+	upstreamTransport, err := initTransport(cfg.upstreamCAFile)
+	if err != nil {
+		glog.Fatalf("Failed to set up upstream TLS connection: %v", err)
+	}
+
 	proxy := httputil.NewSingleHostReverseProxy(upstreamURL)
+	proxy.Transport = upstreamTransport
 	mux := http.NewServeMux()
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ok := auth.Handle(w, req)
@@ -211,7 +223,11 @@ func main() {
 
 			if cfg.tls.certFile == "" && cfg.tls.keyFile == "" {
 				glog.Info("Generating self signed cert as no cert is provided")
-				certBytes, keyBytes, err := certutil.GenerateSelfSignedCertKey("", nil, nil)
+				host, err := os.Hostname()
+				if err != nil {
+					glog.Fatalf("Failed to retrieve hostname for self-signed cert: %v", err)
+				}
+				certBytes, keyBytes, err := certutil.GenerateSelfSignedCertKey(host, nil, nil)
 				if err != nil {
 					glog.Fatalf("Failed to generate self signed cert and key: %v", err)
 				}
@@ -221,6 +237,21 @@ func main() {
 				}
 
 				srv.TLSConfig.Certificates = []tls.Certificate{cert}
+			} else {
+				glog.Info("Reading certificate files")
+				ctx, cancel := context.WithCancel(context.Background())
+				r, err := rbac_proxy_tls.NewCertReloader(cfg.tls.certFile, cfg.tls.keyFile, cfg.tls.reloadInterval)
+				if err != nil {
+					glog.Fatalf("Failed to initialize certificate reloader: %v", err)
+				}
+
+				srv.TLSConfig.GetCertificate = r.GetCertificate
+
+				gr.Add(func() error {
+					return r.Watch(ctx)
+				}, func(error) {
+					cancel()
+				})
 			}
 
 			version, err := tlsVersion(cfg.tls.minVersion)
@@ -248,7 +279,8 @@ func main() {
 
 			gr.Add(func() error {
 				glog.Infof("Listening securely on %v", cfg.secureListenAddress)
-				return srv.ServeTLS(l, cfg.tls.certFile, cfg.tls.keyFile)
+				tlsListener := tls.NewListener(l, srv.TLSConfig)
+				return srv.Serve(tlsListener)
 			}, func(err error) {
 				if err := srv.Shutdown(context.Background()); err != nil {
 					glog.Errorf("failed to gracefully shutdown server: %v", err)
