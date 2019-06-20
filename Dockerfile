@@ -1,5 +1,5 @@
 FROM golang:1.12-alpine AS build
-RUN apk add --update make
+RUN apk add --update make && apk add --no-cache git
 WORKDIR /go/src/github.com/brancz/kube-rbac-proxy
 COPY . .
 RUN make build && cp /go/src/github.com/brancz/kube-rbac-proxy/_output/linux/$(go env GOARCH)/kube-rbac-proxy /usr/local/bin
