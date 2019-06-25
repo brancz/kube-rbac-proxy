@@ -2,7 +2,7 @@ all: check-license build generate test
 
 GITHUB_URL=github.com/brancz/kube-rbac-proxy
 GOOS?=$(shell uname -s | tr A-Z a-z)
-GOARCH?=$(subst x86_64,amd64,$(patsubst i%86,386,$(shell uname -m)))
+GOARCH?=$(shell go env GOARCH)
 OUT_DIR=_output
 BIN?=kube-rbac-proxy
 VERSION?=$(shell cat VERSION)
@@ -39,7 +39,13 @@ grpcc-container:
 
 test:
 	@echo ">> running all tests"
+	# install test dependencies
 	@go test -i $(PKGS)
+	# run the tests
+	@go test  $(PKGS)
+
+test-e2e:
+	go test -timeout 55m -v ./test/e2e/ $(TEST_RUN_ARGS) --kubeconfig=$(KUBECONFIG)
 
 generate: embedmd
 	@echo ">> generating examples"
