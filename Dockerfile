@@ -2,6 +2,8 @@ FROM registry.svc.ci.openshift.org/openshift/release:golang-1.12 AS builder
 WORKDIR /go/src/github.com/brancz/kube-rbac-proxy
 COPY . .
 ENV GO111MODULE=on
+# GOFLAGS is needed to build image without accessing external sources, mostly to comply with ART policies
+ENV GOFLAGS="-mod=vendor"
 RUN make build && \
     cp _output/linux/$(go env GOARCH)/kube-rbac-proxy _output/kube-rbac-proxy
 
