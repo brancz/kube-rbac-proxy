@@ -4,7 +4,7 @@
 
 > NOTE: This project is *alpha* stage. Flags, configuration, behavior and design may change significantly in following releases.
 
-The kube-rbac-proxy is a small HTTP proxy for a single upstream, that can perform RBAC authorization against the Kubernetes API using SubjectAccessReviews.
+The kube-rbac-proxy is a small HTTP proxy for a single upstream, that can perform RBAC authorization against the Kubernetes API using [SubjectAccessReview](https://kubernetes.io/docs/reference/access-authn-authz/authorization/).
 
 In Kubernetes clusters without NetworkPolicies any Pod can perform requests to every other Pod in the cluster. This proxy was developed in order to restrict requests to only those Pods, that present a valid and RBAC authorized token or client TLS certificate.
 
@@ -15,7 +15,7 @@ The kube-rbac-proxy has all [`glog`](https://github.com/golang/glog) flags for l
 * `--upstream`: This is the upstream you want to proxy to.
 * `--config-file`: This file specifies details on the SubjectAccessReview you want to be performed on a request. For example, this could contain that an entity performing a request has to be allowed to perform a `get` on the Deployment called `my-frontend-app`, as well as the ability to configure whether SubjectAccessReviews are rewritten based on requests.
 
-See the `examples/` directory for the following examples:
+See the [`examples/`](examples/) directory for the following examples:
 
 * [non-resource-url example](examples/non-resource-url)
 * [resource-attributes example](examples/resource-attributes)
@@ -66,7 +66,7 @@ You may ask yourself, why not just use the Kubernetes apiserver proxy functional
 
 ## Motivation
 
-I developed this proxy in order to be able to protect [Prometheus](https://prometheus.io/) metrics endpoints. In a scenario, where an attacker might obtain full control over a Pod, that attacker would have the ability to discover a lot of information about the workload as well as the current load of the respective workload. This information could originate for example from the [node-exporter](https://github.com/prometheus/node_exporter) and [kube-stat-metrics](https://github.com/kubernetes/kube-state-metrics). Both of those metric sources can commonly be found in Prometheus monitoring stacks on [Kubernetes](https://kubernetes.io/).
+I developed this proxy in order to be able to protect [Prometheus](https://prometheus.io/) metrics endpoints. In a scenario, where an attacker might obtain full control over a Pod, that attacker would have the ability to discover a lot of information about the workload as well as the current load of the respective workload. This information could originate for example from the [node-exporter](https://github.com/prometheus/node_exporter) and [kube-state-metrics](https://github.com/kubernetes/kube-state-metrics). Both of those metric sources can commonly be found in Prometheus monitoring stacks on [Kubernetes](https://kubernetes.io/).
 
 This project was created to specifically solve the above problem, however, I felt there is a larger need for such a proxy in general.
 
@@ -78,7 +78,7 @@ Once a user has been authenticated, again the `authentication.k8s.io` is used to
 
 ## Notes on ServiceAccount token security
 
-Note that when using tokens for authentication, the receiving side can use the token to impersonate the client. Only use token authentication, when the receiving side is already higher privileged or the token itself is super low privileged, such as when the only roles binded to it are for authorization purposes with this project. Passing around highly privileged tokens is a security risk, and is not recommended.
+Note that when using tokens for authentication, the receiving side can use the token to impersonate the client. Only use token authentication, when the receiving side is already higher privileged or the token itself is super low privileged, such as when the only roles bound to it are for authorization purposes with this project. Passing around highly privileged tokens is a security risk, and is not recommended.
 
 This project was built to be used to protect metrics of cluster components. These cluster components are much higher privileged than the Prometheus Pod, so if those Pods were to use the token provided by Prometheus it would actually be lower privileged. It is not recommended to use this method for non infrastructure components.
 
@@ -86,7 +86,7 @@ For better security properties use mTLS for authentication instead, and for user
 
 ## Why are NetworkPolicies not enough?
 
-There are a couple of reasons why the existance of NetworkPolicies may not cover the same use case(s):
+There are a couple of reasons why the existence of NetworkPolicies may not cover the same use case(s):
 
 * NetworkPolicies are not available in all providers, installers and distros.
 * NetworkPolicies do not apply to Pods with HostNetworking enabled, the use case I created this project with the Prometheus node-exporter requires this.
@@ -100,6 +100,6 @@ Additionally, to my knowledge Envoy neither has nor plans Kubernetes specific RB
 
 ## Roadmap
 
-PR are more than welcome!
+PRs are more than welcome!
 
 * Tests
