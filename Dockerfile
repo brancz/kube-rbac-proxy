@@ -1,21 +1,11 @@
-FROM registry.svc.ci.openshift.org/openshift/release:golang-1.12 AS builder
+FROM golang:1.12-alpine AS build
+RUN apk add --update make && apk add --no-cache git
 WORKDIR /go/src/github.com/brancz/kube-rbac-proxy
 COPY . .
-ENV GO111MODULE=on
-# GOFLAGS is needed to build image without accessing external sources, mostly to comply with ART policies
-ENV GOFLAGS="-mod=vendor"
-RUN make build && \
-    cp _output/linux/$(go env GOARCH)/kube-rbac-proxy _output/kube-rbac-proxy
+RUN make build && cp /go/src/github.com/brancz/kube-rbac-proxy/_output/linux/$(go env GOARCH)/kube-rbac-proxy /usr/local/bin
 
-FROM  registry.svc.ci.openshift.org/openshift/origin-v4.0:base
-LABEL io.k8s.display-name="kube-rbac-proxy" \
-      io.k8s.description="This is a proxy, that can perform Kubernetes RBAC authorization." \
-      io.openshift.tags="kubernetes" \
-      maintainer="Frederic Branczyk <fbranczy@redhat.com>"
-
-ARG FROM_DIRECTORY=/go/src/github.com/brancz/kube-rbac-proxy
-COPY --from=builder ${FROM_DIRECTORY}/_output/kube-rbac-proxy  /usr/bin/kube-rbac-proxy
-
-USER nobody
+FROM alpine:3.8
+RUN apk add -U --no-cache ca-certificates && rm -rf /var/cache/apk/*
+COPY --from=build /usr/local/bin/kube-rbac-proxy .
+ENTRYPOINT ["./kube-rbac-proxy"]
 EXPOSE 8080
-ENTRYPOINT ["/usr/bin/kube-rbac-proxy"]
