@@ -14,7 +14,6 @@ require (
 	github.com/go-openapi/spec v0.17.2 // indirect
 	github.com/go-openapi/swag v0.17.2 // indirect
 	github.com/gogo/protobuf v0.0.0-20171007142547-342cbe0a0415 // indirect
-	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/golang/groupcache v0.0.0-20190129154638-5b532d6fd5ef // indirect
 	github.com/google/btree v0.0.0-20160524151835-7d79101e329e // indirect
 	github.com/google/go-cmp v0.3.0 // indirect
@@ -57,7 +56,7 @@ require (
 	k8s.io/apimachinery v0.0.0-20181127025237-2b1284ed4c93
 	k8s.io/apiserver v0.0.0-20190111033246-d50e9ac5404f
 	k8s.io/client-go v0.0.0-20190111032708-6bf63545bd02
-	k8s.io/klog v0.0.0-20181108234604-8139d8cb77af // indirect
+	k8s.io/klog v0.0.0-20181108234604-8139d8cb77af
 	k8s.io/kube-openapi v0.0.0-20181109181836-c59034cc13d5 // indirect
 	sigs.k8s.io/yaml v1.1.0 // indirect
 )
