@@ -2,7 +2,7 @@
 
 > Note to try this out with minikube, make sure you enable RBAC correctly as explained [here](../minikube-rbac).
 
-RBAC differentiates in two types, that need to be authorized, resources and non-resoruces. A resource request authorization, could for example be, that a requesting entity needs to be authorized to perform the `get` action on a particular Kubernetes Deployment. A non-resource authorization validates, that an entity is authorized to request a bare URL.
+RBAC differentiates in two types, that need to be authorized, resources and non-resources. A resource request authorization, could for example be, that a requesting entity needs to be authorized to perform the `get` action on a particular Kubernetes Deployment. A non-resource authorization validates, that an entity is authorized to request a bare URL.
 
 Take the following example. We want to deploy a [prometheus-example-app](https://github.com/brancz/prometheus-example-app), and protect its `/metrics` endpoint. This endpoint does not correspond to a resource, and is therefore treated as a non-resource-url in RBAC. For non-resource-url authorizations there are no extra arguments required to be passed to the kube-rbac-proxy besides the `--upstream` flag in order for it to perform the authorization.
 
