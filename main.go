@@ -28,6 +28,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -37,11 +38,11 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
-	k8sapiflag "k8s.io/apiserver/pkg/util/flag"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	certutil "k8s.io/client-go/util/cert"
+	k8sapiflag "k8s.io/component-base/cli/flag"
 	"k8s.io/klog"
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
@@ -93,6 +94,7 @@ func main() {
 				X509:   &authn.X509Config{},
 				Header: &authn.AuthnHeaderConfig{},
 				OIDC:   &authn.OIDCConfig{},
+				Token:  &authn.TokenConfig{},
 			},
 			Authorization: &authz.Config{},
 		},
@@ -127,6 +129,7 @@ func main() {
 	flagset.StringVar(&cfg.auth.Authentication.Header.UserFieldName, "auth-header-user-field-name", "x-remote-user", "The name of the field inside a http(2) request header to tell the upstream server about the user's name")
 	flagset.StringVar(&cfg.auth.Authentication.Header.GroupsFieldName, "auth-header-groups-field-name", "x-remote-groups", "The name of the field inside a http(2) request header to tell the upstream server about the user's groups")
 	flagset.StringVar(&cfg.auth.Authentication.Header.GroupSeparator, "auth-header-groups-field-separator", "|", "The separator string used for concatenating multiple group names in a groups header field's value")
+	flagset.StringSliceVar(&cfg.auth.Authentication.Token.Audiences, "auth-token-audiences", []string{}, "Comma-separated list of token audiences to accept. By default a token does not have to have any specific audience. It is recommended to set a specific audience.")
 
 	//Authn OIDC flags
 	flagset.StringVar(&cfg.auth.Authentication.OIDC.IssuerURL, "oidc-issuer", "", "The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).")
@@ -180,8 +183,9 @@ func main() {
 
 	} else {
 		//Use Delegating authenticator
+		klog.Infof("Valid token audiences: %s", strings.Join(cfg.auth.Authentication.Token.Audiences, ", "))
 
-		tokenClient := kubeClient.AuthenticationV1beta1().TokenReviews()
+		tokenClient := kubeClient.AuthenticationV1().TokenReviews()
 		authenticator, err = authn.NewDelegatingAuthenticator(tokenClient, cfg.auth.Authentication)
 		if err != nil {
 			klog.Fatalf("Failed to instantiate delegating authenticator: %v", err)
@@ -189,7 +193,7 @@ func main() {
 
 	}
 
-	sarClient := kubeClient.AuthorizationV1beta1().SubjectAccessReviews()
+	sarClient := kubeClient.AuthorizationV1().SubjectAccessReviews()
 	authorizer, err := authz.NewAuthorizer(sarClient)
 
 	if err != nil {
