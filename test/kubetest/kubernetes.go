@@ -26,6 +26,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -207,6 +208,34 @@ func PodsAreReady(client kubernetes.Interface, replicas int, labels string) func
 	}
 }
 
+// ServiceIsReady waits for given service to exist and have at least 1 endpoint.
+// Returns a func directly (not Setup or Conditions) as it can be used in Given and When steps
+func ServiceIsReady(client kubernetes.Interface, service string) func(*ScenarioContext) error {
+	return func(ctx *ScenarioContext) error {
+		return wait.Poll(time.Second, time.Minute, func() (bool, error) {
+			_, err := client.CoreV1().Services(ctx.Namespace).Get(service, metav1.GetOptions{})
+			if err != nil {
+				return false, fmt.Errorf("failed to get service: %v", err)
+			}
+
+			endpoints, err := client.CoreV1().Endpoints(ctx.Namespace).Get(service, metav1.GetOptions{})
+			if err != nil {
+				return false, fmt.Errorf("failed to get endpoints: %v", err)
+			}
+
+			amount := 0
+			for _, s := range endpoints.Subsets {
+				amount = amount + len(s.Addresses)
+			}
+			if amount >= 1 {
+				return true, nil
+			}
+
+			return false, nil
+		})
+	}
+}
+
 // podRunningAndReady returns whether a pod is running and each container has
 // passed it's ready state.
 func podRunningAndReady(pod corev1.Pod) (bool, error) {
@@ -234,6 +263,7 @@ func Sleep(d time.Duration) Condition {
 
 type RunOptions struct {
 	ServiceAccount string
+	TokenAudience  string
 }
 
 func RunSucceeds(client kubernetes.Interface, image string, name string, command []string, opts *RunOptions) Check {
@@ -265,15 +295,15 @@ var errRun = fmt.Errorf("failed to run")
 
 // run the command and return the Check with the container's logs
 func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name string, command []string, opts *RunOptions) ([]byte, error) {
-	pod := &corev1.Pod{
+	labels := map[string]string{
+		"app": name,
+	}
+	pod := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: ctx.Namespace,
-			Labels: map[string]string{
-				"app": name,
-			},
+			Labels: labels,
 		},
 		Spec: corev1.PodSpec{
+			ServiceAccountName: "default",
 			Containers: []corev1.Container{{
 				Name:    name,
 				Image:   image,
@@ -283,39 +313,95 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 		},
 	}
 
-	if opts != nil {
+	if opts != nil && opts.ServiceAccount != "" {
 		pod.Spec.ServiceAccountName = opts.ServiceAccount
+	}
+	if opts != nil && opts.TokenAudience != "" {
+		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+			Name: "requestedtoken",
+			VolumeSource: corev1.VolumeSource{
+				Projected: &corev1.ProjectedVolumeSource{
+					Sources: []corev1.VolumeProjection{{
+						ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+							Audience: opts.TokenAudience,
+							Path:     "requestedtoken",
+						},
+					}},
+				},
+			},
+		})
+		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts,
+			corev1.VolumeMount{
+				Name:      "requestedtoken",
+				MountPath: "/var/run/secrets/tokens",
+			},
+		)
+	}
+
+	parallelism := int32(1)
+	completions := int32(1)
+	activeDeadlineSeconds := int64(60)
+	backoffLimit := int32(3)
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "kube-rbac-proxy-client",
+			Namespace: ctx.Namespace,
+		},
+		Spec: batchv1.JobSpec{
+			Parallelism:           &parallelism,
+			Completions:           &completions,
+			ActiveDeadlineSeconds: &activeDeadlineSeconds,
+			BackoffLimit:          &backoffLimit,
+			Template:              pod,
+		},
+	}
+
+	_, err := client.BatchV1().Jobs(ctx.Namespace).Create(job)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create job: %v", err)
 	}
 
 	ctx.AddFinalizer(func() error {
-		return client.CoreV1().Pods(ctx.Namespace).Delete(pod.ObjectMeta.Name, nil)
+		err := client.BatchV1().Jobs(ctx.Namespace).Delete(job.ObjectMeta.Name, nil)
+		if err != nil {
+			return fmt.Errorf("failed to delete job: %v", err)
+		}
+
+		return nil
 	})
 
-	_, err := client.CoreV1().Pods(ctx.Namespace).Create(pod)
+	watch, err := client.BatchV1().Jobs(ctx.Namespace).Watch(metav1.SingleObject(job.ObjectMeta))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create pod: %v", err)
-	}
-
-	watch, err := client.CoreV1().Pods(ctx.Namespace).Watch(metav1.SingleObject(pod.ObjectMeta))
-	if err != nil {
-		return nil, fmt.Errorf("failed to watch pod: %v", err)
+		return nil, fmt.Errorf("failed to watch job: %v", err)
 	}
 
 	for event := range watch.ResultChan() {
-		pod := event.Object.(*corev1.Pod)
-		phase := pod.Status.Phase
+		job := event.Object.(*batchv1.Job)
+		conditions := job.Status.Conditions
 
-		if phase == corev1.PodFailed {
-			logs, _ := podLogs(client, ctx.Namespace, name, name)
-			return logs, errRun
+		failed := false
+		for _, c := range conditions {
+			if c.Type == batchv1.JobFailed {
+				failed = c.Status == corev1.ConditionTrue
+			}
 		}
-		if phase == corev1.PodSucceeded {
-			break
+
+		if failed {
+			return nil, errRun
+		}
+
+		complete := false
+		for _, c := range conditions {
+			if c.Type == batchv1.JobComplete && c.Status == corev1.ConditionTrue {
+				complete = true
+			}
+		}
+		if complete && !failed {
+			return nil, nil
 		}
 	}
 
-	logs, _ := podLogs(client, ctx.Namespace, name, name)
-	return logs, nil
+	return nil, nil
 }
 
 func podLogs(client kubernetes.Interface, namespace, pod, container string) ([]byte, error) {

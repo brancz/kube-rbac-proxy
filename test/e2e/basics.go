@@ -25,7 +25,7 @@ import (
 
 func testBasics(s *kubetest.Suite) kubetest.TestSuite {
 	return func(t *testing.T) {
-		command := `curl -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
+		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
 
 		kubetest.Scenario{
 			Name: "NoRBAC",
@@ -50,11 +50,16 @@ func testBasics(s *kubetest.Suite) kubetest.TestSuite {
 					1,
 					"app=kube-rbac-proxy",
 				),
+				kubetest.ServiceIsReady(
+					s.KubeClient,
+					"kube-rbac-proxy",
+				),
 			),
 			Then: kubetest.Checks(
 				ClientFails(
 					s.KubeClient,
 					command,
+					nil,
 				),
 			),
 		}.Run(t)
@@ -85,37 +90,126 @@ func testBasics(s *kubetest.Suite) kubetest.TestSuite {
 					1,
 					"app=kube-rbac-proxy",
 				),
+				kubetest.ServiceIsReady(
+					s.KubeClient,
+					"kube-rbac-proxy",
+				),
 			),
 			Then: kubetest.Checks(
 				ClientSucceeds(
 					s.KubeClient,
 					command,
+					nil,
 				),
 			),
 		}.Run(t)
 	}
 }
 
-func ClientSucceeds(client kubernetes.Interface, command string) kubetest.Check {
+func testTokenAudience(s *kubetest.Suite) kubetest.TestSuite {
+	return func(t *testing.T) {
+		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/tokens/requestedtoken)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
+
+		kubetest.Scenario{
+			Name: "IncorrectAudience",
+			Description: `
+				As a client with the wrong token audience,
+				I fail with my request
+			`,
+
+			Given: kubetest.Setups(
+				kubetest.CreatedManifests(
+					s.KubeClient,
+					"tokenrequest/clusterRole.yaml",
+					"tokenrequest/clusterRoleBinding.yaml",
+					"tokenrequest/deployment.yaml",
+					"tokenrequest/service.yaml",
+					"tokenrequest/serviceAccount.yaml",
+					"tokenrequest/clusterRole-client.yaml",
+					"tokenrequest/clusterRoleBinding-client.yaml",
+				),
+			),
+			When: kubetest.Conditions(
+				kubetest.PodsAreReady(
+					s.KubeClient,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					s.KubeClient,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Checks(
+				ClientFails(
+					s.KubeClient,
+					command,
+					&kubetest.RunOptions{TokenAudience: "wrong-audience"},
+				),
+			),
+		}.Run(t)
+
+		kubetest.Scenario{
+			Name: "CorrectAudience",
+			Description: `
+				As a client with the correct token audience,
+				I succeed with my request
+			`,
+
+			Given: kubetest.Setups(
+				kubetest.CreatedManifests(
+					s.KubeClient,
+					"tokenrequest/clusterRole.yaml",
+					"tokenrequest/clusterRoleBinding.yaml",
+					"tokenrequest/deployment.yaml",
+					"tokenrequest/service.yaml",
+					"tokenrequest/serviceAccount.yaml",
+					"tokenrequest/clusterRole-client.yaml",
+					"tokenrequest/clusterRoleBinding-client.yaml",
+				),
+			),
+			When: kubetest.Conditions(
+				kubetest.PodsAreReady(
+					s.KubeClient,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					s.KubeClient,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Checks(
+				ClientSucceeds(
+					s.KubeClient,
+					command,
+					&kubetest.RunOptions{TokenAudience: "kube-rbac-proxy"},
+				),
+			),
+		}.Run(t)
+	}
+}
+
+func ClientSucceeds(client kubernetes.Interface, command string, opts *kubetest.RunOptions) kubetest.Check {
 	return func(ctx *kubetest.ScenarioContext) error {
 		return kubetest.RunSucceeds(
 			client,
-			"alpine",
+			"quay.io/brancz/krp-curl:v0.0.1",
 			"kube-rbac-proxy-client",
-			[]string{"/bin/sh", "-c", "apk add -U curl && " + command},
-			&kubetest.RunOptions{ServiceAccount: "default"},
+			[]string{"/bin/sh", "-c", command},
+			opts,
 		)(ctx)
 	}
 }
 
-func ClientFails(client kubernetes.Interface, command string) kubetest.Check {
+func ClientFails(client kubernetes.Interface, command string, opts *kubetest.RunOptions) kubetest.Check {
 	return func(ctx *kubetest.ScenarioContext) error {
 		return kubetest.RunFails(
 			client,
-			"alpine",
+			"quay.io/brancz/krp-curl:v0.0.1",
 			"kube-rbac-proxy-client",
-			[]string{"/bin/sh", "-c", "apk add -U curl && " + command},
-			&kubetest.RunOptions{ServiceAccount: "default"},
+			[]string{"/bin/sh", "-c", command},
+			opts,
 		)(ctx)
 	}
 }
