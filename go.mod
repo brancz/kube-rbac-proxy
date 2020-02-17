@@ -3,6 +3,7 @@ module github.com/brancz/kube-rbac-proxy
 go 1.12
 
 require (
+	github.com/campoy/embedmd v1.0.0 // indirect
 	github.com/ghodss/yaml v1.0.0
 	github.com/golang/groupcache v0.0.0-20190129154638-5b532d6fd5ef // indirect
 	github.com/oklog/run v1.0.0
