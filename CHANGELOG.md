@@ -1,5 +1,13 @@
 ## Next release
 
+## 0.5.0 / 2020-02-17
+
+* [CHANGE] Move from glog to klog for logging. #57
+* [FEATURE] Support token audience reviews. #56
+* [FEATURE] Support custom upstream CAs. #34
+* [ENHANCEMENT] Reload TLS certificates at runtime. #47
+* [ENHANCEMENT] Add host in self-signed certs. #43
+
 ## 0.4.1 / 2019-01-23
 
 * [ENHANCEMENT] Use golang.org/x/net http2 server. #29
