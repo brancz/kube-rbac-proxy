@@ -61,6 +61,12 @@ func New(client clientset.Interface, config Config, authorizer authorizer.Author
 // Handle authenticates the client and authorizes the request.
 // If the authn fails, a 401 error is returned. If the authz fails, a 403 error is returned
 func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
+	ctx := req.Context()
+	if len(h.Config.Authentication.Token.Audiences) > 0 {
+		ctx = authenticator.WithAudiences(ctx, h.Config.Authentication.Token.Audiences)
+		req = req.WithContext(ctx)
+	}
+
 	// Authenticate
 	u, ok, err := h.AuthenticateRequest(req)
 	if err != nil {
@@ -84,7 +90,7 @@ func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
 
 	for _, attrs := range allAttrs {
 		// Authorize
-		authorized, _, err := h.Authorize(attrs)
+		authorized, _, err := h.Authorize(ctx, attrs)
 		if err != nil {
 			msg := fmt.Sprintf("Authorization error (user=%s, verb=%s, resource=%s, subresource=%s)", u.User.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
 			klog.Errorf(msg, err)
@@ -190,7 +196,7 @@ func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http
 	}
 
 	for attrs := range allAttrs {
-		klog.V(5).Infof("kube-rbac-proxy request attributes: attrs=%#v", attrs)
+		klog.V(5).Infof("kube-rbac-proxy request attributes: attrs=%#+v", attrs)
 	}
 
 	return allAttrs

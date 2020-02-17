@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: krp-curl
+spec:
+  template:
+    metadata:
+      name: krp-curl
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: krp-curl
+        image: quay.io/brancz/krp-curl:v0.0.1
+        command:
+        - /bin/sh
+        - -c
+        - 'curl -v -s -k -H "Authorization: Bearer `cat /service-account/token`" https://kube-rbac-proxy.default.svc:8443/metrics'
+        volumeMounts:
+        - name: token-vol
+          mountPath: "/service-account"
+          readOnly: true
+      volumes:
+      - name: token-vol
+        projected:
+          sources:
+          - serviceAccountToken:
+              audience: kube-rbac-proxy.default.svc
+              expirationSeconds: 3600
+              path: token
+  backoffLimit: 4

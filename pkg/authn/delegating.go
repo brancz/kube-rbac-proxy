@@ -22,21 +22,33 @@ import (
 
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/authenticatorfactory"
-	authenticationclient "k8s.io/client-go/kubernetes/typed/authentication/v1beta1"
+	"k8s.io/apiserver/pkg/server/dynamiccertificates"
+	authenticationclient "k8s.io/client-go/kubernetes/typed/authentication/v1"
 )
 
 // NewDelegatingAuthenticator creates an authenticator compatible with the kubelet's needs
 func NewDelegatingAuthenticator(client authenticationclient.TokenReviewInterface, authn *AuthnConfig) (authenticator.Request, error) {
-
 	if client == nil {
 		return nil, errors.New("tokenAccessReview client not provided, cannot use webhook authentication")
 	}
 
+	var (
+		p   authenticatorfactory.CAContentProvider
+		err error
+	)
+	if len(authn.X509.ClientCAFile) > 0 {
+		p, err = dynamiccertificates.NewStaticCAContentFromFile(authn.X509.ClientCAFile)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	authenticatorConfig := authenticatorfactory.DelegatingAuthenticatorConfig{
-		Anonymous:               false, // always require authentication
-		CacheTTL:                2 * time.Minute,
-		ClientCAFile:            authn.X509.ClientCAFile,
-		TokenAccessReviewClient: client,
+		Anonymous:                          false, // always require authentication
+		CacheTTL:                           2 * time.Minute,
+		ClientCertificateCAContentProvider: p,
+		TokenAccessReviewClient:            client,
+		APIAudiences:                       authenticator.Audiences(authn.Token.Audiences),
 	}
 
 	authenticator, _, err := authenticatorConfig.New()

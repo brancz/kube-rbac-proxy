@@ -87,6 +87,15 @@ type Config struct {
 	// If true, token expiry is not checked.
 	SkipExpiryCheck bool
 
+	// SkipIssuerCheck is intended for specialized cases where the the caller wishes to
+	// defer issuer validation. When enabled, callers MUST independently verify the Token's
+	// Issuer is a known good value.
+	//
+	// Mismatched issuers often indicate client mis-configuration. If mismatches are
+	// unexpected, evaluate if the provided issuer URL is incorrect instead of enabling
+	// this option.
+	SkipIssuerCheck bool
+
 	// Time function to check Token expiry. Defaults to time.Now
 	Now func() time.Time
 }
@@ -231,7 +240,7 @@ func (v *IDTokenVerifier) Verify(ctx context.Context, rawIDToken string) (*IDTok
 	}
 
 	// Check issuer.
-	if t.Issuer != v.issuer {
+	if !v.config.SkipIssuerCheck && t.Issuer != v.issuer {
 		// Google sometimes returns "accounts.google.com" as the issuer claim instead of
 		// the required "https://accounts.google.com". Detect this case and allow it only
 		// for Google.
@@ -261,9 +270,20 @@ func (v *IDTokenVerifier) Verify(ctx context.Context, rawIDToken string) (*IDTok
 		if v.config.Now != nil {
 			now = v.config.Now
 		}
+		nowTime := now()
 
-		if t.Expiry.Before(now()) {
+		if t.Expiry.Before(nowTime) {
 			return nil, fmt.Errorf("oidc: token is expired (Token Expiry: %v)", t.Expiry)
+		}
+
+		// If nbf claim is provided in token, ensure that it is indeed in the past.
+		if token.NotBefore != nil {
+			nbfTime := time.Time(*token.NotBefore)
+			leeway := 1 * time.Minute
+
+			if nowTime.Add(leeway).Before(nbfTime) {
+				return nil, fmt.Errorf("oidc: current time %v before the nbf (not before) time: %v", nowTime, nbfTime)
+			}
 		}
 	}
 
