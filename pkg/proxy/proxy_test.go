@@ -42,6 +42,7 @@ func TestProxyWithOIDCSupport(t *testing.T) {
 				UserFieldName:   "user",
 				GroupsFieldName: "groups",
 			},
+			Token: &authn.TokenConfig{Audiences: []string{}},
 		},
 		Authorization: &authz.Config{},
 	}
@@ -139,13 +140,13 @@ func fakeOIDCAuthenticator(t *testing.T, fakeUser *user.DefaultInfo) authenticat
 
 type denier struct{}
 
-func (d denier) Authorize(auth authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
+func (d denier) Authorize(ctx context.Context, auth authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
 	return authorizer.DecisionDeny, "user not allowed", nil
 }
 
 type approver struct{}
 
-func (a approver) Authorize(auth authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
+func (a approver) Authorize(ctx context.Context, auth authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
 	return authorizer.DecisionAllow, "user allowed", nil
 }
 
