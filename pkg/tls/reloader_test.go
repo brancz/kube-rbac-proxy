@@ -30,8 +30,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/glog"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/klog"
 
 	certutil "k8s.io/client-go/util/cert"
 )
@@ -330,7 +330,7 @@ func poll(interval, timeout time.Duration, f func() error) error {
 		lastErr = f()
 
 		if lastErr != nil {
-			glog.V(4).Infof("error loading certificate: %v, retrying ...", lastErr)
+			klog.V(4).Infof("error loading certificate: %v, retrying ...", lastErr)
 			return false, nil
 		}
 

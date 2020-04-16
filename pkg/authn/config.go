@@ -35,9 +35,15 @@ type AuthnConfig struct {
 	X509   *X509Config
 	Header *AuthnHeaderConfig
 	OIDC   *OIDCConfig
+	Token  *TokenConfig
 }
 
 // X509Config holds public client certificate used for authentication requests if specified
 type X509Config struct {
 	ClientCAFile string
+}
+
+// TokenConfig holds configuration as to how token authentication is to be done
+type TokenConfig struct {
+	Audiences []string
 }
