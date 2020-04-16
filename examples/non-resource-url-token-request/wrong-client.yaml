@@ -1,0 +1,13 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: krp-wrong-token-curl
+spec:
+  template:
+    metadata:
+      name: krp-wrong-token-curl
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: krp-curl
+        image: quay.io/brancz/krp-curl:v0.0.1

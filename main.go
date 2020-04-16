@@ -19,7 +19,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	stdflag "flag"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -28,21 +28,22 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/ghodss/yaml"
-	"github.com/golang/glog"
 	"github.com/oklog/run"
-	flag "github.com/spf13/pflag"
+	"github.com/spf13/pflag"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
-	k8sapiflag "k8s.io/apiserver/pkg/util/flag"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	certutil "k8s.io/client-go/util/cert"
+	k8sapiflag "k8s.io/component-base/cli/flag"
+	"k8s.io/klog"
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
@@ -93,15 +94,19 @@ func main() {
 				X509:   &authn.X509Config{},
 				Header: &authn.AuthnHeaderConfig{},
 				OIDC:   &authn.OIDCConfig{},
+				Token:  &authn.TokenConfig{},
 			},
 			Authorization: &authz.Config{},
 		},
 	}
-	flagset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	configFileName := ""
 
-	// Add glog flags
-	flagset.AddGoFlagSet(stdflag.CommandLine)
+	// Add klog flags
+	klogFlags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	klog.InitFlags(klogFlags)
+
+	flagset := pflag.NewFlagSet(os.Args[0], pflag.ExitOnError)
+	flagset.AddGoFlagSet(klogFlags)
 
 	// kube-rbac-proxy flags
 	flagset.StringVar(&cfg.insecureListenAddress, "insecure-listen-address", "", "The address the kube-rbac-proxy HTTP server should listen on.")
@@ -124,6 +129,7 @@ func main() {
 	flagset.StringVar(&cfg.auth.Authentication.Header.UserFieldName, "auth-header-user-field-name", "x-remote-user", "The name of the field inside a http(2) request header to tell the upstream server about the user's name")
 	flagset.StringVar(&cfg.auth.Authentication.Header.GroupsFieldName, "auth-header-groups-field-name", "x-remote-groups", "The name of the field inside a http(2) request header to tell the upstream server about the user's groups")
 	flagset.StringVar(&cfg.auth.Authentication.Header.GroupSeparator, "auth-header-groups-field-separator", "|", "The separator string used for concatenating multiple group names in a groups header field's value")
+	flagset.StringSliceVar(&cfg.auth.Authentication.Token.Audiences, "auth-token-audiences", []string{}, "Comma-separated list of token audiences to accept. By default a token does not have to have any specific audience. It is recommended to set a specific audience.")
 
 	//Authn OIDC flags
 	flagset.StringVar(&cfg.auth.Authentication.OIDC.IssuerURL, "oidc-issuer", "", "The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).")
@@ -142,21 +148,21 @@ func main() {
 
 	upstreamURL, err := url.Parse(cfg.upstream)
 	if err != nil {
-		glog.Fatalf("Failed to build parse upstream URL: %v", err)
+		klog.Fatalf("Failed to build parse upstream URL: %v", err)
 	}
 
 	if configFileName != "" {
-		glog.Infof("Reading config file: %s", configFileName)
+		klog.Infof("Reading config file: %s", configFileName)
 		b, err := ioutil.ReadFile(configFileName)
 		if err != nil {
-			glog.Fatalf("Failed to read resource-attribute file: %v", err)
+			klog.Fatalf("Failed to read resource-attribute file: %v", err)
 		}
 
 		configfile := configfile{}
 
 		err = yaml.Unmarshal(b, &configfile)
 		if err != nil {
-			glog.Fatalf("Failed to parse config file content: %v", err)
+			klog.Fatalf("Failed to parse config file content: %v", err)
 		}
 
 		cfg.auth.Authorization = configfile.AuthorizationConfig
@@ -164,7 +170,7 @@ func main() {
 
 	kubeClient, err := kubernetes.NewForConfig(kcfg)
 	if err != nil {
-		glog.Fatalf("Failed to instantiate Kubernetes client: %v", err)
+		klog.Fatalf("Failed to instantiate Kubernetes client: %v", err)
 	}
 
 	var authenticator authenticator.Request
@@ -172,36 +178,37 @@ func main() {
 	if cfg.auth.Authentication.OIDC.IssuerURL != "" {
 		authenticator, err = authn.NewOIDCAuthenticator(cfg.auth.Authentication.OIDC)
 		if err != nil {
-			glog.Fatalf("Failed to instantiate OIDC authenticator: %v", err)
+			klog.Fatalf("Failed to instantiate OIDC authenticator: %v", err)
 		}
 
 	} else {
 		//Use Delegating authenticator
+		klog.Infof("Valid token audiences: %s", strings.Join(cfg.auth.Authentication.Token.Audiences, ", "))
 
-		tokenClient := kubeClient.AuthenticationV1beta1().TokenReviews()
+		tokenClient := kubeClient.AuthenticationV1().TokenReviews()
 		authenticator, err = authn.NewDelegatingAuthenticator(tokenClient, cfg.auth.Authentication)
 		if err != nil {
-			glog.Fatalf("Failed to instantiate delegating authenticator: %v", err)
+			klog.Fatalf("Failed to instantiate delegating authenticator: %v", err)
 		}
 
 	}
 
-	sarClient := kubeClient.AuthorizationV1beta1().SubjectAccessReviews()
+	sarClient := kubeClient.AuthorizationV1().SubjectAccessReviews()
 	authorizer, err := authz.NewAuthorizer(sarClient)
 
 	if err != nil {
-		glog.Fatalf("Failed to create authorizer: %v", err)
+		klog.Fatalf("Failed to create authorizer: %v", err)
 	}
 
 	auth, err := proxy.New(kubeClient, cfg.auth, authorizer, authenticator)
 
 	if err != nil {
-		glog.Fatalf("Failed to create rbac-proxy: %v", err)
+		klog.Fatalf("Failed to create rbac-proxy: %v", err)
 	}
 
 	upstreamTransport, err := initTransport(cfg.upstreamCAFile)
 	if err != nil {
-		glog.Fatalf("Failed to set up upstream TLS connection: %v", err)
+		klog.Fatalf("Failed to set up upstream TLS connection: %v", err)
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(upstreamURL)
@@ -222,27 +229,27 @@ func main() {
 			srv := &http.Server{Handler: mux, TLSConfig: &tls.Config{}}
 
 			if cfg.tls.certFile == "" && cfg.tls.keyFile == "" {
-				glog.Info("Generating self signed cert as no cert is provided")
+				klog.Info("Generating self signed cert as no cert is provided")
 				host, err := os.Hostname()
 				if err != nil {
-					glog.Fatalf("Failed to retrieve hostname for self-signed cert: %v", err)
+					klog.Fatalf("Failed to retrieve hostname for self-signed cert: %v", err)
 				}
 				certBytes, keyBytes, err := certutil.GenerateSelfSignedCertKey(host, nil, nil)
 				if err != nil {
-					glog.Fatalf("Failed to generate self signed cert and key: %v", err)
+					klog.Fatalf("Failed to generate self signed cert and key: %v", err)
 				}
 				cert, err := tls.X509KeyPair(certBytes, keyBytes)
 				if err != nil {
-					glog.Fatalf("Failed to load generated self signed cert and key: %v", err)
+					klog.Fatalf("Failed to load generated self signed cert and key: %v", err)
 				}
 
 				srv.TLSConfig.Certificates = []tls.Certificate{cert}
 			} else {
-				glog.Info("Reading certificate files")
+				klog.Info("Reading certificate files")
 				ctx, cancel := context.WithCancel(context.Background())
 				r, err := rbac_proxy_tls.NewCertReloader(cfg.tls.certFile, cfg.tls.keyFile, cfg.tls.reloadInterval)
 				if err != nil {
-					glog.Fatalf("Failed to initialize certificate reloader: %v", err)
+					klog.Fatalf("Failed to initialize certificate reloader: %v", err)
 				}
 
 				srv.TLSConfig.GetCertificate = r.GetCertificate
@@ -256,37 +263,37 @@ func main() {
 
 			version, err := tlsVersion(cfg.tls.minVersion)
 			if err != nil {
-				glog.Fatalf("TLS version invalid: %v", err)
+				klog.Fatalf("TLS version invalid: %v", err)
 			}
 
 			cipherSuiteIDs, err := k8sapiflag.TLSCipherSuites(cfg.tls.cipherSuites)
 			if err != nil {
-				glog.Fatalf("Failed to convert TLS cipher suite name to ID: %v", err)
+				klog.Fatalf("Failed to convert TLS cipher suite name to ID: %v", err)
 			}
 
 			srv.TLSConfig.CipherSuites = cipherSuiteIDs
 			srv.TLSConfig.MinVersion = version
 
 			if err := http2.ConfigureServer(srv, nil); err != nil {
-				glog.Fatalf("failed to configure http2 server: %v", err)
+				klog.Fatalf("failed to configure http2 server: %v", err)
 			}
 
-			glog.Infof("Starting TCP socket on %v", cfg.secureListenAddress)
+			klog.Infof("Starting TCP socket on %v", cfg.secureListenAddress)
 			l, err := net.Listen("tcp", cfg.secureListenAddress)
 			if err != nil {
-				glog.Fatalf("failed to listen on secure address: %v", err)
+				klog.Fatalf("failed to listen on secure address: %v", err)
 			}
 
 			gr.Add(func() error {
-				glog.Infof("Listening securely on %v", cfg.secureListenAddress)
+				klog.Infof("Listening securely on %v", cfg.secureListenAddress)
 				tlsListener := tls.NewListener(l, srv.TLSConfig)
 				return srv.Serve(tlsListener)
 			}, func(err error) {
 				if err := srv.Shutdown(context.Background()); err != nil {
-					glog.Errorf("failed to gracefully shutdown server: %v", err)
+					klog.Errorf("failed to gracefully shutdown server: %v", err)
 				}
 				if err := l.Close(); err != nil {
-					glog.Errorf("failed to gracefully close secure listener: %v", err)
+					klog.Errorf("failed to gracefully close secure listener: %v", err)
 				}
 			})
 		}
@@ -312,18 +319,18 @@ func main() {
 
 			l, err := net.Listen("tcp", cfg.insecureListenAddress)
 			if err != nil {
-				glog.Fatalf("Failed to listen on insecure address: %v", err)
+				klog.Fatalf("Failed to listen on insecure address: %v", err)
 			}
 
 			gr.Add(func() error {
-				glog.Infof("Listening insecurely on %v", cfg.insecureListenAddress)
+				klog.Infof("Listening insecurely on %v", cfg.insecureListenAddress)
 				return srv.Serve(l)
 			}, func(err error) {
 				if err := srv.Shutdown(context.Background()); err != nil {
-					glog.Errorf("failed to gracefully shutdown server: %v", err)
+					klog.Errorf("failed to gracefully shutdown server: %v", err)
 				}
 				if err := l.Close(); err != nil {
-					glog.Errorf("failed to gracefully close listener: %v", err)
+					klog.Errorf("failed to gracefully close listener: %v", err)
 				}
 			})
 		}
@@ -333,7 +340,7 @@ func main() {
 		gr.Add(func() error {
 			signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 			<-sig
-			glog.Info("received interrupt, shutting down")
+			klog.Info("received interrupt, shutting down")
 			return nil
 		}, func(err error) {
 			close(sig)
@@ -341,7 +348,7 @@ func main() {
 	}
 
 	if err := gr.Run(); err != nil {
-		glog.Fatalf("failed to run groups: %v", err)
+		klog.Fatalf("failed to run groups: %v", err)
 	}
 }
 
@@ -351,14 +358,14 @@ func initKubeConfig(kcLocation string) *rest.Config {
 	if kcLocation != "" {
 		kubeConfig, err := clientcmd.BuildConfigFromFlags("", kcLocation)
 		if err != nil {
-			glog.Fatal("unable to build rest config based on provided path to kubeconfig file")
+			klog.Fatal("unable to build rest config based on provided path to kubeconfig file")
 		}
 		return kubeConfig
 	}
 
 	kubeConfig, err := rest.InClusterConfig()
 	if err != nil {
-		glog.Fatal("cannot find Service Account in pod to build in-cluster rest config")
+		klog.Fatal("cannot find Service Account in pod to build in-cluster rest config")
 	}
 
 	return kubeConfig

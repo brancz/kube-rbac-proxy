@@ -25,11 +25,11 @@ import (
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
-	"github.com/golang/glog"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/user"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/klog"
 )
 
 // Config holds proxy authorization and authentication settings
@@ -61,10 +61,16 @@ func New(client clientset.Interface, config Config, authorizer authorizer.Author
 // Handle authenticates the client and authorizes the request.
 // If the authn fails, a 401 error is returned. If the authz fails, a 403 error is returned
 func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
+	ctx := req.Context()
+	if len(h.Config.Authentication.Token.Audiences) > 0 {
+		ctx = authenticator.WithAudiences(ctx, h.Config.Authentication.Token.Audiences)
+		req = req.WithContext(ctx)
+	}
+
 	// Authenticate
 	u, ok, err := h.AuthenticateRequest(req)
 	if err != nil {
-		glog.Errorf("Unable to authenticate the request due to an error: %v", err)
+		klog.Errorf("Unable to authenticate the request due to an error: %v", err)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return false
 	}
@@ -77,23 +83,23 @@ func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
 	allAttrs := h.authorizerAttributesGetter.GetRequestAttributes(u.User, req)
 	if len(allAttrs) == 0 {
 		msg := fmt.Sprintf("Bad Request. The request or configuration is malformed.")
-		glog.V(2).Info(msg)
+		klog.V(2).Info(msg)
 		http.Error(w, msg, http.StatusBadRequest)
 		return false
 	}
 
 	for _, attrs := range allAttrs {
 		// Authorize
-		authorized, _, err := h.Authorize(attrs)
+		authorized, _, err := h.Authorize(ctx, attrs)
 		if err != nil {
 			msg := fmt.Sprintf("Authorization error (user=%s, verb=%s, resource=%s, subresource=%s)", u.User.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
-			glog.Errorf(msg, err)
+			klog.Errorf(msg, err)
 			http.Error(w, msg, http.StatusInternalServerError)
 			return false
 		}
 		if authorized != authorizer.DecisionAllow {
 			msg := fmt.Sprintf("Forbidden (user=%s, verb=%s, resource=%s, subresource=%s)", u.User.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
-			glog.V(2).Info(msg)
+			klog.V(2).Info(msg)
 			http.Error(w, msg, http.StatusForbidden)
 			return false
 		}
@@ -190,7 +196,7 @@ func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http
 	}
 
 	for attrs := range allAttrs {
-		glog.V(5).Infof("kube-rbac-proxy request attributes: attrs=%#v", attrs)
+		klog.V(5).Infof("kube-rbac-proxy request attributes: attrs=%#+v", attrs)
 	}
 
 	return allAttrs

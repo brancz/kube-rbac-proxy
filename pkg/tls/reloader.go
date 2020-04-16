@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/glog"
+	"k8s.io/klog"
 )
 
 // CertReloader is the struct that parses a certificate/key pair,
@@ -95,7 +95,7 @@ func (r *CertReloader) reload() error {
 		return nil
 	}
 
-	glog.V(4).Info("reloading key ", r.keyPath, " certificate ", r.certPath)
+	klog.V(4).Info("reloading key ", r.keyPath, " certificate ", r.certPath)
 
 	cert, err := tls.X509KeyPair(certRaw, keyRaw)
 	if err != nil {
