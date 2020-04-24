@@ -60,6 +60,7 @@ type config struct {
 	auth                  proxy.Config
 	tls                   tlsConfig
 	kubeconfigLocation    string
+	subjectAltNames       []string
 }
 
 type tlsConfig struct {
@@ -115,6 +116,7 @@ func main() {
 	flagset.BoolVar(&cfg.upstreamForceH2C, "upstream-force-h2c", false, "Force h2c to communiate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only")
 	flagset.StringVar(&cfg.upstreamCAFile, "upstream-ca-file", "", "The CA the upstream uses for TLS connection. This is required when the upstream uses TLS and its own CA certificate")
 	flagset.StringVar(&configFileName, "config-file", "", "Configuration file to configure kube-rbac-proxy.")
+	flagset.StringSliceVar(&cfg.subjectAltNames, "subject-alt-names", nil, "Additional SANs to use when creating a self-signed cert.")
 
 	// TLS flags
 	flagset.StringVar(&cfg.tls.certFile, "tls-cert-file", "", "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)")
@@ -234,7 +236,16 @@ func main() {
 				if err != nil {
 					klog.Fatalf("Failed to retrieve hostname for self-signed cert: %v", err)
 				}
-				certBytes, keyBytes, err := certutil.GenerateSelfSignedCertKey(host, nil, nil)
+				var alternateIPs []net.IP
+				var alternateDNS []string
+				for _, san := range cfg.subjectAltNames {
+					if ip := net.ParseIP(san); ip != nil {
+						alternateIPs = append(alternateIPs, ip)
+					} else {
+						alternateDNS = append(alternateDNS, san)
+					}
+				}
+				certBytes, keyBytes, err := certutil.GenerateSelfSignedCertKey(host, alternateIPs, alternateDNS)
 				if err != nil {
 					klog.Fatalf("Failed to generate self signed cert and key: %v", err)
 				}
