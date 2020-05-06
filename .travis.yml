@@ -32,9 +32,10 @@ jobs:
       stage: push-docker-image
       script:
         - "echo ${QUAY_PASSWORD} | docker login -u ${QUAY_USERNAME} --password-stdin quay.io"
-        - VERSION=$TRAVIS_TAG make push
+        - [ "$TRAVIS_BRANCH" = "master" ] && VERSION="$(git rev-parse --abbrev-ref HEAD | tr / -)-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD)" make push
+        - [ -n "$TRAVIS_TAG" ] && VERSION=$TRAVIS_TAG make push
 
 stages:
   - name: test
   - name: push-docker-image
-    if: (type != pull_request) AND (tag =~ ^v)
+    if: (type != pull_request)
