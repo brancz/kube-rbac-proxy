@@ -19,15 +19,6 @@ services:
 
 jobs:
   include:
-    - name: Integration Tests
-      stage: test
-      before_script:
-        - curl -Lo kind https://github.com/kubernetes-sigs/kind/releases/download/v0.7.0/kind-linux-amd64 && chmod +x kind && sudo mv kind /usr/local/bin/
-        - kind create cluster --config test/e2e/kind-config/kind-config.yaml
-      script:
-        - VERSION=local make container
-        - kind load docker-image quay.io/brancz/kube-rbac-proxy:local
-        - make test-e2e
     - name: Push container images
       stage: push-docker-image
       script:

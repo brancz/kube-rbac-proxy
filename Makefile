@@ -10,7 +10,7 @@ OUT_DIR=_output
 BIN?=kube-rbac-proxy
 VERSION?=$(shell cat VERSION)-$(shell git rev-parse --short HEAD)
 PKGS=$(shell go list ./... | grep -v /vendor/)
-DOCKER_REPO?=quay.io/brancz/kube-rbac-proxy
+DOCKER_REPO?=quay.io/paulfantom/kube-rbac-proxy
 KUBECONFIG?=$(HOME)/.kube/config
 
 ALL_ARCH=amd64 arm arm64 ppc64le s390x
