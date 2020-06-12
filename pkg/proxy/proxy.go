@@ -90,16 +90,16 @@ func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
 
 	for _, attrs := range allAttrs {
 		// Authorize
-		authorized, _, err := h.Authorize(ctx, attrs)
+		authorized, reason, err := h.Authorize(ctx, attrs)
 		if err != nil {
 			msg := fmt.Sprintf("Authorization error (user=%s, verb=%s, resource=%s, subresource=%s)", u.User.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
-			klog.Errorf(msg, err)
+			klog.Errorf("%s: %s", msg, err)
 			http.Error(w, msg, http.StatusInternalServerError)
 			return false
 		}
 		if authorized != authorizer.DecisionAllow {
 			msg := fmt.Sprintf("Forbidden (user=%s, verb=%s, resource=%s, subresource=%s)", u.User.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
-			klog.V(2).Info(msg)
+			klog.V(2).Infof("%s. Reason: %q.", msg, reason)
 			http.Error(w, msg, http.StatusForbidden)
 			return false
 		}
