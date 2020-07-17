@@ -1,5 +1,10 @@
 ## Next release
 
+## 0.6.0 / 2020-06-11
+
+* [CHANGE] Use gcr.io/distroless/static as base image instead of alpine. #67
+* [ENHANCEMENT] Add multi-arch container images for amd64, arm, arm64, ppc64le and s390x. #67
+
 ## 0.5.0 / 2020-02-17
 
 * [CHANGE] Move from glog to klog for logging. #57
