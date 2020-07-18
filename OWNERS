@@ -2,16 +2,21 @@ component: "Monitoring"
 
 reviewers:
 - brancz
+- LiliC
 - paulfantom
-- elad661
-- ironcladlou
-- squat
+- pgier
 - s-urbaniak
+- simonpasquier
 
 approvers:
 - brancz
+- LiliC
 - paulfantom
+- pgier
+- s-urbaniak
+- simonpasquier
+
+emeritus_approvers:
 - elad661
 - ironcladlou
 - squat
-- s-urbaniak
