@@ -60,6 +60,7 @@ type config struct {
 	auth                  proxy.Config
 	tls                   tlsConfig
 	kubeconfigLocation    string
+	allowPaths            []string
 }
 
 type tlsConfig struct {
@@ -115,6 +116,7 @@ func main() {
 	flagset.BoolVar(&cfg.upstreamForceH2C, "upstream-force-h2c", false, "Force h2c to communiate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only")
 	flagset.StringVar(&cfg.upstreamCAFile, "upstream-ca-file", "", "The CA the upstream uses for TLS connection. This is required when the upstream uses TLS and its own CA certificate")
 	flagset.StringVar(&configFileName, "config-file", "", "Configuration file to configure kube-rbac-proxy.")
+	flagset.StringSliceVar(&cfg.allowPaths, "allow-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy matches the incoming request. If the request doesn't match, kube-rbac-proxy responds with a 404 status code. If omitted, the incoming request path isn't checked.")
 
 	// TLS flags
 	flagset.StringVar(&cfg.tls.certFile, "tls-cert-file", "", "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)")
@@ -148,7 +150,7 @@ func main() {
 
 	upstreamURL, err := url.Parse(cfg.upstream)
 	if err != nil {
-		klog.Fatalf("Failed to build parse upstream URL: %v", err)
+		klog.Fatalf("Failed to parse upstream URL: %v", err)
 	}
 
 	if configFileName != "" {
@@ -215,6 +217,17 @@ func main() {
 	proxy.Transport = upstreamTransport
 	mux := http.NewServeMux()
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		found := len(cfg.allowPaths) == 0
+		for _, path := range cfg.allowPaths {
+			if req.URL.Path == path {
+				found = true
+				break
+			}
+		}
+		if !found {
+			http.NotFound(w, req)
+			return
+		}
 		ok := auth.Handle(w, req)
 		if !ok {
 			return

@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/brancz/kube-rbac-proxy/test/kubetest"
@@ -184,6 +185,90 @@ func testTokenAudience(s *kubetest.Suite) kubetest.TestSuite {
 					s.KubeClient,
 					command,
 					&kubetest.RunOptions{TokenAudience: "kube-rbac-proxy"},
+				),
+			),
+		}.Run(t)
+	}
+}
+
+func testAllowPathsRegexp(s *kubetest.Suite) kubetest.TestSuite {
+	return func(t *testing.T) {
+		command := `STATUS_CODE=$(curl --connect-timeout 5 -o /dev/null -v -s -k --write-out "%%{http_code}" -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443%s); if [[ "$STATUS_CODE" != %d ]]; then echo "expecting %d status code, got $STATUS_CODE instead" > /proc/self/fd/2; exit 1; fi`
+
+		kubetest.Scenario{
+			Name: "WithPathhNotAllowed",
+			Description: `
+				As a client with the correct RBAC rules,
+				I get a 404 response when requesting a path which isn't allowed by kube-rbac-proxy
+			`,
+
+			Given: kubetest.Setups(
+				kubetest.CreatedManifests(
+					s.KubeClient,
+					"allowpaths/clusterRole.yaml",
+					"allowpaths/clusterRoleBinding.yaml",
+					"allowpaths/deployment.yaml",
+					"allowpaths/service.yaml",
+					"allowpaths/serviceAccount.yaml",
+					"allowpaths/clusterRole-client.yaml",
+					"allowpaths/clusterRoleBinding-client.yaml",
+				),
+			),
+			When: kubetest.Conditions(
+				kubetest.PodsAreReady(
+					s.KubeClient,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					s.KubeClient,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Checks(
+				ClientSucceeds(
+					s.KubeClient,
+					fmt.Sprintf(command, "/", 404, 404),
+					nil,
+				),
+			),
+		}.Run(t)
+
+		kubetest.Scenario{
+			Name: "WithPathAllowed",
+			Description: `
+				As a client with the correct RBAC rules,
+				I succeed with my request for a path that is allowed
+			`,
+
+			Given: kubetest.Setups(
+				kubetest.CreatedManifests(
+					s.KubeClient,
+					"allowpaths/clusterRole.yaml",
+					"allowpaths/clusterRoleBinding.yaml",
+					"allowpaths/deployment.yaml",
+					"allowpaths/service.yaml",
+					"allowpaths/serviceAccount.yaml",
+					"allowpaths/clusterRole-client.yaml",
+					"allowpaths/clusterRoleBinding-client.yaml",
+				),
+			),
+			When: kubetest.Conditions(
+				kubetest.PodsAreReady(
+					s.KubeClient,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					s.KubeClient,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Checks(
+				ClientSucceeds(
+					s.KubeClient,
+					fmt.Sprintf(command, "/metrics", 200, 200),
+					nil,
 				),
 			),
 		}.Run(t)
