@@ -58,6 +58,8 @@ spec:
       labels:
         app: kube-rbac-proxy
     spec:
+      securityContext:
+        runAsUser: 1001
       serviceAccountName: kube-rbac-proxy
       containers:
       - name: kube-rbac-proxy
@@ -71,6 +73,8 @@ spec:
         ports:
         - containerPort: 8443
           name: https
+        securityContext:
+          allowPrivilegeEscalation: false
       - name: prometheus-example-app
         image: quay.io/brancz/prometheus-example-app:v0.1.0
         args:

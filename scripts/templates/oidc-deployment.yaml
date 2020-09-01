@@ -74,6 +74,8 @@ spec:
         ports:
         - containerPort: 8444
           name: https
+        securityContext:
+          allowPrivilegeEscalation: false
       - name: prometheus-example-app
         image: quay.io/brancz/prometheus-example-app:v0.1.0
         args:
