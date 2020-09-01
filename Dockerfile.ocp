@@ -10,8 +10,9 @@ RUN make build && \
 FROM  registry.svc.ci.openshift.org/ocp/4.6:base
 LABEL io.k8s.display-name="kube-rbac-proxy" \
       io.k8s.description="This is a proxy, that can perform Kubernetes RBAC authorization." \
-      io.openshift.tags="kubernetes" \
-      maintainer="Frederic Branczyk <fbranczy@redhat.com>"
+      io.openshift.tags="openshift,kubernetes" \
+      summary="" \
+      maintainer="OpenShift Monitoring Team <team-monitoring@redhat.com>"
 
 ARG FROM_DIRECTORY=/go/src/github.com/brancz/kube-rbac-proxy
 COPY --from=builder ${FROM_DIRECTORY}/_output/kube-rbac-proxy  /usr/bin/kube-rbac-proxy
