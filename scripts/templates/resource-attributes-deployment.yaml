@@ -70,7 +70,7 @@ spec:
         app: kube-rbac-proxy
     spec:
       securityContext:
-        runAsUser: 1001
+        runAsUser: 65532
       serviceAccountName: kube-rbac-proxy
       containers:
       - name: kube-rbac-proxy
