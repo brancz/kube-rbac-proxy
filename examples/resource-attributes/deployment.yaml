@@ -69,6 +69,8 @@ spec:
       labels:
         app: kube-rbac-proxy
     spec:
+      securityContext:
+        runAsUser: 65532
       serviceAccountName: kube-rbac-proxy
       containers:
       - name: kube-rbac-proxy
@@ -85,6 +87,8 @@ spec:
         volumeMounts:
         - name: config
           mountPath: /etc/kube-rbac-proxy
+        securityContext:
+          allowPrivilegeEscalation: false
       - name: prometheus-example-app
         image: quay.io/brancz/prometheus-example-app:v0.1.0
         args:
