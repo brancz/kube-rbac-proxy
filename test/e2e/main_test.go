@@ -52,6 +52,7 @@ func Test(t *testing.T) {
 		"Basics":        testBasics(suite),
 		"TokenAudience": testTokenAudience(suite),
 		"AllowPath":     testAllowPathsRegexp(suite),
+		"IgnorePath":    testIgnorePaths(suite),
 	}
 
 	for name, tc := range tests {
