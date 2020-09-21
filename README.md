@@ -29,6 +29,7 @@ All command line flags:
 $ kube-rbac-proxy -h
 Usage of _output/linux/amd64/kube-rbac-proxy:
       --add_dir_header                              If true, adds the file directory to the header
+      --allow-paths strings                         Comma-separated list of paths against which kube-rbac-proxy matches the incoming request. If the request doesn't match, kube-rbac-proxy responds with a 404 status code. If omitted, the incoming request path isn't checked.
       --alsologtostderr                             log to standard error as well as files
       --auth-header-fields-enabled                  When set to true, kube-rbac-proxy adds auth-related fields to the headers of http requests sent to the upstream
       --auth-header-groups-field-name string        The name of the field inside a http(2) request header to tell the upstream server about the user's groups (default "x-remote-groups")
