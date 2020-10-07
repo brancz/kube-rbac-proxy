@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 // CertReloader is the struct that parses a certificate/key pair,
