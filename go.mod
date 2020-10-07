@@ -14,5 +14,5 @@ require (
 	k8s.io/apiserver v0.0.0-20191122221311-9d521947b1e1
 	k8s.io/client-go v0.0.0-20191122220542-ed16ecbdf3a0
 	k8s.io/component-base v0.0.0-20191122220729-2684fb322cb9
-	k8s.io/klog v1.0.0
+	k8s.io/klog/v2 v2.3.0
 )
