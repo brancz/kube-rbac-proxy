@@ -1,9 +1,8 @@
 module github.com/brancz/kube-rbac-proxy
 
-go 1.12
+go 1.13
 
 require (
-	github.com/campoy/embedmd v1.0.0 // indirect
 	github.com/ghodss/yaml v1.0.0
 	github.com/golang/groupcache v0.0.0-20190129154638-5b532d6fd5ef // indirect
 	github.com/oklog/run v1.0.0
@@ -15,5 +14,5 @@ require (
 	k8s.io/apiserver v0.0.0-20191122221311-9d521947b1e1
 	k8s.io/client-go v0.0.0-20191122220542-ed16ecbdf3a0
 	k8s.io/component-base v0.0.0-20191122220729-2684fb322cb9
-	k8s.io/klog v1.0.0
+	k8s.io/klog/v2 v2.3.0
 )

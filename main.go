@@ -43,7 +43,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	certutil "k8s.io/client-go/util/cert"
 	k8sapiflag "k8s.io/component-base/cli/flag"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
@@ -61,6 +61,7 @@ type config struct {
 	tls                   tlsConfig
 	kubeconfigLocation    string
 	allowPaths            []string
+	ignorePaths           []string
 }
 
 type tlsConfig struct {
@@ -116,7 +117,8 @@ func main() {
 	flagset.BoolVar(&cfg.upstreamForceH2C, "upstream-force-h2c", false, "Force h2c to communiate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only")
 	flagset.StringVar(&cfg.upstreamCAFile, "upstream-ca-file", "", "The CA the upstream uses for TLS connection. This is required when the upstream uses TLS and its own CA certificate")
 	flagset.StringVar(&configFileName, "config-file", "", "Configuration file to configure kube-rbac-proxy.")
-	flagset.StringSliceVar(&cfg.allowPaths, "allow-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy matches the incoming request. If the request doesn't match, kube-rbac-proxy responds with a 404 status code. If omitted, the incoming request path isn't checked.")
+	flagset.StringSliceVar(&cfg.allowPaths, "allow-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy matches the incoming request. If the request doesn't match, kube-rbac-proxy responds with a 404 status code. If omitted, the incoming request path isn't checked. Cannot be used with --ignore-paths.")
+	flagset.StringSliceVar(&cfg.ignorePaths, "ignore-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy will proxy without performing an authentication or authorization check. Cannot be used with --allow-paths.")
 
 	// TLS flags
 	flagset.StringVar(&cfg.tls.certFile, "tls-cert-file", "", "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)")
@@ -213,6 +215,10 @@ func main() {
 		klog.Fatalf("Failed to set up upstream TLS connection: %v", err)
 	}
 
+	if len(cfg.allowPaths) > 0 && len(cfg.ignorePaths) > 0 {
+		klog.Fatal("Cannot use --allow-paths and --ignore-paths together.")
+	}
+
 	proxy := httputil.NewSingleHostReverseProxy(upstreamURL)
 	proxy.Transport = upstreamTransport
 	mux := http.NewServeMux()
@@ -228,9 +234,20 @@ func main() {
 			http.NotFound(w, req)
 			return
 		}
-		ok := auth.Handle(w, req)
-		if !ok {
-			return
+
+		ignorePathFound := false
+		for _, path := range cfg.ignorePaths {
+			if req.URL.Path == path {
+				ignorePathFound = true
+				break
+			}
+		}
+
+		if !ignorePathFound {
+			ok := auth.Handle(w, req)
+			if !ok {
+				return
+			}
 		}
 
 		proxy.ServeHTTP(w, req)

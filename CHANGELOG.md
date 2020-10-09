@@ -1,5 +1,10 @@
 ## Next release
 
+## 0.7.0 / 2020-09-15
+
+* [CHANGE] Make images rootless. #86
+* [FEATURE] Add ability to check for allowed request paths with new `--allow-paths` config option. #83
+
 ## 0.6.0 / 2020-06-11
 
 * [CHANGE] Use gcr.io/distroless/static as base image instead of alpine. #67

@@ -9,7 +9,7 @@ GOARCH?=$(shell go env GOARCH)
 OUT_DIR=_output
 BIN?=kube-rbac-proxy
 VERSION?=$(shell cat VERSION)-$(shell git rev-parse --short HEAD)
-PKGS=$(shell go list ./... | grep -v /vendor/)
+PKGS=$(shell go list ./... )
 DOCKER_REPO?=quay.io/brancz/kube-rbac-proxy
 KUBECONFIG?=$(HOME)/.kube/config
 
@@ -87,7 +87,7 @@ generate: build embedmd
 	@./scripts/generate-examples.sh
 	@echo ">> generating docs"
 	@./scripts/generate-help-txt.sh
-	@$(GOPATH)/bin/embedmd -w `find ./ -path ./vendor -prune -o -name "*.md" -print`
+	@$(GOPATH)/bin/embedmd -w `find ./ -prune -o -name "*.md" -print`
 
 embedmd:
 	@go get github.com/campoy/embedmd

@@ -275,6 +275,90 @@ func testAllowPathsRegexp(s *kubetest.Suite) kubetest.TestSuite {
 	}
 }
 
+func testIgnorePaths(s *kubetest.Suite) kubetest.TestSuite {
+	return func(t *testing.T) {
+		commandWithoutAuth := `STATUS_CODE=$(curl --connect-timeout 5 -o /dev/null -v -s -k --write-out "%%{http_code}" https://kube-rbac-proxy.default.svc.cluster.local:8443%s); if [[ "$STATUS_CODE" != %d ]]; then echo "expecting %d status code, got $STATUS_CODE instead" > /proc/self/fd/2; exit 1; fi`
+
+		kubetest.Scenario{
+			Name: "WithIgnorePathMatch",
+			Description: `
+				As a client without an auth token,
+				I get a 200 response when requesting a path included in ignorePaths
+			`,
+
+			Given: kubetest.Setups(
+				kubetest.CreatedManifests(
+					s.KubeClient,
+					"ignorepaths/clusterRole.yaml",
+					"ignorepaths/clusterRoleBinding.yaml",
+					"ignorepaths/deployment.yaml",
+					"ignorepaths/service.yaml",
+					"ignorepaths/serviceAccount.yaml",
+					"ignorepaths/clusterRole-client.yaml",
+					"ignorepaths/clusterRoleBinding-client.yaml",
+				),
+			),
+			When: kubetest.Conditions(
+				kubetest.PodsAreReady(
+					s.KubeClient,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					s.KubeClient,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Checks(
+				ClientSucceeds(
+					s.KubeClient,
+					fmt.Sprintf(commandWithoutAuth, "/metrics", 200, 200),
+					nil,
+				),
+			),
+		}.Run(t)
+
+		kubetest.Scenario{
+			Name: "WithIgnorePathNoMatch",
+			Description: `
+				As a client without an auth token,
+				I get a 401 response when requesting a path not included in ignorePaths
+			`,
+
+			Given: kubetest.Setups(
+				kubetest.CreatedManifests(
+					s.KubeClient,
+					"ignorepaths/clusterRole.yaml",
+					"ignorepaths/clusterRoleBinding.yaml",
+					"ignorepaths/deployment.yaml",
+					"ignorepaths/service.yaml",
+					"ignorepaths/serviceAccount.yaml",
+					"ignorepaths/clusterRole-client.yaml",
+					"ignorepaths/clusterRoleBinding-client.yaml",
+				),
+			),
+			When: kubetest.Conditions(
+				kubetest.PodsAreReady(
+					s.KubeClient,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					s.KubeClient,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Checks(
+				ClientSucceeds(
+					s.KubeClient,
+					fmt.Sprintf(commandWithoutAuth, "/", 401, 401),
+					nil,
+				),
+			),
+		}.Run(t)
+	}
+}
+
 func ClientSucceeds(client kubernetes.Interface, command string, opts *kubetest.RunOptions) kubetest.Check {
 	return func(ctx *kubetest.ScenarioContext) error {
 		return kubetest.RunSucceeds(
