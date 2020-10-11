@@ -1,0 +1,39 @@
+name: Go
+
+on: [push, pull_request]
+
+env:
+  VERSION: 1.13.x
+  GO111MODULE: on
+  QUAY_PATH: quay.io/brancz/kube-rbac-proxy
+
+jobs:
+  create-cluster:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+    - name: Create cluster
+      run: |
+        curl -Lo kind https://github.com/kubernetes-sigs/kind/releases/download/v0.7.0/kind-linux-amd64 && chmod +x kind && sudo mv kind /usr/local/bin/
+        kind create cluster --config test/e2e/kind-config/kind-config.yaml
+      continue-on-error: false
+    - name: Create container & run tests
+      run: |
+        VERSION=local make container
+        kind load docker-image ${QUAY_PATH}:local
+        make test-e2es
+    - name: Login to Quay
+      if: ${{ github.event_name != 'pull_request' }}
+      uses: docker/login-action@v1
+      with:
+        registry: quay.io
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_PASSWORD }}
+    - name: Push to Quay
+      if: ${{ github.event_name != 'pull_request' }}
+      run: |
+        TAG="$(git rev-parse --abbrev-ref HEAD | tr / -)-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD)"
+        ID="$(docker images ${QUAY_PATH}:local --format "{{.ID}}")"
+        docker tag $ID ${QUAY_PATH}:$TAG
+        docker push ${QUAY_PATH}:$TAG
