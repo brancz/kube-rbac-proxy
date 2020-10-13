@@ -6,6 +6,9 @@ env:
   VERSION: 1.13.x
   GO111MODULE: on
   QUAY_PATH: quay.io/brancz/kube-rbac-proxy
+  QUAY_REPOSITORY: quay.io/markku/kube-rbac-proxy
+  kind-version: 'v0.7.0'
+  kind-image: 'kind-linux-amd64'
 
 jobs:
   create-cluster:
@@ -13,27 +16,36 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
-    - name: Create cluster
-      run: |
-        curl -Lo kind https://github.com/kubernetes-sigs/kind/releases/download/v0.7.0/kind-linux-amd64 && chmod +x kind && sudo mv kind /usr/local/bin/
-        kind create cluster --config test/e2e/kind-config/kind-config.yaml
+    - name: Start kind & create cluster
+      uses: engineerd/setup-kind@v0.4.0
+      with:
+        version: ${{ env.kind-version }}
+        # image: ${{ env.kind-image }}
+    - name: Wait for cluster to finish bootstraping
+      # run: |
+      #   until [ "$(kubectl get pods --all-namespaces --no-headers | grep -cEv '([0-9]+)/\1')" -eq 0 ]; do
+      #       sleep 5s
+      #   done
+      #   kubectl cluster-info
+      #   kubectl get pods -A
+      # run: |
+      #   curl -Lo kind https://github.com/kubernetes-sigs/kind/releases/download/v0.7.0/kind-linux-amd64 && chmod +x kind && sudo mv kind /usr/local/bin/
+      #   kind create cluster --config test/e2e/kind-config/kind-config.yaml
       continue-on-error: false
     - name: Create container & run tests
       run: |
         VERSION=local make container
         kind load docker-image ${QUAY_PATH}:local
         make test-e2e
-    - name: Login to Quay
-      if: ${{ github.event_name != 'pull_request' }}
+    - name: Login and push to Quay
+      if: github.event_name == 'push'
       uses: docker/login-action@v1
       with:
         registry: quay.io
         username: ${{ secrets.QUAY_USERNAME }}
         password: ${{ secrets.QUAY_PASSWORD }}
-    - name: Push to Quay
-      if: ${{ github.event_name != 'pull_request' }}
       run: |
         TAG="$(git rev-parse --abbrev-ref HEAD | tr / -)-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD)"
         ID="$(docker images ${QUAY_PATH}:local --format "{{.ID}}")"
-        docker tag $ID ${QUAY_PATH}:$TAG
-        docker push ${QUAY_PATH}:$TAG
+        docker tag $ID ${QUAY_REPOSITORY}:$TAG
+        docker push ${QUAY_REPOSITORY}:$TAG
