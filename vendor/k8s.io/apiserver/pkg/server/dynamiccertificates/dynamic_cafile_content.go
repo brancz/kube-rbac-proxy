@@ -29,7 +29,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 // FileRefreshDuration is exposed so that integration tests can crank up the reload speed.
@@ -126,6 +126,7 @@ func (c *DynamicFileCAContent) loadCABundle() error {
 		return err
 	}
 	c.caBundle.Store(caBundleAndVerifier)
+	klog.V(2).Infof("Loaded a new CA Bundle and Verifier for %q", c.Name())
 
 	for _, listener := range c.listeners {
 		listener.Enqueue()
@@ -170,7 +171,7 @@ func (c *DynamicFileCAContent) Run(workers int, stopCh <-chan struct{}) {
 	go wait.Until(c.runWorker, time.Second, stopCh)
 
 	// start timer that rechecks every minute, just in case.  this also serves to prime the controller quickly.
-	_ = wait.PollImmediateUntil(FileRefreshDuration, func() (bool, error) {
+	go wait.PollImmediateUntil(FileRefreshDuration, func() (bool, error) {
 		c.queue.Add(workItemKey)
 		return false, nil
 	}, stopCh)
