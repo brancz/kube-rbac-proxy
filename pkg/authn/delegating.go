@@ -18,6 +18,8 @@ package authn
 
 import (
 	"errors"
+	"fmt"
+	"io/ioutil"
 	"time"
 
 	"k8s.io/apiserver/pkg/authentication/authenticator"
@@ -37,7 +39,16 @@ func NewDelegatingAuthenticator(client authenticationclient.TokenReviewInterface
 		err error
 	)
 	if len(authn.X509.ClientCAFile) > 0 {
-		p, err = dynamiccertificates.NewStaticCAContentFromFile(authn.X509.ClientCAFile)
+		if len(authn.X509.ClientCAFile) == 0 {
+			return nil, fmt.Errorf("missing filename for ca bundle")
+		}
+
+		caBundle, err := ioutil.ReadFile(authn.X509.ClientCAFile)
+		if err != nil {
+			return nil, err
+		}
+
+		p, err = dynamiccertificates.NewStaticCAContent(authn.X509.ClientCAFile, caBundle)
 		if err != nil {
 			return nil, err
 		}
