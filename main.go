@@ -388,14 +388,14 @@ func initKubeConfig(kcLocation string) *rest.Config {
 	if kcLocation != "" {
 		kubeConfig, err := clientcmd.BuildConfigFromFlags("", kcLocation)
 		if err != nil {
-			klog.Fatalf("unable to build rest config based on provided path to kubeconfig file:%v",err)
+			klog.Fatalf("unable to build rest config based on provided path to kubeconfig file: %v",err)
 		}
 		return kubeConfig
 	}
 
 	kubeConfig, err := rest.InClusterConfig()
 	if err != nil {
-		klog.Fatalf("cannot find Service Account in pod to build in-cluster rest config:%v",err)
+		klog.Fatalf("cannot find Service Account in pod to build in-cluster rest config: %v",err)
 	}
 
 	return kubeConfig
