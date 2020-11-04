@@ -1,0 +1,42 @@
+name: Go
+
+on: [push, pull_request]
+
+env:
+  VERSION: 1.13.x
+  GO111MODULE: on
+  QUAY_PATH: quay.io/brancz/kube-rbac-proxy
+  kind-version: 'v0.7.0'
+
+jobs:
+  create-cluster:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+    - name: Start kind & create cluster
+      uses: engineerd/setup-kind@v0.4.0
+      with:
+        version: ${{ env.kind-version }}
+        config: test/e2e/kind-config/kind-config.yaml
+    - name: Wait for cluster to finish bootstrapping
+      run: |
+        until [ "$(kubectl get pods --all-namespaces --no-headers | grep -cEv '([0-9]+)/\1')" -eq 0 ]; do
+            sleep 5s
+        done
+        kubectl cluster-info
+        kubectl get pods -A
+      continue-on-error: false
+    - name: Create container & run tests
+      run: |
+        VERSION=local make container
+        kind load docker-image ${QUAY_PATH}:local
+        make test-e2e
+    - name: Login and push to Quay
+      if: github.event_name == 'push'
+      run: |
+        docker login quay.io -u="${{ secrets.QUAY_USERNAME }}" -p="${{ secrets.QUAY_PASSWORD }}"
+        TAG="$(git rev-parse --abbrev-ref HEAD | tr / -)-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD)"
+        ID="$(docker images ${QUAY_PATH}:local --format "{{.ID}}")"
+        docker tag $ID ${QUAY_PATH}:$TAG
+        docker push ${QUAY_PATH}:$TAG
