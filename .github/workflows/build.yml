@@ -14,7 +14,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v2
     - name: Start kind & create cluster
-      uses: engineerd/setup-kind@v0.4.0
+      uses: engineerd/setup-kind@v0.5.0
       with:
         version: ${{ env.kind-version }}
         config: test/e2e/kind-config/kind-config.yaml
