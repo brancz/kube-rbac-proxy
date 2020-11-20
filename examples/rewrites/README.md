@@ -2,7 +2,7 @@
 
 > Note to try this out with minikube, make sure you enable RBAC correctly as explained [here](../minikube-rbac).
 
-RBAC differentiates in two types, that need to be authorized, resources and non-resoruces. A resource request authorization, could for example be, that a requesting entity needs to be authorized to perform the `get` action on a particular Kubernetes Deployment.
+RBAC differentiates in two types, that need to be authorized, resources and non-resources. A resource request authorization, could for example be, that a requesting entity needs to be authorized to perform the `get` action on a particular Kubernetes Deployment.
 
 Take the following example. We want to deploy a [prometheus-example-app](https://github.com/brancz/prometheus-example-app), and protect it with the kube-rbac-proxy. In this example we require a requesting entity to be allowed to call the `proxy` subresource on a Kubernetes Service called `kube-rbac-proxy`. This is configured in the file passed to the kube-rbac-proxy with the `--config-file` flag. Additionally the `--upstream` flag has to be set to configure the application that should be proxied to on successful authentication as well as authorization.
 
