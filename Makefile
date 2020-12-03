@@ -10,7 +10,7 @@ OUT_DIR=_output
 BIN?=kube-rbac-proxy
 VERSION?=$(shell cat VERSION)-$(shell git rev-parse --short HEAD)
 PKGS=$(shell go list ./... )
-DOCKER_REPO?=quay.io/brancz/kube-rbac-proxy
+DOCKER_REPO?=registry.hub.docker.com/marpiot/kube-rbac-proxy
 KUBECONFIG?=$(HOME)/.kube/config
 
 ALL_ARCH=amd64 arm arm64 ppc64le s390x
@@ -40,9 +40,9 @@ $(OUT_DIR)/$(BIN)-%:
 build: $(OUT_DIR)/$(BIN)
 
 container: $(OUT_DIR)/$(BIN)-$(GOOS)-$(GOARCH) Dockerfile
-	docker build --build-arg BINARY=$(BIN)-$(GOOS)-$(GOARCH) -t $(DOCKER_REPO):$(VERSION)-$(GOARCH) .
+	podman build --build-arg BINARY=$(BIN)-$(GOOS)-$(GOARCH) -t $(DOCKER_REPO):$(VERSION)-$(GOARCH) .
 ifeq ($(GOARCH), amd64)
-	docker tag $(DOCKER_REPO):$(VERSION)-$(GOARCH) $(DOCKER_REPO):$(VERSION)
+	podman tag $(DOCKER_REPO):$(VERSION)-$(GOARCH) $(DOCKER_REPO):$(VERSION)
 endif
 
 
