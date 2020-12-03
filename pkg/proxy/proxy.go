@@ -143,10 +143,21 @@ func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http
 	allAttrs := []authorizer.Attributes{}
 
 	if n.authzConfig.ResourceAttributes != nil {
-		if n.authzConfig.Rewrites != nil && n.authzConfig.Rewrites.ByQueryParameter != nil && n.authzConfig.Rewrites.ByQueryParameter.Name != "" {
-			params, ok := r.URL.Query()[n.authzConfig.Rewrites.ByQueryParameter.Name]
-			if !ok {
-				return nil
+		if n.authzConfig.Rewrites != nil {
+			params := []string{}
+			if n.authzConfig.Rewrites.ByQueryParameter != nil && n.authzConfig.Rewrites.ByQueryParameter.Name != "" {
+				if ps, ok := r.URL.Query()[n.authzConfig.Rewrites.ByQueryParameter.Name]; ok {
+					params = append(params, ps...)
+				}
+			}
+			if n.authzConfig.Rewrites.ByHTTPHeader != nil && n.authzConfig.Rewrites.ByHTTPHeader.Name != "" {
+				if p := r.Header.Get(n.authzConfig.Rewrites.ByHTTPHeader.Name); p != "" {
+					params = append(params, p)
+				}
+			}
+
+			if len(params) == 0 {
+				return []authorizer.Attributes{}
 			}
 
 			for _, param := range params {
