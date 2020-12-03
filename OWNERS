@@ -1,22 +1,22 @@
 component: "Monitoring"
 
 reviewers:
-- brancz
 - LiliC
 - paulfantom
-- pgier
 - s-urbaniak
 - simonpasquier
+- dgrisonnet
 
 approvers:
-- brancz
 - LiliC
 - paulfantom
-- pgier
 - s-urbaniak
 - simonpasquier
+- dgrisonnet
 
 emeritus_approvers:
 - elad661
 - ironcladlou
 - squat
+- brancz
+- pgier
