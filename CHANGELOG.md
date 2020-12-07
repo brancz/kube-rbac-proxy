@@ -1,4 +1,6 @@
-## Next release
+## 0.8.0 / 2020-11-03
+
+* [FEATURE] Add ability with the new `--ignore-paths` flag to define paths for which kube-rbac-proxy will proxy without performing authn/authz. This cannot be used with `--allow-paths`. #91
 
 ## 0.7.0 / 2020-09-15
 
