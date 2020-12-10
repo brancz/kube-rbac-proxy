@@ -17,6 +17,6 @@ LABEL io.k8s.display-name="kube-rbac-proxy" \
 ARG FROM_DIRECTORY=/go/src/github.com/brancz/kube-rbac-proxy
 COPY --from=builder ${FROM_DIRECTORY}/_output/kube-rbac-proxy  /usr/bin/kube-rbac-proxy
 
-USER nobody
+USER 65534
 EXPOSE 8080
 ENTRYPOINT ["/usr/bin/kube-rbac-proxy"]
