@@ -125,7 +125,7 @@ type krpAuthorizerAttributesGetter struct {
 }
 
 // GetRequestAttributes populates authorizer attributes for the requests to kube-rbac-proxy.
-func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http.Request) []authorizer.Attributes {
+func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http.Request) (allAttrs []authorizer.Attributes) {
 	apiVerb := ""
 	switch r.Method {
 	case "POST":
@@ -140,58 +140,15 @@ func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http
 		apiVerb = "delete"
 	}
 
-	allAttrs := []authorizer.Attributes{}
-
-	if n.authzConfig.ResourceAttributes != nil {
-		if n.authzConfig.Rewrites != nil {
-			params := []string{}
-			if n.authzConfig.Rewrites.ByQueryParameter != nil && n.authzConfig.Rewrites.ByQueryParameter.Name != "" {
-				if ps, ok := r.URL.Query()[n.authzConfig.Rewrites.ByQueryParameter.Name]; ok {
-					params = append(params, ps...)
-				}
-			}
-			if n.authzConfig.Rewrites.ByHTTPHeader != nil && n.authzConfig.Rewrites.ByHTTPHeader.Name != "" {
-				if p := r.Header.Get(n.authzConfig.Rewrites.ByHTTPHeader.Name); p != "" {
-					params = append(params, p)
-				}
-			}
-
-			if len(params) == 0 {
-				return []authorizer.Attributes{}
-			}
-
-			for _, param := range params {
-				attrs := authorizer.AttributesRecord{
-					User:            u,
-					Verb:            apiVerb,
-					Namespace:       templateWithValue(n.authzConfig.ResourceAttributes.Namespace, param),
-					APIGroup:        templateWithValue(n.authzConfig.ResourceAttributes.APIGroup, param),
-					APIVersion:      templateWithValue(n.authzConfig.ResourceAttributes.APIVersion, param),
-					Resource:        templateWithValue(n.authzConfig.ResourceAttributes.Resource, param),
-					Subresource:     templateWithValue(n.authzConfig.ResourceAttributes.Subresource, param),
-					Name:            templateWithValue(n.authzConfig.ResourceAttributes.Name, param),
-					ResourceRequest: true,
-				}
-				allAttrs = append(allAttrs, attrs)
-			}
-		} else {
-			attrs := authorizer.AttributesRecord{
-				User:            u,
-				Verb:            apiVerb,
-				Namespace:       n.authzConfig.ResourceAttributes.Namespace,
-				APIGroup:        n.authzConfig.ResourceAttributes.APIGroup,
-				APIVersion:      n.authzConfig.ResourceAttributes.APIVersion,
-				Resource:        n.authzConfig.ResourceAttributes.Resource,
-				Subresource:     n.authzConfig.ResourceAttributes.Subresource,
-				Name:            n.authzConfig.ResourceAttributes.Name,
-				ResourceRequest: true,
-			}
-			allAttrs = append(allAttrs, attrs)
+	defer func() {
+		for attrs := range allAttrs {
+			klog.V(5).Infof("kube-rbac-proxy request attributes: attrs=%#v", attrs)
 		}
-	} else {
-		requestPath := r.URL.Path
+	}()
+
+	if n.authzConfig.ResourceAttributes == nil {
 		// Default attributes mirror the API attributes that would allow this access to kube-rbac-proxy
-		attrs := authorizer.AttributesRecord{
+		allAttrs = append(allAttrs, authorizer.AttributesRecord{
 			User:            u,
 			Verb:            apiVerb,
 			Namespace:       "",
@@ -201,16 +158,60 @@ func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http
 			Subresource:     "",
 			Name:            "",
 			ResourceRequest: false,
-			Path:            requestPath,
+			Path:            r.URL.Path,
+		})
+		return
+	}
+
+	if n.authzConfig.Rewrites == nil {
+		allAttrs = append(allAttrs, authorizer.AttributesRecord{
+			User:            u,
+			Verb:            apiVerb,
+			Namespace:       n.authzConfig.ResourceAttributes.Namespace,
+			APIGroup:        n.authzConfig.ResourceAttributes.APIGroup,
+			APIVersion:      n.authzConfig.ResourceAttributes.APIVersion,
+			Resource:        n.authzConfig.ResourceAttributes.Resource,
+			Subresource:     n.authzConfig.ResourceAttributes.Subresource,
+			Name:            n.authzConfig.ResourceAttributes.Name,
+			ResourceRequest: true,
+		})
+
+		return
+	}
+
+	params := []string{}
+
+	if n.authzConfig.Rewrites.ByQueryParameter != nil && n.authzConfig.Rewrites.ByQueryParameter.Name != "" {
+		if ps, ok := r.URL.Query()[n.authzConfig.Rewrites.ByQueryParameter.Name]; ok {
+			params = append(params, ps...)
 		}
-		allAttrs = append(allAttrs, attrs)
 	}
 
-	for attrs := range allAttrs {
-		klog.V(5).Infof("kube-rbac-proxy request attributes: attrs=%#+v", attrs)
+	if n.authzConfig.Rewrites.ByHTTPHeader != nil && n.authzConfig.Rewrites.ByHTTPHeader.Name != "" {
+		if p := r.Header.Get(n.authzConfig.Rewrites.ByHTTPHeader.Name); p != "" {
+			params = append(params, p)
+		}
 	}
 
-	return allAttrs
+	if len(params) == 0 {
+		return
+	}
+
+	for _, param := range params {
+		allAttrs = append(allAttrs, authorizer.AttributesRecord{
+			User:            u,
+			Verb:            apiVerb,
+			Namespace:       templateWithValue(n.authzConfig.ResourceAttributes.Namespace, param),
+			APIGroup:        templateWithValue(n.authzConfig.ResourceAttributes.APIGroup, param),
+			APIVersion:      templateWithValue(n.authzConfig.ResourceAttributes.APIVersion, param),
+			Resource:        templateWithValue(n.authzConfig.ResourceAttributes.Resource, param),
+			Subresource:     templateWithValue(n.authzConfig.ResourceAttributes.Subresource, param),
+			Name:            templateWithValue(n.authzConfig.ResourceAttributes.Name, param),
+			ResourceRequest: true,
+		})
+	}
+
+	return
 }
 
 // DeepCopy of Proxy Configuration
