@@ -110,7 +110,7 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 			},
 		},
 		{
-			"without rewrites",
+			"without rewrites config",
 			&authz.Config{ResourceAttributes: &authz.ResourceAttributes{Namespace: "tenant1", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"}},
 			createRequest(nil, nil),
 			[]authorizer.Attributes{
@@ -128,7 +128,7 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 			},
 		},
 		{
-			"with query param rewrites",
+			"with query param rewrites config",
 			&authz.Config{
 				Rewrites:           &authz.SubjectAccessReviewRewrites{ByQueryParameter: &authz.QueryParameterRewriteConfig{Name: "namespace"}},
 				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
@@ -149,7 +149,16 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 			},
 		},
 		{
-			"with http header rewrites",
+			"with query param rewrites config but missing URL query",
+			&authz.Config{
+				Rewrites:           &authz.SubjectAccessReviewRewrites{ByQueryParameter: &authz.QueryParameterRewriteConfig{Name: "namespace"}},
+				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
+			},
+			createRequest(nil, nil),
+			nil,
+		},
+		{
+			"with http header rewrites config",
 			&authz.Config{
 				Rewrites:           &authz.SubjectAccessReviewRewrites{ByHTTPHeader: &authz.HTTPHeaderRewriteConfig{Name: "namespace"}},
 				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
@@ -170,7 +179,16 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 			},
 		},
 		{
-			"with http header and query param rewrites",
+			"with http header rewrites config but missing header",
+			&authz.Config{
+				Rewrites:           &authz.SubjectAccessReviewRewrites{ByQueryParameter: &authz.QueryParameterRewriteConfig{Name: "namespace"}},
+				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
+			},
+			createRequest(nil, nil),
+			nil,
+		},
+		{
+			"with http header and query param rewrites config",
 			&authz.Config{
 				Rewrites: &authz.SubjectAccessReviewRewrites{
 					ByHTTPHeader:     &authz.HTTPHeaderRewriteConfig{Name: "namespace"},
