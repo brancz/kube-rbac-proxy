@@ -205,7 +205,6 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 			},
 		},
 	}
-
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
 			t.Log(c.req.URL.Query())
