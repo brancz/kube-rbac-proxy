@@ -193,7 +193,7 @@ func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http
 	}
 
 	if len(params) == 0 {
-		return nil
+		return allAttrs
 	}
 
 	for _, param := range params {
