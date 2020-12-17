@@ -9,7 +9,7 @@ GOARCH?=$(shell go env GOARCH)
 OUT_DIR=_output
 BIN?=kube-rbac-proxy
 VERSION?=$(shell cat VERSION)-$(shell git rev-parse --short HEAD)
-PKGS=$(shell go list ./... )
+PKGS=$(shell go list ./... | grep -v /test/e2e)
 DOCKER_REPO?=quay.io/brancz/kube-rbac-proxy
 KUBECONFIG?=$(HOME)/.kube/config
 
@@ -77,7 +77,7 @@ test:
 	# install test dependencies
 	@go test -i $(PKGS)
 	# run the tests
-	@go test  $(PKGS)
+	@go test $(PKGS)
 
 test-e2e:
 	go test -timeout 55m -v ./test/e2e/ $(TEST_RUN_ARGS) --kubeconfig=$(KUBECONFIG)

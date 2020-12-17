@@ -107,8 +107,15 @@ func TestReloader(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
+	// add klog flags
+	klog.InitFlags(flag.CommandLine)
+
 	var err error
 	err = flag.Set("alsologtostderr", "true")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	err = flag.Set("v", "5")
 	if err != nil {
 		log.Fatal(err)
