@@ -77,12 +77,10 @@ run-curl-container:
 grpcc-container:
 	docker build -f ./examples/grpcc/Dockerfile -t mumoshu/grpcc:v0.0.1 .
 
-test:
-	@echo ">> running all tests"
-	# install test dependencies
-	@go test -i $(PKGS)
-	# run the tests
-	@go test $(PKGS)
+test: test-unit test-e2e
+
+test-unit:
+	go test -v -race -count=1 $(PKGS)
 
 test-e2e:
 	go test -timeout 55m -v ./test/e2e/ $(TEST_RUN_ARGS) --kubeconfig=$(KUBECONFIG)
@@ -101,4 +99,4 @@ $(TOOLING): $(TOOLS_BIN_DIR)
 	@echo Installing tools from scripts/tools.go
 	@cat scripts/tools.go | grep _ | awk -F'"' '{print $$2}' | GOBIN=$(TOOLS_BIN_DIR) xargs -tI % go install -mod=readonly -modfile=scripts/go.mod %
 
-.PHONY: all check-license crossbuild build container push push-% manifest-push curl-container test generate
+.PHONY: all check-license crossbuild build container push push-% manifest-push curl-container test test-unit test-e2e generate

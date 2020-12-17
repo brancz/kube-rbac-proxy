@@ -40,7 +40,7 @@ jobs:
     - uses: actions/setup-go@v2
       with:
         go-version: ${{ env.go-version }}
-    - run: make test
+    - run: make test-unit
   e2e-tests:
     runs-on: ubuntu-latest
     name: E2E tests
