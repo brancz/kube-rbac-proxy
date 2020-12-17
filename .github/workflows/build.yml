@@ -3,13 +3,47 @@ name: Go
 on: [push, pull_request]
 
 env:
-  VERSION: 1.15.x
   QUAY_PATH: quay.io/brancz/kube-rbac-proxy
+  go-version: '1.15'
   kind-version: 'v0.9.0'
 
 jobs:
-  create-cluster:
+  check-license:
     runs-on: ubuntu-latest
+    name: Check license
+    steps:
+    - uses: actions/checkout@v2
+    - run: make check-license
+  generate:
+    runs-on: ubuntu-latest
+    name: Generate
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-go@v2
+      with:
+        go-version: ${{ env.go-version }}
+    - run: make generate && git diff --exit-code
+  build:
+    runs-on: ubuntu-latest
+    name: Build
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-go@v2
+      with:
+        go-version: ${{ env.go-version }}
+    - run: make build
+  unit-tests:
+    runs-on: ubuntu-latest
+    name: Unit tests
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-go@v2
+      with:
+        go-version: ${{ env.go-version }}
+    - run: make test
+  e2e-tests:
+    runs-on: ubuntu-latest
+    name: E2E tests
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
@@ -31,11 +65,31 @@ jobs:
         VERSION=local make container
         kind load docker-image ${QUAY_PATH}:local
         make test-e2e
-    - name: Login and push to Quay
-      if: github.event_name == 'push'
-      run: |
-        docker login quay.io -u="${{ secrets.QUAY_USERNAME }}" -p="${{ secrets.QUAY_PASSWORD }}"
-        TAG="$(git rev-parse --abbrev-ref HEAD | tr / -)-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD)"
-        ID="$(docker images ${QUAY_PATH}:local --format "{{.ID}}")"
-        docker tag $ID ${QUAY_PATH}:$TAG
-        docker push ${QUAY_PATH}:$TAG
+  publish:
+    runs-on: ubuntu-latest
+    name: Publish container image to Quay
+    if: github.event_name == 'push'
+    needs:
+      - check-license
+      - generate
+      - build
+      - unit-tests
+      # Disable e2e-tests job requirement to avoid having flakes impacting
+      # image publication.
+      # This requirement should be uncommented once the flaky tests are fixed.
+      # - e2e-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Login to Quay.io
+        uses: docker/login-actions@v1
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+      - name: Build images and push
+        run: |
+          TAG="$(git rev-parse --abbrev-ref HEAD | tr / -)-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD)"
+          ID="$(docker images ${QUAY_PATH}:local --format "{{.ID}}")"
+          docker tag $ID ${QUAY_PATH}:$TAG
+          docker push ${QUAY_PATH}:$TAG
