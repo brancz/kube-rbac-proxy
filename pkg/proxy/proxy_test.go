@@ -42,6 +42,7 @@ func TestProxyWithOIDCSupport(t *testing.T) {
 				UserFieldName:   "user",
 				GroupsFieldName: "groups",
 			},
+			Token: &authn.TokenConfig{},
 		},
 		Authorization: &authz.Config{},
 	}
