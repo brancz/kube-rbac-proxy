@@ -9,7 +9,7 @@ GOARCH?=$(shell go env GOARCH)
 OUT_DIR=_output
 BIN?=kube-rbac-proxy
 VERSION?=$(shell cat VERSION)-$(shell git rev-parse --short HEAD)
-PKGS=$(shell go list ./... )
+PKGS=$(shell go list ./... | grep -v /test/e2e)
 DOCKER_REPO?=quay.io/brancz/kube-rbac-proxy
 KUBECONFIG?=$(HOME)/.kube/config
 
@@ -20,6 +20,11 @@ ALL_BINARIES ?= $(addprefix $(OUT_DIR)/$(BIN)-, \
 				darwin-amd64 \
 				windows-amd64.exe)
 
+TOOLS_BIN_DIR?=$(shell pwd)/tmp/bin
+export PATH := $(TOOLS_BIN_DIR):$(PATH)
+
+EMBEDMD_BINARY=$(TOOLS_BIN_DIR)/embedmd
+TOOLING=$(EMBEDMD_BINARY)
 
 check-license:
 	@echo ">> checking license headers"
@@ -72,24 +77,26 @@ run-curl-container:
 grpcc-container:
 	docker build -f ./examples/grpcc/Dockerfile -t mumoshu/grpcc:v0.0.1 .
 
-test:
-	@echo ">> running all tests"
-	# install test dependencies
-	@go test -i $(PKGS)
-	# run the tests
-	@go test  $(PKGS)
+test: test-unit test-e2e
+
+test-unit:
+	go test -v -race -count=1 $(PKGS)
 
 test-e2e:
 	go test -timeout 55m -v ./test/e2e/ $(TEST_RUN_ARGS) --kubeconfig=$(KUBECONFIG)
 
-generate: build embedmd
+generate: build $(EMBEDMD_BINARY)
 	@echo ">> generating examples"
 	@./scripts/generate-examples.sh
 	@echo ">> generating docs"
 	@./scripts/generate-help-txt.sh
-	@$(GOPATH)/bin/embedmd -w `find ./ -prune -o -name "*.md" -print`
+	@$(EMBEDMD_BINARY) -w `find ./ -name "*.md" -print`
 
-embedmd:
-	@go get github.com/campoy/embedmd
+$(TOOLS_BIN_DIR):
+	@mkdir -p $(TOOLS_BIN_DIR)
 
-.PHONY: all check-license crossbuild build container push push-% manifest-push curl-container test generate embedmd
+$(TOOLING): $(TOOLS_BIN_DIR)
+	@echo Installing tools from scripts/tools.go
+	@cat scripts/tools.go | grep _ | awk -F'"' '{print $$2}' | GOBIN=$(TOOLS_BIN_DIR) xargs -tI % go install -mod=readonly -modfile=scripts/go.mod %
+
+.PHONY: all check-license crossbuild build container push push-% manifest-push curl-container test test-unit test-e2e generate

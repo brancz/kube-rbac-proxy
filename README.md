@@ -27,8 +27,8 @@ All command line flags:
 [embedmd]:# (_output/help.txt)
 ```txt
 $ kube-rbac-proxy -h
-Usage of _output/linux/amd64/kube-rbac-proxy:
-      --add_dir_header                              If true, adds the file directory to the header
+Usage of _output/kube-rbac-proxy:
+      --add_dir_header                              If true, adds the file directory to the header of the log messages
       --allow-paths strings                         Comma-separated list of paths against which kube-rbac-proxy matches the incoming request. If the request doesn't match, kube-rbac-proxy responds with a 404 status code. If omitted, the incoming request path isn't checked. Cannot be used with --ignore-paths.
       --alsologtostderr                             log to standard error as well as files
       --auth-header-fields-enabled                  When set to true, kube-rbac-proxy adds auth-related fields to the headers of http requests sent to the upstream
