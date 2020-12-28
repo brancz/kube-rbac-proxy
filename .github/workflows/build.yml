@@ -89,6 +89,7 @@ jobs:
           password: ${{ secrets.QUAY_PASSWORD }}
       - name: Build images and push
         run: |
+          VERSION=local make container
           TAG="$(git rev-parse --abbrev-ref HEAD | tr / -)-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD)"
           ID="$(docker images ${QUAY_PATH}:local --format "{{.ID}}")"
           docker tag $ID ${QUAY_PATH}:$TAG
