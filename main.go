@@ -38,6 +38,7 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
+	"k8s.io/apiserver/pkg/authorization/union"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -47,6 +48,7 @@ import (
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
+	"github.com/brancz/kube-rbac-proxy/pkg/hardcodedauthorizer"
 	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
 	rbac_proxy_tls "github.com/brancz/kube-rbac-proxy/pkg/tls"
 )
@@ -199,10 +201,15 @@ func main() {
 
 	sarClient := kubeClient.AuthorizationV1().SubjectAccessReviews()
 	authorizer, err := authz.NewAuthorizer(sarClient)
-
 	if err != nil {
 		klog.Fatalf("Failed to create authorizer: %v", err)
 	}
+	authorizer = union.New(
+		// prefix the authorizer with the permissions for metrics scraping which are well known.
+		// openshift RBAC policy will always allow this user to read metrics.
+		hardcodedauthorizer.NewHardCodedMetricsAuthorizer(),
+		authorizer,
+	)
 
 	auth, err := proxy.New(kubeClient, cfg.auth, authorizer, authenticator)
 
@@ -388,14 +395,14 @@ func initKubeConfig(kcLocation string) *rest.Config {
 	if kcLocation != "" {
 		kubeConfig, err := clientcmd.BuildConfigFromFlags("", kcLocation)
 		if err != nil {
-			klog.Fatalf("unable to build rest config based on provided path to kubeconfig file: %v",err)
+			klog.Fatalf("unable to build rest config based on provided path to kubeconfig file: %v", err)
 		}
 		return kubeConfig
 	}
 
 	kubeConfig, err := rest.InClusterConfig()
 	if err != nil {
-		klog.Fatalf("cannot find Service Account in pod to build in-cluster rest config: %v",err)
+		klog.Fatalf("cannot find Service Account in pod to build in-cluster rest config: %v", err)
 	}
 
 	return kubeConfig
