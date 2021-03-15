@@ -64,6 +64,10 @@ jobs:
       run: |
         VERSION=local make container
         kind load docker-image ${QUAY_PATH}:local
+        until docker exec $(kind get nodes) crictl images | grep "${QUAY_PATH}"; do
+          echo "no kube-rbac-proxy image"
+          sleep 1
+        done
         make test-e2e
   publish:
     runs-on: ubuntu-latest
