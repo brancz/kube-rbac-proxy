@@ -49,10 +49,11 @@ func TestMain(m *testing.M) {
 
 func Test(t *testing.T) {
 	tests := map[string]kubetest.TestSuite{
-		"Basics":        testBasics(suite),
-		"TokenAudience": testTokenAudience(suite),
-		"AllowPath":     testAllowPathsRegexp(suite),
-		"IgnorePath":    testIgnorePaths(suite),
+		"Basics":             testBasics(suite),
+		"ClientCertificates": testClientCertificates(suite),
+		"TokenAudience":      testTokenAudience(suite),
+		"AllowPath":          testAllowPathsRegexp(suite),
+		"IgnorePath":         testIgnorePaths(suite),
 	}
 
 	for name, tc := range tests {
