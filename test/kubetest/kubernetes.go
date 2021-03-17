@@ -78,6 +78,10 @@ func CreatedManifests(client kubernetes.Interface, paths ...string) Setup {
 				if err := createServiceAccount(client, ctx, content); err != nil {
 					return err
 				}
+			case "secret":
+				if err := createSecret(client, ctx, content); err != nil {
+					return err
+				}
 			default:
 				return fmt.Errorf("unable to unmarshal manifest with unknown kind: %s", kind)
 			}
@@ -177,6 +181,25 @@ func createServiceAccount(client kubernetes.Interface, ctx *ScenarioContext, con
 	return err
 }
 
+func createSecret(client kubernetes.Interface, ctx *ScenarioContext, content []byte) error {
+	r := bytes.NewReader(content)
+
+	var secret *corev1.Secret
+	if err := kubeyaml.NewYAMLOrJSONDecoder(r, r.Len()).Decode(&secret); err != nil {
+		return err
+	}
+
+	secret.Namespace = ctx.Namespace
+
+	_, err := client.CoreV1().Secrets(secret.Namespace).Create(context.TODO(), secret, metav1.CreateOptions{})
+
+	ctx.AddFinalizer(func() error {
+		return client.CoreV1().Secrets(secret.Namespace).Delete(context.TODO(), secret.Name, metav1.DeleteOptions{})
+	})
+
+	return err
+}
+
 // PodsAreReady waits for a number if replicas matching the given labels to be ready.
 // Returns a func directly (not Setup or Conditions) as it can be used in Given and When steps
 func PodsAreReady(client kubernetes.Interface, replicas int, labels string) func(*ScenarioContext) error {
@@ -263,8 +286,9 @@ func Sleep(d time.Duration) Condition {
 }
 
 type RunOptions struct {
-	ServiceAccount string
-	TokenAudience  string
+	ServiceAccount     string
+	TokenAudience      string
+	ClientCertificates bool
 }
 
 func RunSucceeds(client kubernetes.Interface, image string, name string, command []string, opts *RunOptions) Check {
@@ -335,6 +359,24 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 			corev1.VolumeMount{
 				Name:      "requestedtoken",
 				MountPath: "/var/run/secrets/tokens",
+			},
+		)
+	}
+
+	if opts != nil && opts.ClientCertificates {
+		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+			Name: "clientcertificates",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "kube-rbac-proxy-client-certificates",
+				},
+			},
+		})
+
+		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts,
+			corev1.VolumeMount{
+				Name:      "clientcertificates",
+				MountPath: "/certs",
 			},
 		)
 	}
@@ -422,9 +464,9 @@ func CreateNamespace(client kubernetes.Interface, name string) error {
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
-			},
-		}
-	
+		},
+	}
+
 	_, err := client.CoreV1().Namespaces().Create(context.TODO(), ns, metav1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to create namespace with name %v", name)
