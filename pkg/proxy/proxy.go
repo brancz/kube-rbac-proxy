@@ -61,7 +61,6 @@ func New(client clientset.Interface, config Config, authorizer authorizer.Author
 // Handle authenticates the client and authorizes the request.
 // If the authn fails, a 401 error is returned. If the authz fails, a 403 error is returned
 func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
-
 	ctx := req.Context()
 	if len(h.Config.Authentication.Token.Audiences) > 0 {
 		ctx = authenticator.WithAudiences(ctx, h.Config.Authentication.Token.Audiences)
