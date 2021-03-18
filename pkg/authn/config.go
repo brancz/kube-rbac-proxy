@@ -20,6 +20,8 @@ package authn
 type AuthnHeaderConfig struct {
 	// When set to true, kube-rbac-proxy adds auth-related fields to the headers of http requests sent to the upstream
 	Enabled bool
+	// When set to true, kube-rbac-proxy will pass Authorization header with Bearer token to the upstream
+	PassBearerToken bool
 	// Corresponds to the name of the field inside a http(2) request header
 	// to tell the upstream server about the user's name
 	UserFieldName string

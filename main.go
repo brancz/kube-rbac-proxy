@@ -130,6 +130,7 @@ func main() {
 	// Auth flags
 	flagset.StringVar(&cfg.auth.Authentication.X509.ClientCAFile, "client-ca-file", "", "If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.")
 	flagset.BoolVar(&cfg.auth.Authentication.Header.Enabled, "auth-header-fields-enabled", false, "When set to true, kube-rbac-proxy adds auth-related fields to the headers of http requests sent to the upstream")
+	flagset.BoolVar(&cfg.auth.Authentication.Header.PassBearerToken, "auth-header-pass-bearer", false, "When set to true, kube-rbac-proxy will pass Authorization header with Bearer token to the upstream")
 	flagset.StringVar(&cfg.auth.Authentication.Header.UserFieldName, "auth-header-user-field-name", "x-remote-user", "The name of the field inside a http(2) request header to tell the upstream server about the user's name")
 	flagset.StringVar(&cfg.auth.Authentication.Header.GroupsFieldName, "auth-header-groups-field-name", "x-remote-groups", "The name of the field inside a http(2) request header to tell the upstream server about the user's groups")
 	flagset.StringVar(&cfg.auth.Authentication.Header.GroupSeparator, "auth-header-groups-field-separator", "|", "The separator string used for concatenating multiple group names in a groups header field's value")
@@ -354,7 +355,7 @@ func main() {
 			}
 
 			gr.Add(func() error {
-				klog.Infof("Listening insecurely on %v", cfg.insecureListenAddress)
+				klog.Infof("Listening insecurely on %v. Wohou!", cfg.insecureListenAddress)
 				return srv.Serve(l)
 			}, func(err error) {
 				if err := srv.Shutdown(context.Background()); err != nil {

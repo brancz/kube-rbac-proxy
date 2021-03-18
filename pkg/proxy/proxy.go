@@ -61,12 +61,15 @@ func New(client clientset.Interface, config Config, authorizer authorizer.Author
 // Handle authenticates the client and authorizes the request.
 // If the authn fails, a 401 error is returned. If the authz fails, a 403 error is returned
 func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
+
 	ctx := req.Context()
 	if len(h.Config.Authentication.Token.Audiences) > 0 {
 		ctx = authenticator.WithAudiences(ctx, h.Config.Authentication.Token.Audiences)
 		req = req.WithContext(ctx)
 	}
 
+	// if enabled, remember bearer token before authentication
+	bearerToken := rememberBearerToken(h, req)
 	// Authenticate
 	u, ok, err := h.AuthenticateRequest(req)
 	if err != nil {
@@ -111,9 +114,24 @@ func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
 		headerCfg := h.Config.Authentication.Header
 		req.Header.Set(headerCfg.UserFieldName, u.User.GetName())
 		req.Header.Set(headerCfg.GroupsFieldName, strings.Join(u.User.GetGroups(), headerCfg.GroupSeparator))
+
+		if h.Config.Authentication.Header.PassBearerToken && len(bearerToken) > 0 {
+			req.Header.Set("Authorization", bearerToken)
+		}
 	}
 
 	return true
+}
+
+func rememberBearerToken(h *kubeRBACProxy, req *http.Request) string {
+	if h.Config.Authentication.Header.Enabled && h.Config.Authentication.Header.PassBearerToken {
+		for _, authzHdr := range req.Header.Values("Authorization") {
+			if strings.HasPrefix(authzHdr, "Bearer ") {
+				return authzHdr
+			}
+		}
+	}
+	return ""
 }
 
 func newKubeRBACProxyAuthorizerAttributesGetter(authzConfig *authz.Config) *krpAuthorizerAttributesGetter {
