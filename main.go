@@ -355,7 +355,7 @@ func main() {
 			}
 
 			gr.Add(func() error {
-				klog.Infof("Listening insecurely on %v. Wohou!", cfg.insecureListenAddress)
+				klog.Infof("Listening insecurely on %v.", cfg.insecureListenAddress)
 				return srv.Serve(l)
 			}, func(err error) {
 				if err := srv.Shutdown(context.Background()); err != nil {
