@@ -37,7 +37,7 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
-	"k8s.io/apiserver/pkg/authentication/union"
+	"k8s.io/apiserver/pkg/authorization/union"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -185,12 +185,16 @@ func main() {
 	}
 
 	sarClient := kubeClient.AuthorizationV1().SubjectAccessReviews()
-	sarAuthorizer, err := authz.NewAuthorizer(sarClient)
+	sarAuthorizer, err := authz.NewSarAuthorizer(sarClient)
 
 	if err != nil {
 		klog.Fatalf("Failed to create sar authorizer: %v", err)
 	}
-	authorizer = union.New(
+
+	staticAuthorizer := authz.NewStaticAuthorizer(cfg.auth.Authorization.Static)
+
+	authorizer := union.New(
+		staticAuthorizer,
 		sarAuthorizer,
 	)
 
