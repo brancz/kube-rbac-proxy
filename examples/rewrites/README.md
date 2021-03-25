@@ -4,7 +4,7 @@
 
 RBAC differentiates in two types, that need to be authorized, resources and non-resources. A resource request authorization, could for example be, that a requesting entity needs to be authorized to perform the `get` action on a particular Kubernetes Deployment.
 
-Take the following example. We want to deploy a [prometheus-example-app](https://github.com/brancz/prometheus-example-app), and protect it with the kube-rbac-proxy. In this example we require a requesting entity to be allowed to call the `proxy` subresource on a Kubernetes Service called `kube-rbac-proxy`. This is configured in the file passed to the kube-rbac-proxy with the `--config-file` flag. Additionally the `--upstream` flag has to be set to configure the application that should be proxied to on successful authentication as well as authorization.
+Take the following example. We want to deploy a [prometheus-example-app](https://github.com/brancz/prometheus-example-app), and protect it with the kube-rbac-proxy. In this example we require a requesting entity to be allowed to call the `metrics` subresource on a Kubernetes Namespace, the name of which is passed by the HTTP URL query parameter `namespace`. This is configured in the file passed to the kube-rbac-proxy with the `--config-file` flag.  Additionally the `--upstream` flag has to be set to configure the application that should be proxied to on successful authentication as well as authorization.
 
 The kube-rbac-proxy itself also requires RBAC access, in order to perform TokenReviews as well as SubjectAccessReviews. These are the APIs available from the Kubernetes API to authenticate and then validate the authorization of an entity.
 
@@ -121,7 +121,7 @@ spec:
 
 Once the prometheus-example-app is up and running, we can test it. In order to test it, we deploy a Job, that performs a `curl` against the above deployment. Because it has the correct RBAC roles, the request will succeed.
 
-The Dockerfile of this container can be found [here](../example-client/Dockerfile).
+The Dockerfile of this container can be found [here](../example-client-urlquery/Dockerfile).
 
 ```bash
 $ kubectl create -f client-rbac.yaml
