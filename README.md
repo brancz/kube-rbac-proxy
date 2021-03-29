@@ -34,6 +34,7 @@ Usage of _output/kube-rbac-proxy:
       --auth-header-fields-enabled                  When set to true, kube-rbac-proxy adds auth-related fields to the headers of http requests sent to the upstream
       --auth-header-groups-field-name string        The name of the field inside a http(2) request header to tell the upstream server about the user's groups (default "x-remote-groups")
       --auth-header-groups-field-separator string   The separator string used for concatenating multiple group names in a groups header field's value (default "|")
+      --auth-header-pass-bearer                     When set to true, kube-rbac-proxy will pass Authorization header with Bearer token to the upstream
       --auth-header-user-field-name string          The name of the field inside a http(2) request header to tell the upstream server about the user's name (default "x-remote-user")
       --auth-token-audiences strings                Comma-separated list of token audiences to accept. By default a token does not have to have any specific audience. It is recommended to set a specific audience.
       --client-ca-file string                       If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.
