@@ -84,6 +84,63 @@ func TestProxyWithOIDCSupport(t *testing.T) {
 	}
 }
 
+func TestPassBearerTokenToUpstream(t *testing.T) {
+	cfg := Config{
+		Authentication: &authn.AuthnConfig{
+			OIDC: &authn.OIDCConfig{},
+			Header: &authn.AuthnHeaderConfig{
+				Enabled:         true,
+				PassBearerToken: true,
+			},
+			Token: &authn.TokenConfig{},
+		},
+		Authorization: &authz.Config{},
+	}
+	req := makeAuthorizedRequest(t, cfg)
+	if req.Header.Get("Authorization") != "Bearer VALID" {
+		t.Error("Bearer token should be passed to upstream application")
+	}
+}
+
+func TestBearerTokenNotPassedToUpstream(t *testing.T) {
+	cfg := Config{
+		Authentication: &authn.AuthnConfig{
+			OIDC: &authn.OIDCConfig{},
+			Header: &authn.AuthnHeaderConfig{
+				Enabled:         true,
+			},
+			Token: &authn.TokenConfig{},
+		},
+		Authorization: &authz.Config{},
+	}
+	req := makeAuthorizedRequest(t, cfg)
+	if req.Header.Get("Authorization") != "" {
+		t.Error("Bearer token should NOT be passed to upstream application")
+	}
+}
+
+func makeAuthorizedRequest(t *testing.T, cfg Config) *http.Request {
+	kc := testclient.NewSimpleClientset()
+
+	fakeUser := user.DefaultInfo{Name: "Foo Bar", Groups: []string{"foo-bars"}}
+	authenticator := fakeOIDCAuthenticator(t, &fakeUser)
+
+	w := httptest.NewRecorder()
+	proxy, err := New(kc, cfg, approver{}, authenticator)
+	if err != nil {
+		t.Fatalf("Failed to instantiate test proxy. Details : %s", err.Error())
+	}
+	req := fakeJWTRequest("GET", "/accounts", "Bearer VALID")
+	proxy.Handle(w, req)
+	resp := w.Result()
+
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected response: %d received : %d", 200, resp.StatusCode)
+	}
+
+	return req
+}
+
 func TestGeneratingAuthorizerAttributes(t *testing.T) {
 	cases := []struct {
 		desc     string
@@ -277,7 +334,7 @@ func setupTestScenario() []testCase {
 			},
 		},
 		{
-			description: "Request with valid token, should return 200 due to lack of permissions",
+			description: "Request with valid token, should return 200",
 			given: given{
 				req:        fakeJWTRequest("GET", "/accounts", "Bearer VALID"),
 				authorizer: approver{},
