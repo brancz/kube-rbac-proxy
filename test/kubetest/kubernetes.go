@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -137,10 +138,46 @@ func createDeployment(client kubernetes.Interface, ctx *ScenarioContext, content
 	_, err := client.AppsV1().Deployments(d.Namespace).Create(context.TODO(), &d, metav1.CreateOptions{})
 
 	ctx.AddFinalizer(func() error {
-		return client.AppsV1().Deployments(d.Namespace).Delete(context.TODO(), d.Name, metav1.DeleteOptions{})
+		dep, err := client.AppsV1().Deployments(d.Namespace).Get(context.TODO(), d.Name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+
+		sel, err := metav1.LabelSelectorAsSelector(dep.Spec.Selector)
+		if err != nil {
+			return err
+		}
+
+		dumpLogs(client, ctx, metav1.ListOptions{LabelSelector: sel.String()})
+		return client.AppsV1().Deployments(dep.Namespace).Delete(context.TODO(), dep.Name, metav1.DeleteOptions{})
 	})
 
 	return err
+}
+
+func dumpLogs(client kubernetes.Interface, ctx *ScenarioContext, opts metav1.ListOptions) {
+	pods, err := client.CoreV1().Pods(ctx.Namespace).List(context.TODO(), opts)
+	if err != nil {
+		return
+	}
+
+	for _, p := range pods.Items {
+		for _, c := range p.Spec.Containers {
+			fmt.Println("=== LOGS", ctx.Namespace, p.Name, c.Name)
+
+			rest := client.CoreV1().Pods(ctx.Namespace).GetLogs(p.GetName(), &corev1.PodLogOptions{
+				Container: c.Name,
+				Follow:    false,
+			})
+
+			stream, err := rest.Stream(context.TODO())
+			if err != nil {
+				return
+			}
+
+			io.Copy(os.Stdout, stream)
+		}
+	}
 }
 
 func createService(client kubernetes.Interface, ctx *ScenarioContext, content []byte) error {
@@ -293,20 +330,14 @@ type RunOptions struct {
 
 func RunSucceeds(client kubernetes.Interface, image string, name string, command []string, opts *RunOptions) Check {
 	return func(ctx *ScenarioContext) error {
-		logs, err := run(client, ctx, image, name, command, opts)
-		if err != nil {
-			_, _ = fmt.Fprint(os.Stderr, string(logs))
-			return err
-		}
-		return nil
+		return run(client, ctx, image, name, command, opts)
 	}
 }
 
 func RunFails(client kubernetes.Interface, image string, name string, command []string, opts *RunOptions) Check {
 	return func(ctx *ScenarioContext) error {
-		logs, err := run(client, ctx, image, name, command, opts)
+		err := run(client, ctx, image, name, command, opts)
 		if err == nil {
-			_, _ = fmt.Fprint(os.Stderr, string(logs))
 			return fmt.Errorf("expected run to fail")
 		}
 		if err != errRun {
@@ -319,7 +350,7 @@ func RunFails(client kubernetes.Interface, image string, name string, command []
 var errRun = fmt.Errorf("failed to run")
 
 // run the command and return the Check with the container's logs
-func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name string, command []string, opts *RunOptions) ([]byte, error) {
+func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name string, command []string, opts *RunOptions) error {
 	labels := map[string]string{
 		"app": name,
 	}
@@ -387,8 +418,8 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 	backoffLimit := int32(3)
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "kube-rbac-proxy-client",
-			Namespace: ctx.Namespace,
+			GenerateName: "kube-rbac-proxy-client-",
+			Namespace:    ctx.Namespace,
 		},
 		Spec: batchv1.JobSpec{
 			Parallelism:           &parallelism,
@@ -399,13 +430,13 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 		},
 	}
 
-	_, err := client.BatchV1().Jobs(ctx.Namespace).Create(context.TODO(), job, metav1.CreateOptions{})
+	batch, err := client.BatchV1().Jobs(ctx.Namespace).Create(context.TODO(), job, metav1.CreateOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create job: %v", err)
+		return fmt.Errorf("failed to create job: %v", err)
 	}
 
 	ctx.AddFinalizer(func() error {
-		err := client.BatchV1().Jobs(ctx.Namespace).Delete(context.TODO(), job.ObjectMeta.Name, metav1.DeleteOptions{})
+		err := client.BatchV1().Jobs(ctx.Namespace).Delete(context.TODO(), batch.Name, metav1.DeleteOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to delete job: %v", err)
 		}
@@ -413,9 +444,9 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 		return nil
 	})
 
-	watch, err := client.BatchV1().Jobs(ctx.Namespace).Watch(context.TODO(), metav1.SingleObject(job.ObjectMeta))
+	watch, err := client.BatchV1().Jobs(ctx.Namespace).Watch(context.TODO(), metav1.SingleObject(batch.ObjectMeta))
 	if err != nil {
-		return nil, fmt.Errorf("failed to watch job: %v", err)
+		return fmt.Errorf("failed to watch job: %v", err)
 	}
 
 	for event := range watch.ResultChan() {
@@ -430,7 +461,8 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 		}
 
 		if failed {
-			return nil, errRun
+			dumpLogs(client, ctx, metav1.ListOptions{LabelSelector: "job-name=" + batch.Name})
+			return errRun
 		}
 
 		complete := false
@@ -440,24 +472,12 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 			}
 		}
 		if complete && !failed {
-			return nil, nil
+			dumpLogs(client, ctx, metav1.ListOptions{LabelSelector: "job-name=" + batch.Name})
+			return nil
 		}
 	}
 
-	return nil, nil
-}
-
-func podLogs(client kubernetes.Interface, namespace, pod, container string) ([]byte, error) {
-	rest := client.CoreV1().Pods(namespace).GetLogs(pod, &corev1.PodLogOptions{
-		Container: container,
-		Follow:    false,
-	})
-
-	stream, err := rest.Stream(context.TODO())
-	if err != nil {
-		return nil, err
-	}
-	return ioutil.ReadAll(stream)
+	return nil
 }
 
 func CreateNamespace(client kubernetes.Interface, name string) error {
