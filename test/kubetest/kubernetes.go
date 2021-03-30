@@ -149,7 +149,13 @@ func createDeployment(client kubernetes.Interface, ctx *ScenarioContext, content
 		}
 
 		dumpLogs(client, ctx, metav1.ListOptions{LabelSelector: sel.String()})
-		return client.AppsV1().Deployments(dep.Namespace).Delete(context.TODO(), dep.Name, metav1.DeleteOptions{})
+
+		err = client.AppsV1().Deployments(dep.Namespace).Delete(context.TODO(), dep.Name, metav1.DeleteOptions{})
+		if err != nil {
+			return err
+		}
+
+		return PodsAreGone(client, sel.String())(ctx)
 	})
 
 	return err
@@ -265,6 +271,24 @@ func PodsAreReady(client kubernetes.Interface, replicas int, labels string) func
 				return true, nil
 			}
 			return false, nil
+		})
+	}
+}
+
+// PodsAreGone waits for pods being gone for the given labels.
+// Returns a func directly (not Setup or Conditions) as it can be used in Given and When steps
+func PodsAreGone(client kubernetes.Interface, labels string) func(*ScenarioContext) error {
+	return func(ctx *ScenarioContext) error {
+		return wait.Poll(time.Second, time.Minute, func() (bool, error) {
+			list, err := client.CoreV1().Pods(ctx.Namespace).List(context.TODO(), metav1.ListOptions{
+				LabelSelector: labels,
+			})
+
+			if err != nil {
+				return false, fmt.Errorf("failed to list pods: %v", err)
+			}
+
+			return len(list.Items) == 0, nil
 		})
 	}
 }
