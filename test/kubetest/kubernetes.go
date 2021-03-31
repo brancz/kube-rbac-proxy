@@ -439,7 +439,7 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 	parallelism := int32(1)
 	completions := int32(1)
 	activeDeadlineSeconds := int64(60)
-	backoffLimit := int32(3)
+	backoffLimit := int32(10)
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "kube-rbac-proxy-client-",
