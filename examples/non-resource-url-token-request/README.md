@@ -144,7 +144,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: krp-curl
-        image: quay.io/brancz/krp-curl:v0.0.1
+        image: quay.io/brancz/krp-curl:v0.0.2
         command:
         - /bin/sh
         - -c
@@ -237,7 +237,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: krp-curl
-        image: quay.io/brancz/krp-curl:v0.0.1
+        image: quay.io/brancz/krp-curl:v0.0.2
 ```
 
 Then the log output should look something along the lines of:
