@@ -142,7 +142,7 @@ spec:
     spec:
       containers:
       - name: krp-curl
-        image: quay.io/brancz/krp-curl:v0.0.1
+        image: quay.io/brancz/krp-curl:v0.0.2
       restartPolicy: Never
   backoffLimit: 4
 ```

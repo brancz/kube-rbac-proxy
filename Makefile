@@ -68,11 +68,11 @@ manifest-push: manifest-tool
 push: crossbuild manifest-tool $(addprefix push-,$(ALL_ARCH)) manifest-push
 
 curl-container:
-	docker build -f ./examples/example-client/Dockerfile -t quay.io/brancz/krp-curl:v0.0.1 .
+	docker build -f ./examples/example-client/Dockerfile -t quay.io/brancz/krp-curl:v0.0.2 .
 
 run-curl-container:
 	@echo 'Example: curl -v -s -k -H "Authorization: Bearer `cat /var/run/secrets/kubernetes.io/serviceaccount/token`" https://kube-rbac-proxy.default.svc:8443/metrics'
-	kubectl run -i -t krp-curl --image=quay.io/brancz/krp-curl:v0.0.1 --restart=Never --command -- /bin/sh
+	kubectl run -i -t krp-curl --image=quay.io/brancz/krp-curl:v0.0.2 --restart=Never --command -- /bin/sh
 
 grpcc-container:
 	docker build -f ./examples/grpcc/Dockerfile -t mumoshu/grpcc:v0.0.1 .

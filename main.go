@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -74,19 +73,6 @@ type tlsConfig struct {
 
 type configfile struct {
 	AuthorizationConfig *authz.Config `json:"authorization,omitempty"`
-}
-
-var versions = map[string]uint16{
-	"VersionTLS10": tls.VersionTLS10,
-	"VersionTLS11": tls.VersionTLS11,
-	"VersionTLS12": tls.VersionTLS12,
-}
-
-func tlsVersion(versionName string) (uint16, error) {
-	if version, ok := versions[versionName]; ok {
-		return version, nil
-	}
-	return 0, fmt.Errorf("unknown tls version %q", versionName)
 }
 
 func main() {
@@ -291,7 +277,7 @@ func main() {
 				})
 			}
 
-			version, err := tlsVersion(cfg.tls.minVersion)
+			version, err := k8sapiflag.TLSVersion(cfg.tls.minVersion)
 			if err != nil {
 				klog.Fatalf("TLS version invalid: %v", err)
 			}

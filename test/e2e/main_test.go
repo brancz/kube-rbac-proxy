@@ -54,6 +54,7 @@ func Test(t *testing.T) {
 		"TokenAudience":      testTokenAudience(suite),
 		"AllowPath":          testAllowPathsRegexp(suite),
 		"IgnorePath":         testIgnorePaths(suite),
+		"TLS":                testTLS(suite),
 	}
 
 	for name, tc := range tests {
