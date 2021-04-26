@@ -487,7 +487,7 @@ func ClientSucceeds(client kubernetes.Interface, command string, opts *kubetest.
 	return func(ctx *kubetest.ScenarioContext) error {
 		return kubetest.RunSucceeds(
 			client,
-			"quay.io/brancz/krp-curl:v0.0.1",
+			"quay.io/brancz/krp-curl:v0.0.2",
 			"kube-rbac-proxy-client",
 			[]string{"/bin/sh", "-c", command},
 			opts,
@@ -499,7 +499,7 @@ func ClientFails(client kubernetes.Interface, command string, opts *kubetest.Run
 	return func(ctx *kubetest.ScenarioContext) error {
 		return kubetest.RunFails(
 			client,
-			"quay.io/brancz/krp-curl:v0.0.1",
+			"quay.io/brancz/krp-curl:v0.0.2",
 			"kube-rbac-proxy-client",
 			[]string{"/bin/sh", "-c", command},
 			opts,
