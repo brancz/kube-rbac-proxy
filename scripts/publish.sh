@@ -5,6 +5,12 @@ set -e
 set -o pipefail
 # error on unset variables
 set -u
+# for debugging
+set -x
+
+# github actions, by default, fetches using `--no-tags`.
+# we need tags though to create a release version string.
+git fetch --tags
 
 QUAY_PATH="${QUAY_PATH:-quay.io/brancz/kube-rbac-proxy}"
 CPU_ARCHS="amd64 arm64 arm ppc64le s390x"
