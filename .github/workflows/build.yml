@@ -78,10 +78,7 @@ jobs:
       - generate
       - build
       - unit-tests
-      # Disable e2e-tests job requirement to avoid having flakes impacting
-      # image publication.
-      # This requirement should be uncommented once the flaky tests are fixed.
-      # - e2e-tests
+      - e2e-tests
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -92,9 +89,4 @@ jobs:
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
       - name: Build images and push
-        run: |
-          VERSION=local make container
-          TAG="$(git rev-parse --abbrev-ref HEAD | tr / -)-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD)"
-          ID="$(docker images ${QUAY_PATH}:local --format "{{.ID}}")"
-          docker tag $ID ${QUAY_PATH}:$TAG
-          docker push ${QUAY_PATH}:$TAG
+        run: ./scripts/publish.sh
