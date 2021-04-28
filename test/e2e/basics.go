@@ -191,6 +191,130 @@ func testTokenAudience(s *kubetest.Suite) kubetest.TestSuite {
 	}
 }
 
+func testClientCertificates(s *kubetest.Suite) kubetest.TestSuite {
+	return func(t *testing.T) {
+		command := `curl --connect-timeout 5 -v -s -k --fail --cert /certs/tls.crt --key /certs/tls.key https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
+
+		kubetest.Scenario{
+			Name: "NoRBAC",
+			Description: `
+				As a client with client certificates authorization without RBAC,
+				I fail with my request
+			`,
+
+			Given: kubetest.Setups(
+				kubetest.CreatedManifests(
+					s.KubeClient,
+					"clientcertificates/certificate.yaml",
+					"clientcertificates/clusterRole.yaml",
+					"clientcertificates/clusterRoleBinding.yaml",
+					"clientcertificates/deployment.yaml",
+					"clientcertificates/service.yaml",
+					"clientcertificates/serviceAccount.yaml",
+				),
+			),
+			When: kubetest.Conditions(
+				kubetest.PodsAreReady(
+					s.KubeClient,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					s.KubeClient,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Checks(
+				ClientFails(
+					s.KubeClient,
+					command,
+					&kubetest.RunOptions{ClientCertificates: true},
+				),
+			),
+		}.Run(t)
+
+		kubetest.Scenario{
+			Name: "WithRBAC",
+			Description: `
+				As a client with client certificates authorization with RBAC,
+				I succeed with my request
+			`,
+
+			Given: kubetest.Setups(
+				kubetest.CreatedManifests(
+					s.KubeClient,
+					"clientcertificates/certificate.yaml",
+					"clientcertificates/clusterRole.yaml",
+					"clientcertificates/clusterRoleBinding.yaml",
+					"clientcertificates/deployment.yaml",
+					"clientcertificates/service.yaml",
+					"clientcertificates/serviceAccount.yaml",
+					"clientcertificates/clusterRole-client.yaml",
+					"clientcertificates/clusterRoleBinding-client.yaml",
+				),
+			),
+			When: kubetest.Conditions(
+				kubetest.PodsAreReady(
+					s.KubeClient,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					s.KubeClient,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Checks(
+				ClientSucceeds(
+					s.KubeClient,
+					command,
+					&kubetest.RunOptions{ClientCertificates: true},
+				),
+			),
+		}.Run(t)
+
+		kubetest.Scenario{
+			Name: "WrongCA",
+			Description: `
+				As a client with client certificates authorization with RBAC and with unmatched CA,
+				I fail with my request
+			`,
+
+			Given: kubetest.Setups(
+				kubetest.CreatedManifests(
+					s.KubeClient,
+					"clientcertificates/certificate.yaml",
+					"clientcertificates/clusterRole.yaml",
+					"clientcertificates/clusterRoleBinding.yaml",
+					"clientcertificates/deployment-wrongca.yaml",
+					"clientcertificates/service.yaml",
+					"clientcertificates/serviceAccount.yaml",
+					"clientcertificates/clusterRole-client.yaml",
+					"clientcertificates/clusterRoleBinding-client.yaml",
+				),
+			),
+			When: kubetest.Conditions(
+				kubetest.PodsAreReady(
+					s.KubeClient,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					s.KubeClient,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Checks(
+				ClientFails(
+					s.KubeClient,
+					command,
+					&kubetest.RunOptions{ClientCertificates: true},
+				),
+			),
+		}.Run(t)
+	}
+}
+
 func testAllowPathsRegexp(s *kubetest.Suite) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `STATUS_CODE=$(curl --connect-timeout 5 -o /dev/null -v -s -k --write-out "%%{http_code}" -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443%s); if [[ "$STATUS_CODE" != %d ]]; then echo "expecting %d status code, got $STATUS_CODE instead" > /proc/self/fd/2; exit 1; fi`
@@ -363,7 +487,7 @@ func ClientSucceeds(client kubernetes.Interface, command string, opts *kubetest.
 	return func(ctx *kubetest.ScenarioContext) error {
 		return kubetest.RunSucceeds(
 			client,
-			"quay.io/brancz/krp-curl:v0.0.1",
+			"quay.io/brancz/krp-curl:v0.0.2",
 			"kube-rbac-proxy-client",
 			[]string{"/bin/sh", "-c", command},
 			opts,
@@ -375,7 +499,7 @@ func ClientFails(client kubernetes.Interface, command string, opts *kubetest.Run
 	return func(ctx *kubetest.ScenarioContext) error {
 		return kubetest.RunFails(
 			client,
-			"quay.io/brancz/krp-curl:v0.0.1",
+			"quay.io/brancz/krp-curl:v0.0.2",
 			"kube-rbac-proxy-client",
 			[]string{"/bin/sh", "-c", command},
 			opts,

@@ -36,11 +36,18 @@ type Config struct {
 // rewritten on a given request.
 type SubjectAccessReviewRewrites struct {
 	ByQueryParameter *QueryParameterRewriteConfig `json:"byQueryParameter,omitempty"`
+	ByHTTPHeader     *HTTPHeaderRewriteConfig     `json:"byHttpHeader,omitempty"`
 }
 
 // QueryParameterRewriteConfig describes which HTTP URL query parameter is to
 // be used to rewrite a SubjectAccessReview on a given request.
 type QueryParameterRewriteConfig struct {
+	Name string `json:"name,omitempty"`
+}
+
+// HTTPHeaderRewriteConfig describes which HTTP header is to
+// be used to rewrite a SubjectAccessReview on a given request.
+type HTTPHeaderRewriteConfig struct {
 	Name string `json:"name,omitempty"`
 }
 
