@@ -55,6 +55,7 @@ func Test(t *testing.T) {
 		"AllowPath":          testAllowPathsRegexp(suite),
 		"IgnorePath":         testIgnorePaths(suite),
 		"TLS":                testTLS(suite),
+		"StaticAuthorizer":   testStaticAuthorizer(suite),
 	}
 
 	for name, tc := range tests {

@@ -26,17 +26,18 @@ import (
 
 func TestStaticAuthorizer(t *testing.T) {
 	tests := []struct {
-		name       string
-		authorizer authorizer.Authorizer
+		name   string
+		config []StaticAuthorizationConfig
 
+		shouldFail      bool
 		shouldPass      []authorizer.Attributes
 		shouldNoOpinion []authorizer.Attributes
 	}{
 		{
 			name: "pathOnly",
-			authorizer: NewStaticAuthorizer([]StaticAuthorizationConfig{
-				StaticAuthorizationConfig{Path: "/metrics"},
-			}),
+			config: []StaticAuthorizationConfig{
+				{Path: "/metrics", ResourceRequest: false},
+			},
 			shouldPass: []authorizer.Attributes{
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "get", Path: "/metrics"},
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "update", Path: "/metrics"},
@@ -48,9 +49,9 @@ func TestStaticAuthorizer(t *testing.T) {
 		},
 		{
 			name: "pathAndVerb",
-			authorizer: NewStaticAuthorizer([]StaticAuthorizationConfig{
-				StaticAuthorizationConfig{Path: "/metrics", Verb: "get"},
-			}),
+			config: []StaticAuthorizationConfig{
+				{Path: "/metrics", Verb: "get"},
+			},
 			shouldPass: []authorizer.Attributes{
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "get", Path: "/metrics"},
 			},
@@ -62,23 +63,24 @@ func TestStaticAuthorizer(t *testing.T) {
 			},
 		},
 		{
-			name: "resourceRequestSpecifiedTrue",
-			authorizer: NewStaticAuthorizer([]StaticAuthorizationConfig{
-				StaticAuthorizationConfig{Path: "/metrics", Verb: "get", ResourceRequest: true},
-			}),
-			shouldPass: []authorizer.Attributes{
-				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "get", Path: "/metrics", ResourceRequest: true},
+			name: "nonResourceRequestSpecifiedTrue",
+			config: []StaticAuthorizationConfig{
+				{Path: "/metrics", Verb: "get", ResourceRequest: true},
 			},
-			shouldNoOpinion: []authorizer.Attributes{
-				// wrong resourceRequest
-				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "get", Path: "/metrics", ResourceRequest: false},
-			},
+			shouldFail: true,
 		},
 		{
 			name: "resourceRequestSpecifiedFalse",
-			authorizer: NewStaticAuthorizer([]StaticAuthorizationConfig{
-				StaticAuthorizationConfig{Path: "/metrics", Verb: "get", ResourceRequest: false},
-			}),
+			config: []StaticAuthorizationConfig{
+				{Resource: "namespaces", Verb: "get", ResourceRequest: false},
+			},
+			shouldFail: true,
+		},
+		{
+			name: "resourceRequestSpecifiedFalse",
+			config: []StaticAuthorizationConfig{
+				{Path: "/metrics", Verb: "get", ResourceRequest: false},
+			},
 			shouldPass: []authorizer.Attributes{
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "get", Path: "/metrics", ResourceRequest: false},
 			},
@@ -89,9 +91,9 @@ func TestStaticAuthorizer(t *testing.T) {
 		},
 		{
 			name: "resourceRequestUnspecified",
-			authorizer: NewStaticAuthorizer([]StaticAuthorizationConfig{
-				StaticAuthorizationConfig{Path: "/metrics", Verb: "get"},
-			}),
+			config: []StaticAuthorizationConfig{
+				{Path: "/metrics", Verb: "get"},
+			},
 			shouldPass: []authorizer.Attributes{
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "get", Path: "/metrics", ResourceRequest: false},
 			},
@@ -105,17 +107,50 @@ func TestStaticAuthorizer(t *testing.T) {
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "update", Path: "/metrics", ResourceRequest: false},
 			},
 		},
+		{
+			name: "resourceRequest",
+			config: []StaticAuthorizationConfig{
+				{Resource: "namespaces", Verb: "get", ResourceRequest: true},
+			},
+			shouldPass: []authorizer.Attributes{
+				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "get", Resource: "namespaces", ResourceRequest: true},
+				authorizer.AttributesRecord{Verb: "get", Resource: "namespaces", ResourceRequest: true},
+			},
+			shouldNoOpinion: []authorizer.Attributes{
+				authorizer.AttributesRecord{Verb: "get", Resource: "services", ResourceRequest: true},
+			},
+		},
+		{
+			name: "resourceRequestSpecificUser",
+			config: []StaticAuthorizationConfig{
+				{User: UserConfig{Name: "system:foo"}, Resource: "namespaces", Verb: "get", ResourceRequest: true},
+			},
+			shouldPass: []authorizer.Attributes{
+				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "get", Resource: "namespaces", ResourceRequest: true},
+			},
+			shouldNoOpinion: []authorizer.Attributes{
+				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:bar"}, Verb: "get", Resource: "namespaces", ResourceRequest: true},
+				authorizer.AttributesRecord{Verb: "get", Resource: "namespaces", ResourceRequest: true},
+				authorizer.AttributesRecord{Verb: "get", Resource: "services", ResourceRequest: true},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			auth, err := NewStaticAuthorizer(tt.config)
+			if failed := err != nil; tt.shouldFail != failed {
+				t.Errorf("static authorizer creation expected to fail: %v, got %v, err: %v", tt.shouldFail, failed, err)
+				return
+			}
+
 			for _, attr := range tt.shouldPass {
-				if decision, _, _ := tt.authorizer.Authorize(context.Background(), attr); decision != authorizer.DecisionAllow {
+				if decision, _, _ := auth.Authorize(context.Background(), attr); decision != authorizer.DecisionAllow {
 					t.Errorf("incorrectly restricted %v", attr)
 				}
 			}
 
 			for _, attr := range tt.shouldNoOpinion {
-				if decision, _, _ := tt.authorizer.Authorize(context.Background(), attr); decision != authorizer.DecisionNoOpinion {
+				if decision, _, _ := auth.Authorize(context.Background(), attr); decision != authorizer.DecisionNoOpinion {
 					t.Errorf("incorrectly opinionated %v", attr)
 				}
 			}

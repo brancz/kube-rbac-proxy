@@ -165,7 +165,7 @@ Now simply run
 kubectl run -i -t alpine --image=alpine --restart=Never -- sh -c 'apk add curl; curl -v -s -k -H "Authorization: Bearer `cat /var/run/secrets/kubernetes.io/serviceaccount/token`" https://kube-rbac-proxy.default.svc:8443/metrics?namespace=default'
 ```
 
-The full configuration setting for the static authorization feature looks like this:
+A configuration setting for the static authorization feature for resource requests looks like this:
 ```
   config-file.yaml: |+
     authorization:
@@ -181,6 +181,21 @@ The full configuration setting for the static authorization feature looks like t
           resourceRequest: true
           resource: namespace
           subresource: metrics
+```
+
+A configuration setting for the static authorization feature for non-resource requests looks like this:
+```
+  config-file.yaml: |+
+    authorization:
+      static:
+        - user:
+            name: UserName
+            groups:
+              - group1
+              - group2
+          verb: get
+          resourceRequest: false
           path: /metrics
 ```
+
 The values in the above example are just aimed at illustrating what is possible. An omitted configuration setting is interpreted as a wildcard. E.g. if a static-auth configuration omits the `user` setting, any user can be statically authorized if a request fits the remaining configuration.

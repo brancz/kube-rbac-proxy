@@ -191,7 +191,10 @@ func main() {
 		klog.Fatalf("Failed to create sar authorizer: %v", err)
 	}
 
-	staticAuthorizer := authz.NewStaticAuthorizer(cfg.auth.Authorization.Static)
+	staticAuthorizer, err := authz.NewStaticAuthorizer(cfg.auth.Authorization.Static)
+	if err != nil {
+		klog.Fatalf("Failed to create static authorizer: %v", err)
+	}
 
 	authorizer := union.New(
 		staticAuthorizer,

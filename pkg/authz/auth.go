@@ -19,6 +19,7 @@ package authz
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"k8s.io/apiserver/pkg/authorization/authorizer"
@@ -108,7 +109,12 @@ func (saConfig StaticAuthorizationConfig) Equal(a authorizer.Attributes) bool {
 		}
 	}
 
-	if isAllowed(saConfig.User.Name, a.GetUser().GetName()) &&
+	userName := ""
+	if a.GetUser() != nil {
+		userName = a.GetUser().GetName()
+	}
+
+	if isAllowed(saConfig.User.Name, userName) &&
 		isAllowed(saConfig.Verb, a.GetVerb()) &&
 		isAllowed(saConfig.Namespace, a.GetNamespace()) &&
 		isAllowed(saConfig.APIGroup, a.GetAPIGroup()) &&
@@ -133,6 +139,11 @@ func (sa staticAuthorizer) Authorize(ctx context.Context, a authorizer.Attribute
 	return authorizer.DecisionNoOpinion, "", nil
 }
 
-func NewStaticAuthorizer(config []StaticAuthorizationConfig) staticAuthorizer {
-	return staticAuthorizer{config}
+func NewStaticAuthorizer(config []StaticAuthorizationConfig) (*staticAuthorizer, error) {
+	for _, c := range config {
+		if c.ResourceRequest != (c.Path == "") {
+			return nil, fmt.Errorf("invalid configuration: resource requests must not include a path: %v", config)
+		}
+	}
+	return &staticAuthorizer{config}, nil
 }
