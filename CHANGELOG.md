@@ -1,3 +1,9 @@
+## 0.9.0 / 2021-04-27
+
+* [FEATURE] Support rewrites using HTTP headers in addition to query parameters. #104
+* [FEATURE] Support pass-through of client certificates. #113
+* [FEATURE] Support TLS 1.3. #120
+
 ## 0.8.0 / 2020-11-03
 
 * [FEATURE] Add ability with the new `--ignore-paths` flag to define paths for which kube-rbac-proxy will proxy without performing authn/authz. This cannot be used with `--allow-paths`. #91

@@ -78,7 +78,7 @@ spec:
       serviceAccountName: kube-rbac-proxy
       containers:
       - name: kube-rbac-proxy
-        image: quay.io/brancz/kube-rbac-proxy:v0.8.0
+        image: quay.io/brancz/kube-rbac-proxy:v0.9.0
         args:
         - "--secure-listen-address=0.0.0.0:8443"
         - "--upstream=http://127.0.0.1:8081/"
@@ -144,7 +144,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: krp-curl
-        image: quay.io/brancz/krp-curl:v0.0.1
+        image: quay.io/brancz/krp-curl:v0.0.2
         command:
         - /bin/sh
         - -c
@@ -237,7 +237,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: krp-curl
-        image: quay.io/brancz/krp-curl:v0.0.1
+        image: quay.io/brancz/krp-curl:v0.0.2
 ```
 
 Then the log output should look something along the lines of:
