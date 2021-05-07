@@ -83,6 +83,10 @@ func CreatedManifests(client kubernetes.Interface, paths ...string) Setup {
 				if err := createSecret(client, ctx, content); err != nil {
 					return err
 				}
+			case "configmap":
+				if err := createConfigmap(client, ctx, content); err != nil {
+					return err
+				}
 			default:
 				return fmt.Errorf("unable to unmarshal manifest with unknown kind: %s", kind)
 			}
@@ -238,6 +242,25 @@ func createSecret(client kubernetes.Interface, ctx *ScenarioContext, content []b
 
 	ctx.AddFinalizer(func() error {
 		return client.CoreV1().Secrets(secret.Namespace).Delete(context.TODO(), secret.Name, metav1.DeleteOptions{})
+	})
+
+	return err
+}
+
+func createConfigmap(client kubernetes.Interface, ctx *ScenarioContext, content []byte) error {
+	r := bytes.NewReader(content)
+
+	var configmap *corev1.ConfigMap
+	if err := kubeyaml.NewYAMLOrJSONDecoder(r, r.Len()).Decode(&configmap); err != nil {
+		return err
+	}
+
+	configmap.Namespace = ctx.Namespace
+
+	_, err := client.CoreV1().ConfigMaps(configmap.Namespace).Create(context.TODO(), configmap, metav1.CreateOptions{})
+
+	ctx.AddFinalizer(func() error {
+		return client.CoreV1().ConfigMaps(configmap.Namespace).Delete(context.TODO(), configmap.Name, metav1.DeleteOptions{})
 	})
 
 	return err

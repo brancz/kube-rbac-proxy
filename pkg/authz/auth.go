@@ -17,7 +17,9 @@ limitations under the License.
 package authz
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"k8s.io/apiserver/pkg/authorization/authorizer"
@@ -30,6 +32,7 @@ type Config struct {
 	Rewrites               *SubjectAccessReviewRewrites `json:"rewrites,omitempty"`
 	ResourceAttributes     *ResourceAttributes          `json:"resourceAttributes,omitempty"`
 	ResourceAttributesFile string                       `json:"-"`
+	Static                 []StaticAuthorizationConfig  `json:"static,omitempty"`
 }
 
 // SubjectAccessReviewRewrites describes how SubjectAccessReview may be
@@ -61,8 +64,27 @@ type ResourceAttributes struct {
 	Name        string `json:"name,omitempty"`
 }
 
-// NewAuthorizer creates an authorizer compatible with the kubelet's needs
-func NewAuthorizer(client authorizationclient.SubjectAccessReviewInterface) (authorizer.Authorizer, error) {
+// StaticAuthorizationConfig describes what is needed to specify a static
+// authorization.
+type StaticAuthorizationConfig struct {
+	User            UserConfig
+	Verb            string `json:"verb,omitempty"`
+	Namespace       string `json:"namespace,omitempty"`
+	APIGroup        string `json:"apiGroup,omitempty"`
+	Resource        string `json:"resource,omitempty"`
+	Subresource     string `json:"subresource,omitempty"`
+	Name            string `json:"name,omitempty"`
+	ResourceRequest bool   `json:"resourceRequest,omitempty"`
+	Path            string `json:"path,omitempty"`
+}
+
+type UserConfig struct {
+	Name   string   `json:"name,omitempty"`
+	Groups []string `json:"groups,omitempty"`
+}
+
+// NewSarAuthorizer creates an authorizer compatible with the kubelet's needs
+func NewSarAuthorizer(client authorizationclient.SubjectAccessReviewInterface) (authorizer.Authorizer, error) {
 	if client == nil {
 		return nil, errors.New("no client provided, cannot use webhook authorization")
 	}
@@ -72,4 +94,56 @@ func NewAuthorizer(client authorizationclient.SubjectAccessReviewInterface) (aut
 		DenyCacheTTL:              30 * time.Second,
 	}
 	return authorizerConfig.New()
+}
+
+type staticAuthorizer struct {
+	config []StaticAuthorizationConfig
+}
+
+func (saConfig StaticAuthorizationConfig) Equal(a authorizer.Attributes) bool {
+	isAllowed := func(staticConf string, requestVal string) bool {
+		if staticConf == "" {
+			return true
+		} else {
+			return staticConf == requestVal
+		}
+	}
+
+	userName := ""
+	if a.GetUser() != nil {
+		userName = a.GetUser().GetName()
+	}
+
+	if isAllowed(saConfig.User.Name, userName) &&
+		isAllowed(saConfig.Verb, a.GetVerb()) &&
+		isAllowed(saConfig.Namespace, a.GetNamespace()) &&
+		isAllowed(saConfig.APIGroup, a.GetAPIGroup()) &&
+		isAllowed(saConfig.Resource, a.GetResource()) &&
+		isAllowed(saConfig.Subresource, a.GetSubresource()) &&
+		isAllowed(saConfig.Name, a.GetName()) &&
+		isAllowed(saConfig.Path, a.GetPath()) &&
+		saConfig.ResourceRequest == a.IsResourceRequest() {
+		return true
+	}
+	return false
+}
+
+func (sa staticAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
+	// compare a against the configured static auths
+	for _, saConfig := range sa.config {
+		if saConfig.Equal(a) {
+			return authorizer.DecisionAllow, "found corresponding static auth config", nil
+		}
+	}
+
+	return authorizer.DecisionNoOpinion, "", nil
+}
+
+func NewStaticAuthorizer(config []StaticAuthorizationConfig) (*staticAuthorizer, error) {
+	for _, c := range config {
+		if c.ResourceRequest != (c.Path == "") {
+			return nil, fmt.Errorf("invalid configuration: resource requests must not include a path: %v", config)
+		}
+	}
+	return &staticAuthorizer{config}, nil
 }
