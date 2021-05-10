@@ -186,15 +186,24 @@ func main() {
 	}
 
 	sarClient := kubeClient.AuthorizationV1().SubjectAccessReviews()
-	authorizer, err := authz.NewAuthorizer(sarClient)
+	sarAuthorizer, err := authz.NewSarAuthorizer(sarClient)
+
 	if err != nil {
-		klog.Fatalf("Failed to create authorizer: %v", err)
+		klog.Fatalf("Failed to create sar authorizer: %v", err)
 	}
-	authorizer = union.New(
+
+	staticAuthorizer, err := authz.NewStaticAuthorizer(cfg.auth.Authorization.Static)
+	if err != nil {
+		klog.Fatalf("Failed to create static authorizer: %v", err)
+	}
+
+	authorizer := union.New(
 		// prefix the authorizer with the permissions for metrics scraping which are well known.
 		// openshift RBAC policy will always allow this user to read metrics.
+		// TODO: remove this, once CMO lands static authorizer configuration.
 		hardcodedauthorizer.NewHardCodedMetricsAuthorizer(),
-		authorizer,
+		staticAuthorizer,
+		sarAuthorizer,
 	)
 
 	auth, err := proxy.New(kubeClient, cfg.auth, authorizer, authenticator)
