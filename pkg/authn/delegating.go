@@ -18,8 +18,7 @@ package authn
 
 import (
 	"errors"
-	"fmt"
-	"io/ioutil"
+	"net/http"
 	"time"
 
 	"k8s.io/apiserver/pkg/authentication/authenticator"
@@ -28,27 +27,23 @@ import (
 	authenticationclient "k8s.io/client-go/kubernetes/typed/authentication/v1"
 )
 
+type DelegatingAuthenticator struct {
+	dynamicClientCA      *dynamiccertificates.DynamicFileCAContent
+	requestAuthenticator authenticator.Request
+}
+
 // NewDelegatingAuthenticator creates an authenticator compatible with the kubelet's needs
-func NewDelegatingAuthenticator(client authenticationclient.TokenReviewInterface, authn *AuthnConfig) (authenticator.Request, error) {
+func NewDelegatingAuthenticator(client authenticationclient.TokenReviewInterface, authn *AuthnConfig) (*DelegatingAuthenticator, error) {
 	if client == nil {
 		return nil, errors.New("tokenAccessReview client not provided, cannot use webhook authentication")
 	}
 
 	var (
-		p   authenticatorfactory.CAContentProvider
+		p   *dynamiccertificates.DynamicFileCAContent
 		err error
 	)
 	if len(authn.X509.ClientCAFile) > 0 {
-		if len(authn.X509.ClientCAFile) == 0 {
-			return nil, fmt.Errorf("missing filename for ca bundle")
-		}
-
-		caBundle, err := ioutil.ReadFile(authn.X509.ClientCAFile)
-		if err != nil {
-			return nil, err
-		}
-
-		p, err = dynamiccertificates.NewStaticCAContent(authn.X509.ClientCAFile, caBundle)
+		p, err = dynamiccertificates.NewDynamicCAContentFromFile("client-ca", authn.X509.ClientCAFile)
 		if err != nil {
 			return nil, err
 		}
@@ -63,5 +58,26 @@ func NewDelegatingAuthenticator(client authenticationclient.TokenReviewInterface
 	}
 
 	authenticator, _, err := authenticatorConfig.New()
-	return authenticator, err
+	if err != nil {
+		return nil, err
+	}
+
+	return &DelegatingAuthenticator{requestAuthenticator: authenticator, dynamicClientCA: p}, nil
+}
+
+func (a *DelegatingAuthenticator) AuthenticateRequest(req *http.Request) (*authenticator.Response, bool, error) {
+	return a.requestAuthenticator.AuthenticateRequest(req)
+}
+
+func (a *DelegatingAuthenticator) RunOnce() error {
+	if a.dynamicClientCA != nil {
+		return a.dynamicClientCA.RunOnce()
+	}
+	return nil
+}
+
+func (a *DelegatingAuthenticator) Run(workers int, stopCh <-chan struct{}) {
+	if a.dynamicClientCA != nil {
+		a.dynamicClientCA.Run(workers, stopCh)
+	}
 }
