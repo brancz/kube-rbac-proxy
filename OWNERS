@@ -1,18 +1,16 @@
 component: "Monitoring"
 
 reviewers:
-- LiliC
-- paulfantom
+- stlaz
 - s-urbaniak
-- simonpasquier
-- dgrisonnet
+- sttts
+- deads2k
 
 approvers:
-- LiliC
-- paulfantom
+- stlaz
 - s-urbaniak
-- simonpasquier
-- dgrisonnet
+- sttts
+- deads2k
 
 emeritus_approvers:
 - elad661
@@ -20,3 +18,7 @@ emeritus_approvers:
 - squat
 - brancz
 - pgier
+- LiliC
+- paulfantom
+- simonpasquier
+- dgrisonnet
