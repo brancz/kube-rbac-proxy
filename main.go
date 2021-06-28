@@ -172,17 +172,18 @@ func main() {
 		if err != nil {
 			klog.Fatalf("Failed to instantiate OIDC authenticator: %v", err)
 		}
-
 	} else {
 		//Use Delegating authenticator
 		klog.Infof("Valid token audiences: %s", strings.Join(cfg.auth.Authentication.Token.Audiences, ", "))
 
 		tokenClient := kubeClient.AuthenticationV1().TokenReviews()
-		authenticator, err = authn.NewDelegatingAuthenticator(tokenClient, cfg.auth.Authentication)
+		delegatingAuthenticator, err := authn.NewDelegatingAuthenticator(tokenClient, cfg.auth.Authentication)
 		if err != nil {
 			klog.Fatalf("Failed to instantiate delegating authenticator: %v", err)
 		}
 
+		go delegatingAuthenticator.Run(1, context.Background().Done())
+		authenticator = delegatingAuthenticator
 	}
 
 	sarClient := kubeClient.AuthorizationV1().SubjectAccessReviews()
