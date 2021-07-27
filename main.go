@@ -134,7 +134,10 @@ func main() {
 	//Kubeconfig flag
 	flagset.StringVar(&cfg.kubeconfigLocation, "kubeconfig", "", "Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used")
 
-	flagset.Parse(os.Args[1:])
+	err := flagset.Parse(os.Args[1:])
+	if err != nil {
+		klog.Fatalf("Failed to parse CLI flags: %v", err)
+	}
 	kcfg := initKubeConfig(cfg.kubeconfigLocation)
 
 	upstreamURL, err := url.Parse(cfg.upstream)
@@ -365,7 +368,7 @@ func main() {
 		}
 	}
 	{
-		sig := make(chan os.Signal)
+		sig := make(chan os.Signal, 1)
 		gr.Add(func() error {
 			signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 			<-sig
