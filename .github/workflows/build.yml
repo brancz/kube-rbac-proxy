@@ -23,6 +23,15 @@ jobs:
       with:
         go-version: ${{ env.go-version }}
     - run: make generate && git diff --exit-code
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint
+    steps:
+    - uses: actions/checkout@v2
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v2
+      with:
+        version: latest
   build:
     runs-on: ubuntu-latest
     name: Build
