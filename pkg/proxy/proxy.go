@@ -82,7 +82,7 @@ func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
 	// Get authorization attributes
 	allAttrs := h.authorizerAttributesGetter.GetRequestAttributes(u.User, req)
 	if len(allAttrs) == 0 {
-		msg := fmt.Sprintf("Bad Request. The request or configuration is malformed.")
+		msg := "Bad Request. The request or configuration is malformed."
 		klog.V(2).Info(msg)
 		http.Error(w, msg, http.StatusBadRequest)
 		return false
@@ -259,6 +259,9 @@ func (c *Config) DeepCopy() *Config {
 func templateWithValue(templateString, value string) string {
 	tmpl, _ := template.New("valueTemplate").Parse(templateString)
 	out := bytes.NewBuffer(nil)
-	tmpl.Execute(out, struct{ Value string }{Value: value})
+	err := tmpl.Execute(out, struct{ Value string }{Value: value})
+	if err != nil {
+		return ""
+	}
 	return out.String()
 }
