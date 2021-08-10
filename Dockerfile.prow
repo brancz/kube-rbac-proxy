@@ -1,0 +1,16 @@
+# Copyright Contributors to the Open Cluster Management project
+
+FROM registry.ci.openshift.org/open-cluster-management/builder:go1.16-linux AS builder
+
+WORKDIR /workspace
+COPY . .
+RUN make build
+
+FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
+
+ARG BINARY=kube-rbac-proxy-linux-amd64
+COPY --from=builder /workspace/_output/$BINARY /usr/local/bin/kube-rbac-proxy
+EXPOSE 8080
+USER 65532:65532
+
+ENTRYPOINT ["/usr/local/bin/kube-rbac-proxy"]
