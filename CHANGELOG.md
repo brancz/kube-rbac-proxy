@@ -1,3 +1,13 @@
+## 0.11.0 / 2021-08-02
+
+* [FEATURE] Support for path patterns in --allow-paths and --ignore-paths. #135
+* [ENHANCEMENT] Dynamically reload client CA. #127
+* [BUGFIX] Fix panics on client-cert authenticated requests. #132
+
+## 0.10.0 / 2021-05-07
+
+* [FEATURE] Support local static authorizer. #125
+
 ## 0.9.0 / 2021-04-27
 
 * [FEATURE] Support rewrites using HTTP headers in addition to query parameters. #104

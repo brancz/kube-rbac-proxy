@@ -193,9 +193,12 @@ func newSelfSignedCert(hostname string) stepFunc {
 		}
 
 		certPath, err := writeTempFile("cert", certBytes)
+		if err != nil {
+			t.Fatalf("error writing cert data: %v", err)
+		}
 		keyPath, err := writeTempFile("key", keyBytes)
 		if err != nil {
-			t.Fatalf("error writing cert/key data: %v", err)
+			t.Fatalf("error writing key data: %v", err)
 		}
 
 		s.certPath = certPath

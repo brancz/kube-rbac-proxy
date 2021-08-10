@@ -42,19 +42,20 @@ func NewDelegatingAuthenticator(client authenticationclient.TokenReviewInterface
 		p   *dynamiccertificates.DynamicFileCAContent
 		err error
 	)
+
+	authenticatorConfig := authenticatorfactory.DelegatingAuthenticatorConfig{
+		Anonymous:               false, // always require authentication
+		CacheTTL:                2 * time.Minute,
+		TokenAccessReviewClient: client,
+		APIAudiences:            authenticator.Audiences(authn.Token.Audiences),
+	}
+
 	if len(authn.X509.ClientCAFile) > 0 {
 		p, err = dynamiccertificates.NewDynamicCAContentFromFile("client-ca", authn.X509.ClientCAFile)
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	authenticatorConfig := authenticatorfactory.DelegatingAuthenticatorConfig{
-		Anonymous:                          false, // always require authentication
-		CacheTTL:                           2 * time.Minute,
-		ClientCertificateCAContentProvider: p,
-		TokenAccessReviewClient:            client,
-		APIAudiences:                       authenticator.Audiences(authn.Token.Audiences),
+		authenticatorConfig.ClientCertificateCAContentProvider = p
 	}
 
 	authenticator, _, err := authenticatorConfig.New()
