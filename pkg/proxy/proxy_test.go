@@ -246,10 +246,8 @@ func createRequest(queryParams, headers map[string]string) *http.Request {
 		}
 		r.URL.RawQuery = q.Encode()
 	}
-	if headers != nil {
-		for k, v := range headers {
-			r.Header.Set(k, v)
-		}
+	for k, v := range headers {
+		r.Header.Set(k, v)
 	}
 	return r
 }
