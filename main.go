@@ -237,6 +237,22 @@ func main() {
 
 	proxy := httputil.NewSingleHostReverseProxy(upstreamURL)
 	proxy.Transport = upstreamTransport
+
+	if cfg.upstreamForceH2C {
+		// Force http/2 for connections to the upstream i.e. do not start with HTTP1.1 UPGRADE req to
+		// initialize http/2 session.
+		// See https://github.com/golang/go/issues/14141#issuecomment-219212895 for more context
+		proxy.Transport = &http2.Transport{
+			// Allow http schema. This doesn't automatically disable TLS
+			AllowHTTP: true,
+			// Do disable TLS.
+			// In combination with the schema check above. We could enforce h2c against the upstream server
+			DialTLS: func(netw, addr string, cfg *tls.Config) (net.Conn, error) {
+				return net.Dial(netw, addr)
+			},
+		}
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		found := len(cfg.allowPaths) == 0
@@ -353,21 +369,6 @@ func main() {
 	}
 	{
 		if cfg.insecureListenAddress != "" {
-			if cfg.upstreamForceH2C {
-				// Force http/2 for connections to the upstream i.e. do not start with HTTP1.1 UPGRADE req to
-				// initialize http/2 session.
-				// See https://github.com/golang/go/issues/14141#issuecomment-219212895 for more context
-				proxy.Transport = &http2.Transport{
-					// Allow http schema. This doesn't automatically disable TLS
-					AllowHTTP: true,
-					// Do disable TLS.
-					// In combination with the schema check above. We could enforce h2c against the upstream server
-					DialTLS: func(netw, addr string, cfg *tls.Config) (net.Conn, error) {
-						return net.Dial(netw, addr)
-					},
-				}
-			}
-
 			srv := &http.Server{Handler: h2c.NewHandler(mux, &http2.Server{})}
 
 			l, err := net.Listen("tcp", cfg.insecureListenAddress)
