@@ -50,6 +50,7 @@ func TestMain(m *testing.M) {
 func Test(t *testing.T) {
 	tests := map[string]kubetest.TestSuite{
 		"Basics":             testBasics(suite),
+		"H2CUpstream":        testH2CUpstream(suite),
 		"ClientCertificates": testClientCertificates(suite),
 		"TokenAudience":      testTokenAudience(suite),
 		"AllowPath":          testAllowPathsRegexp(suite),
