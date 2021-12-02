@@ -76,12 +76,15 @@ data:
         subresource: proxy
         name: kube-rbac-proxy
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kube-rbac-proxy
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app: kube-rbac-proxy
   template:
     metadata:
       labels:
@@ -129,7 +132,7 @@ The content of this manifest is:
 
 [embedmd]:# (./client-rbac.yaml)
 ```yaml
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: kube-rbac-proxy-client
@@ -138,7 +141,7 @@ rules:
   resources: ["services/proxy"]
   verbs: ["get"]
 ---
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: kube-rbac-proxy-client

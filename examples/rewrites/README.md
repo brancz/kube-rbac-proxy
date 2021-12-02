@@ -78,12 +78,15 @@ data:
         subresource: metrics
         namespace: "{{ .Value }}"
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kube-rbac-proxy
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app: kube-rbac-proxy
   template:
     metadata:
       labels:
