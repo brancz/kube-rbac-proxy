@@ -18,10 +18,12 @@ package proxy
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
@@ -49,7 +51,7 @@ func TestProxyWithOIDCSupport(t *testing.T) {
 	}
 
 	fakeUser := user.DefaultInfo{Name: "Foo Bar", Groups: []string{"foo-bars"}}
-	authenticator := fakeOIDCAuthenticator(t, &fakeUser)
+	fakeAuth := fakeAuthenticator(&fakeUser)
 
 	scenario := setupTestScenario()
 	for _, v := range scenario {
@@ -57,7 +59,7 @@ func TestProxyWithOIDCSupport(t *testing.T) {
 		t.Run(v.description, func(t *testing.T) {
 
 			w := httptest.NewRecorder()
-			proxy, err := New(kc, cfg, v.authorizer, authenticator)
+			proxy, err := New(kc, cfg, v.authorizer, fakeAuth, 0)
 
 			if err != nil {
 				t.Fatalf("Failed to instantiate test proxy. Details : %s", err.Error())
@@ -237,6 +239,103 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 	}
 }
 
+func TestProxyCacheSupport(t *testing.T) {
+	kc := testclient.NewSimpleClientset()
+	cfg := Config{
+		Authentication: &authn.AuthnConfig{
+			Header: &authn.AuthnHeaderConfig{},
+			Token:  &authn.TokenConfig{},
+		},
+		Authorization: &authz.Config{},
+	}
+
+	fakeUser := user.DefaultInfo{Name: "Foo Bar", Groups: []string{"foo-bars"}}
+	fakeAuth := fakeAuthenticator(&fakeUser)
+
+	cases := []struct {
+		description  string
+		authorizer   authorizer.Authorizer
+		token        string
+		tokenInCache bool
+		status       int
+	}{
+		{
+			description:  "With a request with valid token and no access rights should not cache auth response",
+			authorizer:   denier{},
+			token:        "VALID-1",
+			tokenInCache: false,
+			status:       403,
+		},
+		{
+			description:  "With a request with valid token and access rights should cache auth response",
+			authorizer:   approver{},
+			token:        "VALID-2",
+			tokenInCache: true,
+			status:       200,
+		},
+		{
+			description:  "With a request with invalid token should not cache auth response",
+			authorizer:   approver{},
+			token:        "INVALID",
+			tokenInCache: false,
+			status:       401,
+		},
+		{
+			description:  "With a request with a valid token in case of authn error should get auth data from the cache",
+			authorizer:   approver{},
+			token:        "ERROR",
+			tokenInCache: true,
+			status:       200,
+		},
+		{
+			description:  "With a request with a valid non cached token in case of authz error should fail",
+			authorizer:   failer{},
+			token:        "NON-CACHED",
+			tokenInCache: false,
+			status:       500,
+		},
+		{
+			description:  "With a request with a valid cached token in case of authz error should get auth data from the cache",
+			authorizer:   failer{},
+			token:        "CACHED",
+			tokenInCache: true,
+			status:       200,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.description, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			proxy, err := New(kc, cfg, c.authorizer, fakeAuth, time.Hour*3600)
+			if err != nil {
+				t.Fatalf("Failed to instantiate test proxy. Details : %s", err.Error())
+			}
+
+			// Put the cache entry for the ERROR token to be sure that the proxy will use cache if an error is occurred
+			proxy.StaleCache.Add(tokenPrefix+"ERROR", &authenticator.Response{})
+
+			// Put cached tokens to the cache to get back their results on authorization error
+			proxy.StaleCache.Add(tokenPrefix+"CACHED", &authenticator.Response{})
+
+			proxy.Handle(w, fakeJWTRequest("GET", "/", fmt.Sprintf("Bearer %s", c.token)))
+
+			_, ok := proxy.StaleCache.Get(tokenPrefix + c.token)
+			if c.tokenInCache && !ok {
+				t.Fatalf("Cache doesn't contain the token.")
+			}
+
+			if !c.tokenInCache && ok {
+				t.Fatalf("Cache contains the token but it must not.")
+			}
+
+			resp := w.Result()
+			if resp.StatusCode != c.status {
+				t.Errorf("Expected response: %d received : %d", c.status, resp.StatusCode)
+			}
+		})
+	}
+}
+
 func createRequest(queryParams, headers map[string]string) *http.Request {
 	r := httptest.NewRequest("GET", "/accounts", nil)
 	if queryParams != nil {
@@ -296,13 +395,16 @@ func fakeJWTRequest(method, path, token string) *http.Request {
 	return req
 }
 
-func fakeOIDCAuthenticator(t *testing.T, fakeUser *user.DefaultInfo) authenticator.Request {
-
+func fakeAuthenticator(fakeUser *user.DefaultInfo) authenticator.Request {
 	auth := bearertoken.New(authenticator.TokenFunc(func(ctx context.Context, token string) (*authenticator.Response, bool, error) {
-		if token != "VALID" {
+		switch token {
+		case "INVALID":
 			return nil, false, nil
+		case "ERROR":
+			return nil, false, fmt.Errorf("error occured while authenticating")
+		default:
+			return &authenticator.Response{User: fakeUser}, true, nil
 		}
-		return &authenticator.Response{User: fakeUser}, true, nil
 	}))
 	return auth
 }
@@ -317,6 +419,14 @@ type approver struct{}
 
 func (a approver) Authorize(ctx context.Context, auth authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
 	return authorizer.DecisionAllow, "user allowed", nil
+}
+
+type failer struct{}
+
+func (e failer) Authorize(ctx context.Context, auth authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
+	// authorizer.DecisionNoOpinion is a decision on error, see:
+	// https://github.com/kubernetes/apiserver/blob/6490793cbf59ce4b2b4f76c93ffdb0d498c7c3a6/plugin/pkg/authorizer/webhook/webhook.go#L115
+	return authorizer.DecisionNoOpinion, "", fmt.Errorf("error occured while authorizig")
 }
 
 type given struct {

@@ -26,12 +26,17 @@ import (
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
-	utilcache "k8s.io/apimachinery/pkg/util/cache"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/user"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
+)
+
+// Prefixes to differentiate authentication methods to save them to the same cache
+var (
+	tokenPrefix       = "token:"
+	certificatePrefix = "certificate:"
 )
 
 // Config holds proxy authorization and authentication settings
@@ -47,11 +52,10 @@ type kubeRBACProxy struct {
 	authorizer.Authorizer
 	// authorizerAttributesGetter implements retrieving authorization attributes for a respective request.
 	authorizerAttributesGetter *krpAuthorizerAttributesGetter
-	// config for kube-rbac-proxy
+	// Config for kube-rbac-proxy
 	Config Config
-	// StaleCache for caching auth requests
-	StaleCache    simpleCache
-	StaleCacheTTL time.Duration
+	// StaleCache for caching auth response
+	StaleCache authResponseCache
 }
 
 func new(authenticator authenticator.Request, authorizer authorizer.Authorizer, config Config, staleCacheTTL time.Duration) *kubeRBACProxy {
@@ -60,52 +64,49 @@ func new(authenticator authenticator.Request, authorizer authorizer.Authorizer, 
 		Authorizer:                 authorizer,
 		authorizerAttributesGetter: newKubeRBACProxyAuthorizerAttributesGetter(config.Authorization),
 		Config:                     config,
-		StaleCache:                 FakeCache{},
+		StaleCache:                 &fakeCache{},
 	}
 	if staleCacheTTL > 0*time.Second {
-		proxy.StaleCache = utilcache.NewLRUExpireCache(4096)
-		proxy.StaleCacheTTL = staleCacheTTL
+		proxy.StaleCache = newLRUTokenCache(staleCacheTTL)
 	}
 	return &proxy
 }
 
 // New creates an authenticator, an authorizer, and a matching authorizer attributes getter compatible with the kube-rbac-proxy
-func New(client clientset.Interface, config Config, authorizer authorizer.Authorizer, authenticator authenticator.Request, staleCacheTTL time.Duration) (*kubeRBACProxy, error) {
+func New(_ clientset.Interface, config Config, authorizer authorizer.Authorizer, authenticator authenticator.Request, staleCacheTTL time.Duration) (*kubeRBACProxy, error) {
 	return new(authenticator, authorizer, config, staleCacheTTL), nil
 }
 
 // Handle authenticates the client and authorizes the request.
 // If the authn fails, a 401 error is returned. If the authz fails, a 403 error is returned
 func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
-	token := getTokenFromRequest(req)
-	if token == "" {
-		klog.Errorf("Unable to get token from request")
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return false
-	}
-
 	ctx := req.Context()
 	if len(h.Config.Authentication.Token.Audiences) > 0 {
 		ctx = authenticator.WithAudiences(ctx, h.Config.Authentication.Token.Audiences)
 		req = req.WithContext(ctx)
 	}
 
+	userIdentity := tokenPrefix + getTokenFromRequest(req)
+
 	// Authenticate
 	u, ok, err := h.AuthenticateRequest(req)
 	if err != nil {
-		cachedUser, staleOk := h.StaleCache.Get(token)
-		if !staleOk {
+		u, ok = h.StaleCache.Get(userIdentity)
+		if !ok {
 			klog.Errorf("Unable to authenticate the request due to an error: %v", err)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return false
 		}
-		userResponse := cachedUser.(authenticator.Response)
-		u = &userResponse
 	}
 	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		h.StaleCache.Remove(token)
+		h.StaleCache.Remove(userIdentity)
 		return false
+	}
+
+	// If no token was specified in request, use the user name (cn) from x509 authentication instead with the prefix
+	if userIdentity == tokenPrefix {
+		userIdentity = certificatePrefix + u.User.GetName()
 	}
 
 	// Get authorization attributes
@@ -114,7 +115,8 @@ func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
 		msg := "Bad Request. The request or configuration is malformed."
 		klog.V(2).Info(msg)
 		http.Error(w, msg, http.StatusBadRequest)
-		h.StaleCache.Remove(token)
+
+		h.StaleCache.Remove(userIdentity)
 		return false
 	}
 
@@ -122,24 +124,32 @@ func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
 		// Authorize
 		authorized, reason, err := h.Authorize(ctx, attrs)
 		if err != nil {
-			_, staleOk := h.StaleCache.Get(token)
-			if !staleOk {
+			_, ok := h.StaleCache.Get(userIdentity)
+			if !ok {
 				msg := fmt.Sprintf("Authorization error (user=%s, verb=%s, resource=%s, subresource=%s)", u.User.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
 				klog.Errorf("%s: %s", msg, err)
 				http.Error(w, msg, http.StatusInternalServerError)
-				h.StaleCache.Remove(token)
+
+				h.StaleCache.Remove(userIdentity)
 				return false
 			}
+
+			// We save only authorized requests to the stale cache, if there is an entry - authorization is allowed
+			authorized = authorizer.DecisionAllow
 		}
 		if authorized != authorizer.DecisionAllow {
 			msg := fmt.Sprintf("Forbidden (user=%s, verb=%s, resource=%s, subresource=%s)", u.User.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
+
 			klog.V(2).Infof("%s. Reason: %q.", msg, reason)
 			http.Error(w, msg, http.StatusForbidden)
-			h.StaleCache.Remove(token)
+
+			h.StaleCache.Remove(userIdentity)
 			return false
 		}
 	}
-	h.StaleCache.Add(token, &u, h.StaleCacheTTL)
+
+	// cache successfully authorized responses only
+	h.StaleCache.Add(userIdentity, u)
 
 	if h.Config.Authentication.Header.Enabled {
 		// Seemingly well-known headers to tell the upstream about user's identity
@@ -317,22 +327,4 @@ func getTokenFromRequest(req *http.Request) string {
 		return ""
 	}
 	return parts[1]
-}
-
-type simpleCache interface {
-	Add(key interface{}, value interface{}, ttl time.Duration)
-	Get(key interface{}) (interface{}, bool)
-	Remove(key interface{})
-	Keys() []interface{}
-}
-
-type FakeCache struct{}
-
-func (FakeCache) Add(key interface{}, value interface{}, ttl time.Duration) {}
-func (FakeCache) Remove(key interface{})                                    {}
-func (FakeCache) Get(key interface{}) (interface{}, bool) {
-	return nil, false
-}
-func (FakeCache) Keys() []interface{} {
-	return []interface{}{}
 }
