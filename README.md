@@ -41,7 +41,6 @@ Usage of _output/kube-rbac-proxy:
       --ignore-paths strings                        Comma-separated list of paths against which kube-rbac-proxy will proxy without performing an authentication or authorization check. Cannot be used with --allow-paths.
       --insecure-listen-address string              The address the kube-rbac-proxy HTTP server should listen on.
       --kubeconfig string                           Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used
-      --stale-cache-interval string                 The interval to keep auth request review results for in case of unavailability of kube-apiserver (default 0)
       --log_backtrace_at traceLocation              when logging hits line file:N, emit a stack trace (default :0)
       --log_dir string                              If non-empty, write log files in this directory
       --log_file string                             If non-empty, use this log file
@@ -57,6 +56,7 @@ Usage of _output/kube-rbac-proxy:
       --secure-listen-address string                The address the kube-rbac-proxy HTTPs server should listen on.
       --skip_headers                                If true, avoid header prefixes in the log messages
       --skip_log_headers                            If true, avoid headers when opening log files
+      --stale-cache-interval duration               The interval to keep auth request review results for in case of unavailability of kube-apiserver.
       --stderrthreshold severity                    logs at or above this threshold go to stderr (default 2)
       --tls-cert-file string                        File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)
       --tls-cipher-suites strings                   Comma-separated list of cipher suites for the server. Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants). If omitted, the default Go cipher suites will be used
