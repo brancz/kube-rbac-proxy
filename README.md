@@ -69,6 +69,14 @@ Usage of _output/kube-rbac-proxy:
       --vmodule moduleSpec                          comma-separated list of pattern=N settings for file-filtered logging
 ```
 
+### How to update Go dependencies
+
+To update the Go dependencies run 
+
+```make update-go-deps```
+
+This might be useful to do during a release.
+
 ## Why?
 
 You may ask yourself, why not just use the Kubernetes apiserver proxy functionality? There are two reasons why this makes sense, the first is to take load off of the Kubernetes API, so it can be used for actual requests serving the cluster components, rather than in order to serve client requests. The second and more important reason is, this proxy is intended to be a sidecar that accepts incoming HTTP requests. This way, one can ensure that a request is truly authorized, instead of being able to access an application simply because an entity has network access to it.
