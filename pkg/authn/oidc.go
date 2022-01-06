@@ -17,6 +17,8 @@ limitations under the License.
 package authn
 
 import (
+	"io/ioutil"
+
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/request/bearertoken"
 	"k8s.io/apiserver/plugin/pkg/authenticator/token/oidc"
@@ -34,12 +36,34 @@ type OIDCConfig struct {
 	SupportedSigningAlgs []string
 }
 
+type caContentProvider func() []byte
+
+func (f caContentProvider) CurrentCABundleContent() []byte {
+	return f()
+}
+
+func newCAContentProvider(filename string) (caContentProvider, error) {
+	pemBlock, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	return func() []byte {
+		return pemBlock
+	}, nil
+}
+
 // NewOIDCAuthenticator returns OIDC authenticator
 func NewOIDCAuthenticator(config *OIDCConfig) (authenticator.Request, error) {
+	cacp, err := newCAContentProvider(config.CAFile)
+	if err != nil {
+		return nil, err
+	}
+
 	tokenAuthenticator, err := oidc.New(oidc.Options{
 		IssuerURL:            config.IssuerURL,
 		ClientID:             config.ClientID,
-		CAFile:               config.CAFile,
+		CAContentProvider:    cacp,
 		UsernameClaim:        config.UsernameClaim,
 		UsernamePrefix:       config.UsernamePrefix,
 		GroupsClaim:          config.GroupsClaim,
