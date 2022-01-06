@@ -44,6 +44,13 @@ $(OUT_DIR)/$(BIN)-%:
 
 build: $(OUT_DIR)/$(BIN)
 
+.PHONY: update-go-deps
+update-go-deps:
+	@for m in $$(go list -mod=readonly -m -f '{{ if and (not .Indirect) (not .Main)}}{{.Path}}{{end}}' all); do \
+		go get $$m; \
+	done
+	go mod tidy
+
 container: $(OUT_DIR)/$(BIN)-$(GOOS)-$(GOARCH) Dockerfile
 	docker build --build-arg BINARY=$(BIN)-$(GOOS)-$(GOARCH) --build-arg GOARCH=$(GOARCH) -t $(DOCKER_REPO):$(VERSION)-$(GOARCH) .
 ifeq ($(GOARCH), amd64)
