@@ -84,7 +84,7 @@ type UserConfig struct {
 }
 
 // NewSarAuthorizer creates an authorizer compatible with the kubelet's needs
-func NewSarAuthorizer(client authorizationclient.SubjectAccessReviewInterface) (authorizer.Authorizer, error) {
+func NewSarAuthorizer(client authorizationclient.AuthorizationV1Interface) (authorizer.Authorizer, error) {
 	if client == nil {
 		return nil, errors.New("no client provided, cannot use webhook authorization")
 	}
