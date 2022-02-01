@@ -179,7 +179,7 @@ func main() {
 		//Use Delegating authenticator
 		klog.Infof("Valid token audiences: %s", strings.Join(cfg.auth.Authentication.Token.Audiences, ", "))
 
-		tokenClient := kubeClient.AuthenticationV1()
+		tokenClient := kubeClient.AuthenticationV1().TokenReviews()
 		delegatingAuthenticator, err := authn.NewDelegatingAuthenticator(tokenClient, cfg.auth.Authentication)
 		if err != nil {
 			klog.Fatalf("Failed to instantiate delegating authenticator: %v", err)
@@ -189,7 +189,7 @@ func main() {
 		authenticator = delegatingAuthenticator
 	}
 
-	sarClient := kubeClient.AuthorizationV1()
+	sarClient := kubeClient.AuthorizationV1().SubjectAccessReviews()
 	sarAuthorizer, err := authz.NewSarAuthorizer(sarClient)
 
 	if err != nil {
