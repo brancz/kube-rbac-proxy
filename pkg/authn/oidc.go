@@ -17,29 +17,34 @@ limitations under the License.
 package authn
 
 import (
+	"net/http"
+
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/request/bearertoken"
+	"k8s.io/apiserver/pkg/server/dynamiccertificates"
 	"k8s.io/apiserver/plugin/pkg/authenticator/token/oidc"
 )
 
-// OIDCConfig represents configuration used for JWT request authentication
-type OIDCConfig struct {
-	IssuerURL            string
-	ClientID             string
-	CAFile               string
-	UsernameClaim        string
-	UsernamePrefix       string
-	GroupsClaim          string
-	GroupsPrefix         string
-	SupportedSigningAlgs []string
+type OIDCAuthenticator struct {
+	dynamicClientCA      *dynamiccertificates.DynamicFileCAContent
+	requestAuthenticator authenticator.Request
 }
 
+var (
+	_ (authenticator.Request) = (*OIDCAuthenticator)(nil)
+)
+
 // NewOIDCAuthenticator returns OIDC authenticator
-func NewOIDCAuthenticator(config *OIDCConfig) (authenticator.Request, error) {
+func NewOIDCAuthenticator(config *OIDCConfig) (*OIDCAuthenticator, error) {
+	dyCA, err := dynamiccertificates.NewDynamicCAContentFromFile("oidc-ca", config.CAFile)
+	if err != nil {
+		return nil, err
+	}
+
 	tokenAuthenticator, err := oidc.New(oidc.Options{
 		IssuerURL:            config.IssuerURL,
 		ClientID:             config.ClientID,
-		CAFile:               config.CAFile,
+		CAContentProvider:    dyCA,
 		UsernameClaim:        config.UsernameClaim,
 		UsernamePrefix:       config.UsernamePrefix,
 		GroupsClaim:          config.GroupsClaim,
@@ -50,5 +55,18 @@ func NewOIDCAuthenticator(config *OIDCConfig) (authenticator.Request, error) {
 		return nil, err
 	}
 
-	return bearertoken.New(tokenAuthenticator), nil
+	return &OIDCAuthenticator{
+		dynamicClientCA:      dyCA,
+		requestAuthenticator: bearertoken.New(tokenAuthenticator),
+	}, nil
+}
+
+func (o *OIDCAuthenticator) AuthenticateRequest(req *http.Request) (*authenticator.Response, bool, error) {
+	return o.requestAuthenticator.AuthenticateRequest(req)
+}
+
+func (o *OIDCAuthenticator) Run(stopCh <-chan struct{}) {
+	if o.dynamicClientCA != nil {
+		o.dynamicClientCA.Run(1, stopCh)
+	}
 }
