@@ -26,6 +26,14 @@ export PATH := $(TOOLS_BIN_DIR):$(PATH)
 EMBEDMD_BINARY=$(TOOLS_BIN_DIR)/embedmd
 TOOLING=$(EMBEDMD_BINARY)
 
+clean:
+	@rm -rf $(OUT_DIR)
+
+print-go-version:
+	@which go
+	@go version
+	@go env
+
 check-license:
 	@echo ">> checking license headers"
 	@./scripts/check_license.sh
@@ -42,7 +50,7 @@ $(OUT_DIR)/$(BIN)-%:
 	CGO_ENABLED=0 \
 	go build --installsuffix cgo -o $(OUT_DIR)/$(BIN)-$* $(GITHUB_URL)
 
-build: $(OUT_DIR)/$(BIN)
+build: clean print-go-version $(OUT_DIR)/$(BIN)
 
 container: $(OUT_DIR)/$(BIN)-$(GOOS)-$(GOARCH) Dockerfile
 	docker build --build-arg BINARY=$(BIN)-$(GOOS)-$(GOARCH) --build-arg GOARCH=$(GOARCH) -t $(DOCKER_REPO):$(VERSION)-$(GOARCH) .
@@ -99,4 +107,4 @@ $(TOOLING): $(TOOLS_BIN_DIR)
 	@echo Installing tools from scripts/tools.go
 	@cat scripts/tools.go | grep _ | awk -F'"' '{print $$2}' | GOBIN=$(TOOLS_BIN_DIR) xargs -tI % go install -mod=readonly -modfile=scripts/go.mod %
 
-.PHONY: all check-license crossbuild build container push push-% manifest-push curl-container test test-unit test-e2e generate
+.PHONY: all clean check-license crossbuild build container push push-% manifest-push curl-container test test-unit test-e2e generate
