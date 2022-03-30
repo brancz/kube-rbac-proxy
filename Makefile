@@ -12,6 +12,7 @@ VERSION?=$(shell cat VERSION)-$(shell git rev-parse --short HEAD)
 PKGS=$(shell go list ./... | grep -v /test/e2e)
 DOCKER_REPO?=quay.io/brancz/kube-rbac-proxy
 KUBECONFIG?=$(HOME)/.kube/config
+CONTAINER_NAME?=$(DOCKER_REPO):$(VERSION)
 
 ALL_ARCH=amd64 arm arm64 ppc64le s390x
 ALL_PLATFORMS=$(addprefix linux/,$(ALL_ARCH))
@@ -42,14 +43,22 @@ $(OUT_DIR)/$(BIN)-%:
 	CGO_ENABLED=0 \
 	go build --installsuffix cgo -o $(OUT_DIR)/$(BIN)-$* $(GITHUB_URL)
 
-build: $(OUT_DIR)/$(BIN)
+clean:
+	-rm -r $(OUT_DIR)
+
+build: clean $(OUT_DIR)/$(BIN)
+
+update-go-deps:
+	@for m in $$(go list -mod=readonly -m -f '{{ if and (not .Indirect) (not .Main)}}{{.Path}}{{end}}' all); do \
+		go get -d $$m; \
+	done
+	go mod tidy
 
 container: $(OUT_DIR)/$(BIN)-$(GOOS)-$(GOARCH) Dockerfile
-	docker build --build-arg BINARY=$(BIN)-$(GOOS)-$(GOARCH) --build-arg GOARCH=$(GOARCH) -t $(DOCKER_REPO):$(VERSION)-$(GOARCH) .
+	docker build --build-arg BINARY=$(BIN)-$(GOOS)-$(GOARCH) --build-arg GOARCH=$(GOARCH) -t $(CONTAINER_NAME)-$(GOARCH) .
 ifeq ($(GOARCH), amd64)
-	docker tag $(DOCKER_REPO):$(VERSION)-$(GOARCH) $(DOCKER_REPO):$(VERSION)
+	docker tag $(DOCKER_REPO):$(VERSION)-$(GOARCH) $(CONTAINER_NAME)
 endif
-
 
 manifest-tool:
 	curl -fsSL https://github.com/estesp/manifest-tool/releases/download/v1.0.2/manifest-tool-linux-amd64 > ./manifest-tool
@@ -85,6 +94,16 @@ test-unit:
 test-e2e:
 	go test -timeout 55m -v ./test/e2e/ $(TEST_RUN_ARGS) --kubeconfig=$(KUBECONFIG)
 
+test-local:
+	@echo 'run: VERSION=local make clean container kind-create-cluster test'
+
+kind-delete-cluster:
+	kind delete cluster
+
+kind-create-cluster: kind-delete-cluster
+	kind create cluster --config ./test/e2e/kind-config/kind-config.yaml
+	kind load docker-image $(CONTAINER_NAME)
+
 generate: build $(EMBEDMD_BINARY)
 	@echo ">> generating examples"
 	@./scripts/generate-examples.sh
@@ -99,4 +118,4 @@ $(TOOLING): $(TOOLS_BIN_DIR)
 	@echo Installing tools from scripts/tools.go
 	@cat scripts/tools.go | grep _ | awk -F'"' '{print $$2}' | GOBIN=$(TOOLS_BIN_DIR) xargs -tI % go install -mod=readonly -modfile=scripts/go.mod %
 
-.PHONY: all check-license crossbuild build container push push-% manifest-push curl-container test test-unit test-e2e generate
+.PHONY: all check-license crossbuild build container push push-% manifest-push curl-container test test-unit test-e2e generate update-go-deps clean kind-delete-cluster kind-create-cluster

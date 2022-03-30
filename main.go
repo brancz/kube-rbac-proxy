@@ -169,27 +169,33 @@ func main() {
 	}
 
 	var authenticator authenticator.Request
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// If OIDC configuration provided, use oidc authenticator
 	if cfg.auth.Authentication.OIDC.IssuerURL != "" {
-		authenticator, err = authn.NewOIDCAuthenticator(cfg.auth.Authentication.OIDC)
+		oidcAuthenticator, err := authn.NewOIDCAuthenticator(cfg.auth.Authentication.OIDC)
 		if err != nil {
 			klog.Fatalf("Failed to instantiate OIDC authenticator: %v", err)
 		}
+
+		go oidcAuthenticator.Run(ctx.Done())
+		authenticator = oidcAuthenticator
 	} else {
 		//Use Delegating authenticator
 		klog.Infof("Valid token audiences: %s", strings.Join(cfg.auth.Authentication.Token.Audiences, ", "))
 
-		tokenClient := kubeClient.AuthenticationV1().TokenReviews()
+		tokenClient := kubeClient.AuthenticationV1()
 		delegatingAuthenticator, err := authn.NewDelegatingAuthenticator(tokenClient, cfg.auth.Authentication)
 		if err != nil {
 			klog.Fatalf("Failed to instantiate delegating authenticator: %v", err)
 		}
 
-		go delegatingAuthenticator.Run(1, context.Background().Done())
+		go delegatingAuthenticator.Run(ctx.Done())
 		authenticator = delegatingAuthenticator
 	}
 
-	sarClient := kubeClient.AuthorizationV1().SubjectAccessReviews()
+	sarClient := kubeClient.AuthorizationV1()
 	sarAuthorizer, err := authz.NewSarAuthorizer(sarClient)
 
 	if err != nil {

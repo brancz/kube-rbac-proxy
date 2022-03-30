@@ -53,6 +53,7 @@ Usage of _output/kube-rbac-proxy:
       --oidc-issuer string                          The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).
       --oidc-sign-alg stringArray                   Supported signing algorithms, default RS256 (default [RS256])
       --oidc-username-claim string                  Identifier of the user in JWT claim, by default set to 'email' (default "email")
+      --one_output                                  If true, only write logs to their native severity level (vs also writing to each lower severity level)
       --secure-listen-address string                The address the kube-rbac-proxy HTTPs server should listen on.
       --skip_headers                                If true, avoid header prefixes in the log messages
       --skip_log_headers                            If true, avoid headers when opening log files
@@ -68,6 +69,12 @@ Usage of _output/kube-rbac-proxy:
   -v, --v Level                                     number for the log level verbosity
       --vmodule moduleSpec                          comma-separated list of pattern=N settings for file-filtered logging
 ```
+
+### How to update Go dependencies
+
+To update the Go dependencies run `make update-go-deps`.
+
+This might be useful to do during a release.
 
 ## Why?
 
@@ -106,6 +113,12 @@ There are a couple of reasons why the existence of NetworkPolicies may not cover
 This projects is not intended to compete with Envoy or IstioMesh. Although on the surface they seem similar, the goals and usage complement each other. It's perfectly ok to use Envoy as the ingress point of traffic of a Pod, which then forwards traffic to the kube-rbac-proxy, which in turn then proxies to the actually serving application.
 
 Additionally, to my knowledge Envoy neither has nor plans Kubernetes specific RBAC/AuthZ support (maybe it shouldn’t even). My knowledge may very well be incomplete, please point out if it is. After all I'm happy if I don't have to maintain more code, but as long as this serves a purpose to me and no other project can provide it, I'll maintain this.
+
+## Testing
+
+To run tests locally, you need to have [kind](https://kind.sigs.k8s.io/) installed. By default it uses the default cluster, so be aware that it might override your default cluster.
+
+The command to execute the tests is: `VERSION=local make clean container kind-create-cluster test`.
 
 ## Roadmap
 
