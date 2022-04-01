@@ -86,10 +86,10 @@ func main() {
 				OIDC:   &authn.OIDCConfig{},
 				Token:  &authn.TokenConfig{},
 			},
-			Authorization: &authz.Config{},
+			Authorizations: []*authz.Config{},
 		},
 	}
-	configFileName := ""
+	var configFileNames []string
 
 	// Add klog flags
 	klogFlags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -104,7 +104,7 @@ func main() {
 	flagset.StringVar(&cfg.upstream, "upstream", "", "The upstream URL to proxy to once requests have successfully been authenticated and authorized.")
 	flagset.BoolVar(&cfg.upstreamForceH2C, "upstream-force-h2c", false, "Force h2c to communiate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only")
 	flagset.StringVar(&cfg.upstreamCAFile, "upstream-ca-file", "", "The CA the upstream uses for TLS connection. This is required when the upstream uses TLS and its own CA certificate")
-	flagset.StringVar(&configFileName, "config-file", "", "Configuration file to configure kube-rbac-proxy.")
+	flagset.StringSliceVar(&configFileNames, "config-file", []string{}, "Configuration file to configure kube-rbac-proxy. Can be specified multiple times to configure multiple resource authorizations.")
 	flagset.StringSliceVar(&cfg.allowPaths, "allow-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy matches the incoming request. If the request doesn't match, kube-rbac-proxy responds with a 404 status code. If omitted, the incoming request path isn't checked. Cannot be used with --ignore-paths.")
 	flagset.StringSliceVar(&cfg.ignorePaths, "ignore-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy will proxy without performing an authentication or authorization check. Cannot be used with --allow-paths.")
 
@@ -146,21 +146,22 @@ func main() {
 		klog.Fatalf("Failed to parse upstream URL: %v", err)
 	}
 
-	if configFileName != "" {
-		klog.Infof("Reading config file: %s", configFileName)
-		b, err := ioutil.ReadFile(configFileName)
-		if err != nil {
-			klog.Fatalf("Failed to read resource-attribute file: %v", err)
+	if len(configFileNames) != 0 {
+		for _, cfn := range configFileNames {
+			klog.Infof("Reading config file: %s", cfn)
+			b, err := ioutil.ReadFile(cfn)
+			if err != nil {
+				klog.Fatalf("Failed to read resource-attribute file: %v", err)
+			}
+
+			configfile := configfile{}
+
+			if err := yaml.Unmarshal(b, &configfile); err != nil {
+				klog.Fatalf("Failed to parse config file content: %v", err)
+			}
+
+			cfg.auth.Authorizations = append(cfg.auth.Authorizations, configfile.AuthorizationConfig)
 		}
-
-		configfile := configfile{}
-
-		err = yaml.Unmarshal(b, &configfile)
-		if err != nil {
-			klog.Fatalf("Failed to parse config file content: %v", err)
-		}
-
-		cfg.auth.Authorization = configfile.AuthorizationConfig
 	}
 
 	kubeClient, err := kubernetes.NewForConfig(kcfg)
@@ -202,7 +203,11 @@ func main() {
 		klog.Fatalf("Failed to create sar authorizer: %v", err)
 	}
 
-	staticAuthorizer, err := authz.NewStaticAuthorizer(cfg.auth.Authorization.Static)
+	var sacs []authz.StaticAuthorizationConfig
+	for _, ac := range cfg.auth.Authorizations {
+		sacs = append(sacs, ac.Static...)
+	}
+	staticAuthorizer, err := authz.NewStaticAuthorizer(sacs)
 	if err != nil {
 		klog.Fatalf("Failed to create static authorizer: %v", err)
 	}

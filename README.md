@@ -37,7 +37,7 @@ Usage of _output/kube-rbac-proxy:
       --auth-header-user-field-name string          The name of the field inside a http(2) request header to tell the upstream server about the user's name (default "x-remote-user")
       --auth-token-audiences strings                Comma-separated list of token audiences to accept. By default a token does not have to have any specific audience. It is recommended to set a specific audience.
       --client-ca-file string                       If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.
-      --config-file string                          Configuration file to configure kube-rbac-proxy.
+      --config-file strings                         Configuration file to configure kube-rbac-proxy. Can be specified multiple times to configure multiple resource authorizations.
       --ignore-paths strings                        Comma-separated list of paths against which kube-rbac-proxy will proxy without performing an authentication or authorization check. Cannot be used with --allow-paths.
       --insecure-listen-address string              The address the kube-rbac-proxy HTTP server should listen on.
       --kubeconfig string                           Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used

@@ -45,7 +45,7 @@ func TestProxyWithOIDCSupport(t *testing.T) {
 			},
 			Token: &authn.TokenConfig{},
 		},
-		Authorization: &authz.Config{},
+		Authorizations: []*authz.Config{&authz.Config{}},
 	}
 
 	fakeUser := user.DefaultInfo{Name: "Foo Bar", Groups: []string{"foo-bars"}}
@@ -86,14 +86,14 @@ func TestProxyWithOIDCSupport(t *testing.T) {
 
 func TestGeneratingAuthorizerAttributes(t *testing.T) {
 	cases := []struct {
-		desc     string
-		authzCfg *authz.Config
-		req      *http.Request
-		expected []authorizer.Attributes
+		desc      string
+		authzCfgs []*authz.Config
+		req       *http.Request
+		expected  []authorizer.Attributes
 	}{
 		{
-			"without resource attributes and rewrites",
-			&authz.Config{},
+			"without any configs",
+			[]*authz.Config{},
 			createRequest(nil, nil),
 			[]authorizer.Attributes{
 				authorizer.AttributesRecord{
@@ -111,8 +111,27 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 			},
 		},
 		{
-			"without rewrites config",
-			&authz.Config{ResourceAttributes: &authz.ResourceAttributes{Namespace: "tenant1", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"}},
+			"without resource attributes and rewrites",
+			[]*authz.Config{{}},
+			createRequest(nil, nil),
+			[]authorizer.Attributes{
+				authorizer.AttributesRecord{
+					User:            nil,
+					Verb:            "get",
+					Namespace:       "",
+					APIGroup:        "",
+					APIVersion:      "",
+					Resource:        "",
+					Subresource:     "",
+					Name:            "",
+					ResourceRequest: false,
+					Path:            "/accounts",
+				},
+			},
+		},
+		{
+			"with resource attributes",
+			[]*authz.Config{{ResourceAttributes: &authz.ResourceAttributes{Namespace: "tenant1", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"}}},
 			createRequest(nil, nil),
 			[]authorizer.Attributes{
 				authorizer.AttributesRecord{
@@ -129,11 +148,43 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 			},
 		},
 		{
+			"with multiple resource attributes",
+			[]*authz.Config{
+				{ResourceAttributes: &authz.ResourceAttributes{Namespace: "tenant1", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"}},
+				{ResourceAttributes: &authz.ResourceAttributes{Namespace: "tenant1", APIVersion: "v1", Resource: "pod"}},
+			},
+			createRequest(nil, nil),
+			[]authorizer.Attributes{
+				authorizer.AttributesRecord{
+					User:            nil,
+					Verb:            "get",
+					Namespace:       "tenant1",
+					APIGroup:        "",
+					APIVersion:      "v1",
+					Resource:        "namespace",
+					Subresource:     "metrics",
+					Name:            "",
+					ResourceRequest: true,
+				},
+				authorizer.AttributesRecord{
+					User:            nil,
+					Verb:            "get",
+					Namespace:       "tenant1",
+					APIGroup:        "",
+					APIVersion:      "v1",
+					Resource:        "pod",
+					Subresource:     "",
+					Name:            "",
+					ResourceRequest: true,
+				},
+			},
+		},
+		{
 			"with query param rewrites config",
-			&authz.Config{
+			[]*authz.Config{{
 				Rewrites:           &authz.SubjectAccessReviewRewrites{ByQueryParameter: &authz.QueryParameterRewriteConfig{Name: "namespace"}},
 				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
-			},
+			}},
 			createRequest(map[string]string{"namespace": "tenant1"}, nil),
 			[]authorizer.Attributes{
 				authorizer.AttributesRecord{
@@ -151,19 +202,19 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 		},
 		{
 			"with query param rewrites config but missing URL query",
-			&authz.Config{
+			[]*authz.Config{{
 				Rewrites:           &authz.SubjectAccessReviewRewrites{ByQueryParameter: &authz.QueryParameterRewriteConfig{Name: "namespace"}},
 				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
-			},
+			}},
 			createRequest(nil, nil),
 			nil,
 		},
 		{
 			"with http header rewrites config",
-			&authz.Config{
+			[]*authz.Config{{
 				Rewrites:           &authz.SubjectAccessReviewRewrites{ByHTTPHeader: &authz.HTTPHeaderRewriteConfig{Name: "namespace"}},
 				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
-			},
+			}},
 			createRequest(nil, map[string]string{"namespace": "tenant1"}),
 			[]authorizer.Attributes{
 				authorizer.AttributesRecord{
@@ -181,22 +232,22 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 		},
 		{
 			"with http header rewrites config but missing header",
-			&authz.Config{
+			[]*authz.Config{{
 				Rewrites:           &authz.SubjectAccessReviewRewrites{ByQueryParameter: &authz.QueryParameterRewriteConfig{Name: "namespace"}},
 				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
-			},
+			}},
 			createRequest(nil, nil),
 			nil,
 		},
 		{
 			"with http header and query param rewrites config",
-			&authz.Config{
+			[]*authz.Config{{
 				Rewrites: &authz.SubjectAccessReviewRewrites{
 					ByHTTPHeader:     &authz.HTTPHeaderRewriteConfig{Name: "namespace"},
 					ByQueryParameter: &authz.QueryParameterRewriteConfig{Name: "namespace"},
 				},
 				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
-			},
+			}},
 			createRequest(map[string]string{"namespace": "tenant1"}, map[string]string{"namespace": "tenant2"}),
 			[]authorizer.Attributes{
 				authorizer.AttributesRecord{
@@ -228,7 +279,7 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
 			t.Log(c.req.URL.Query())
-			n := krpAuthorizerAttributesGetter{authzConfig: c.authzCfg}
+			n := krpAuthorizerAttributesGetter{authzConfigs: c.authzCfgs}
 			res := n.GetRequestAttributes(nil, c.req)
 			if !cmp.Equal(res, c.expected) {
 				t.Errorf("Generated authorizer attributes are not correct. Expected %v, recieved %v", c.expected, res)

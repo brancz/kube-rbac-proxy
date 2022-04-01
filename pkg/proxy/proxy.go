@@ -35,7 +35,7 @@ import (
 // Config holds proxy authorization and authentication settings
 type Config struct {
 	Authentication *authn.AuthnConfig
-	Authorization  *authz.Config
+	Authorizations []*authz.Config
 }
 
 type kubeRBACProxy struct {
@@ -50,7 +50,7 @@ type kubeRBACProxy struct {
 }
 
 func new(authenticator authenticator.Request, authorizer authorizer.Authorizer, config Config) *kubeRBACProxy {
-	return &kubeRBACProxy{authenticator, authorizer, newKubeRBACProxyAuthorizerAttributesGetter(config.Authorization), config}
+	return &kubeRBACProxy{authenticator, authorizer, newKubeRBACProxyAuthorizerAttributesGetter(config.Authorizations), config}
 }
 
 // New creates an authenticator, an authorizer, and a matching authorizer attributes getter compatible with the kube-rbac-proxy
@@ -116,12 +116,12 @@ func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
 	return true
 }
 
-func newKubeRBACProxyAuthorizerAttributesGetter(authzConfig *authz.Config) *krpAuthorizerAttributesGetter {
-	return &krpAuthorizerAttributesGetter{authzConfig}
+func newKubeRBACProxyAuthorizerAttributesGetter(authzConfigs []*authz.Config) *krpAuthorizerAttributesGetter {
+	return &krpAuthorizerAttributesGetter{authzConfigs}
 }
 
 type krpAuthorizerAttributesGetter struct {
-	authzConfig *authz.Config
+	authzConfigs []*authz.Config
 }
 
 // GetRequestAttributes populates authorizer attributes for the requests to kube-rbac-proxy.
@@ -148,67 +148,76 @@ func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http
 		}
 	}()
 
-	if n.authzConfig.ResourceAttributes == nil {
-		// Default attributes mirror the API attributes that would allow this access to kube-rbac-proxy
-		allAttrs := append(allAttrs, authorizer.AttributesRecord{
-			User:            u,
-			Verb:            apiVerb,
-			Namespace:       "",
-			APIGroup:        "",
-			APIVersion:      "",
-			Resource:        "",
-			Subresource:     "",
-			Name:            "",
-			ResourceRequest: false,
-			Path:            r.URL.Path,
-		})
+	// Default attributes mirror the API attributes that would allow this access to kube-rbac-proxy
+	defaultAttributesRecord := authorizer.AttributesRecord{
+		User:            u,
+		Verb:            apiVerb,
+		Namespace:       "",
+		APIGroup:        "",
+		APIVersion:      "",
+		Resource:        "",
+		Subresource:     "",
+		Name:            "",
+		ResourceRequest: false,
+		Path:            r.URL.Path,
+	}
+
+	if len(n.authzConfigs) == 0 {
+		allAttrs = append(allAttrs, defaultAttributesRecord)
 		return allAttrs
 	}
 
-	if n.authzConfig.Rewrites == nil {
-		allAttrs := append(allAttrs, authorizer.AttributesRecord{
-			User:            u,
-			Verb:            apiVerb,
-			Namespace:       n.authzConfig.ResourceAttributes.Namespace,
-			APIGroup:        n.authzConfig.ResourceAttributes.APIGroup,
-			APIVersion:      n.authzConfig.ResourceAttributes.APIVersion,
-			Resource:        n.authzConfig.ResourceAttributes.Resource,
-			Subresource:     n.authzConfig.ResourceAttributes.Subresource,
-			Name:            n.authzConfig.ResourceAttributes.Name,
-			ResourceRequest: true,
-		})
-		return allAttrs
-	}
-
-	params := []string{}
-	if n.authzConfig.Rewrites.ByQueryParameter != nil && n.authzConfig.Rewrites.ByQueryParameter.Name != "" {
-		if ps, ok := r.URL.Query()[n.authzConfig.Rewrites.ByQueryParameter.Name]; ok {
-			params = append(params, ps...)
+	for _, ac := range n.authzConfigs {
+		if ac.ResourceAttributes == nil {
+			allAttrs = append(allAttrs, defaultAttributesRecord)
+			continue
 		}
-	}
-	if n.authzConfig.Rewrites.ByHTTPHeader != nil && n.authzConfig.Rewrites.ByHTTPHeader.Name != "" {
-		if p := r.Header.Get(n.authzConfig.Rewrites.ByHTTPHeader.Name); p != "" {
-			params = append(params, p)
-		}
-	}
 
-	if len(params) == 0 {
-		return allAttrs
-	}
-
-	for _, param := range params {
-		attrs := authorizer.AttributesRecord{
-			User:            u,
-			Verb:            apiVerb,
-			Namespace:       templateWithValue(n.authzConfig.ResourceAttributes.Namespace, param),
-			APIGroup:        templateWithValue(n.authzConfig.ResourceAttributes.APIGroup, param),
-			APIVersion:      templateWithValue(n.authzConfig.ResourceAttributes.APIVersion, param),
-			Resource:        templateWithValue(n.authzConfig.ResourceAttributes.Resource, param),
-			Subresource:     templateWithValue(n.authzConfig.ResourceAttributes.Subresource, param),
-			Name:            templateWithValue(n.authzConfig.ResourceAttributes.Name, param),
-			ResourceRequest: true,
+		if ac.Rewrites == nil {
+			allAttrs = append(allAttrs, authorizer.AttributesRecord{
+				User:            u,
+				Verb:            apiVerb,
+				Namespace:       ac.ResourceAttributes.Namespace,
+				APIGroup:        ac.ResourceAttributes.APIGroup,
+				APIVersion:      ac.ResourceAttributes.APIVersion,
+				Resource:        ac.ResourceAttributes.Resource,
+				Subresource:     ac.ResourceAttributes.Subresource,
+				Name:            ac.ResourceAttributes.Name,
+				ResourceRequest: true,
+			})
+			continue
 		}
-		allAttrs = append(allAttrs, attrs)
+
+		params := []string{}
+		if ac.Rewrites.ByQueryParameter != nil && ac.Rewrites.ByQueryParameter.Name != "" {
+			if ps, ok := r.URL.Query()[ac.Rewrites.ByQueryParameter.Name]; ok {
+				params = append(params, ps...)
+			}
+		}
+		if ac.Rewrites.ByHTTPHeader != nil && ac.Rewrites.ByHTTPHeader.Name != "" {
+			if p := r.Header.Get(ac.Rewrites.ByHTTPHeader.Name); p != "" {
+				params = append(params, p)
+			}
+		}
+
+		if len(params) == 0 {
+			continue
+		}
+
+		for _, param := range params {
+			attrs := authorizer.AttributesRecord{
+				User:            u,
+				Verb:            apiVerb,
+				Namespace:       templateWithValue(ac.ResourceAttributes.Namespace, param),
+				APIGroup:        templateWithValue(ac.ResourceAttributes.APIGroup, param),
+				APIVersion:      templateWithValue(ac.ResourceAttributes.APIVersion, param),
+				Resource:        templateWithValue(ac.ResourceAttributes.Resource, param),
+				Subresource:     templateWithValue(ac.ResourceAttributes.Subresource, param),
+				Name:            templateWithValue(ac.ResourceAttributes.Name, param),
+				ResourceRequest: true,
+			}
+			allAttrs = append(allAttrs, attrs)
+		}
 	}
 	return allAttrs
 }
@@ -238,17 +247,19 @@ func (c *Config) DeepCopy() *Config {
 		}
 	}
 
-	if c.Authorization != nil {
-		if c.Authorization.ResourceAttributes != nil {
-			res.Authorization = &authz.Config{
-				ResourceAttributes: &authz.ResourceAttributes{
-					Namespace:   c.Authorization.ResourceAttributes.Namespace,
-					APIGroup:    c.Authorization.ResourceAttributes.APIGroup,
-					APIVersion:  c.Authorization.ResourceAttributes.APIVersion,
-					Resource:    c.Authorization.ResourceAttributes.Resource,
-					Subresource: c.Authorization.ResourceAttributes.Subresource,
-					Name:        c.Authorization.ResourceAttributes.Name,
-				},
+	if len(c.Authorizations) != 0 {
+		for _, a := range c.Authorizations {
+			if a != nil && a.ResourceAttributes != nil {
+				res.Authorizations = append(res.Authorizations, &authz.Config{
+					ResourceAttributes: &authz.ResourceAttributes{
+						Namespace:   a.ResourceAttributes.Namespace,
+						APIGroup:    a.ResourceAttributes.APIGroup,
+						APIVersion:  a.ResourceAttributes.APIVersion,
+						Resource:    a.ResourceAttributes.Resource,
+						Subresource: a.ResourceAttributes.Subresource,
+						Name:        a.ResourceAttributes.Name,
+					},
+				})
 			}
 		}
 	}
