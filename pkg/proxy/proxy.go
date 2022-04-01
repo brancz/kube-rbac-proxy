@@ -18,9 +18,11 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"text/template"
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
@@ -88,21 +90,36 @@ func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
 		return false
 	}
 
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	for _, attrs := range allAttrs {
-		// Authorize
-		authorized, reason, err := h.Authorize(ctx, attrs)
-		if err != nil {
-			msg := fmt.Sprintf("Authorization error (user=%s, verb=%s, resource=%s, subresource=%s)", u.User.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
-			klog.Errorf("%s: %s", msg, err)
-			http.Error(w, msg, http.StatusInternalServerError)
-			return false
-		}
-		if authorized != authorizer.DecisionAllow {
-			msg := fmt.Sprintf("Forbidden (user=%s, verb=%s, resource=%s, subresource=%s)", u.User.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
-			klog.V(2).Infof("%s. Reason: %q.", msg, reason)
-			http.Error(w, msg, http.StatusForbidden)
-			return false
-		}
+		// Authorize concurrently, as there can be many outbound requests to the kube API.
+		wg.Add(1)
+		go func(attrs authorizer.Attributes) {
+			defer wg.Done()
+			authorized, reason, err := h.Authorize(ctx, attrs)
+			if err != nil {
+				msg := fmt.Sprintf("Authorization error (user=%s, verb=%s, resource=%s, subresource=%s)", u.User.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
+				klog.Errorf("%s: %s", msg, err)
+				http.Error(w, msg, http.StatusInternalServerError)
+				cancel()
+				return
+			}
+			if authorized != authorizer.DecisionAllow {
+				msg := fmt.Sprintf("Forbidden (user=%s, verb=%s, resource=%s, subresource=%s)", u.User.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
+				klog.V(2).Infof("%s. Reason: %q.", msg, reason)
+				http.Error(w, msg, http.StatusForbidden)
+				cancel()
+			}
+		}(attrs)
+	}
+	wg.Wait()
+	select {
+	case <-ctx.Done():
+		// If the context was cancelled by any goroutine, then there was an authz failure.
+		return false
+	default:
 	}
 
 	if h.Config.Authentication.Header.Enabled {
