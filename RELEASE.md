@@ -7,7 +7,8 @@ Release shepherds are chosen on a voluntary basis.
 
 | release series | date of release (year-month-day) | release shepherd                            |
 |----------------|----------------------------------|---------------------------------------------|
-| v0.12.0        | TBD                              | Krzysztof Ostrowski (GitHub: @ibihim)
+| v0.13.0        | TBD                              | Krzysztof Ostrowski (GitHub: @ibihim)       |
+| v0.12.0        | 2022-04-08                       | Sergiusz Urbaniak (GitHub: @s-urbaniak)     |
 | v0.11.0        | 2021-08-02                       | Sergiusz Urbaniak (GitHub: @s-urbaniak)     |
 | v0.10.0        | 2021-05-07                       | Sergiusz Urbaniak (GitHub: @s-urbaniak)     |
 | v0.9.0         | 2021-04-27                       | Sergiusz Urbaniak (GitHub: @s-urbaniak)     |
@@ -74,8 +75,8 @@ and the previous stable release is `2.16.0` we need to create a `release-2.17`
 branch. Note that all releases are handled in protected release branches, see
 the above `Branch management and versioning` section.
 
-Bump the version in the `VERSION` file and update `CHANGELOG.md`. Do this in a
-proper PR pointing to the release branch as this gives others the opportunity to
+Bump the version in the `VERSION`, update `CHANGELOG.md`, and modify version references in the example deployment manifests.
+Do this in a proper PR pointing to the release branch as this gives others the opportunity to
 chime in on the release in general and on the addition to the changelog in
 particular.
 
@@ -91,6 +92,8 @@ Entries in the `CHANGELOG.md` are meant to be in this order:
 * `[FEATURE]`
 * `[ENHANCEMENT]`
 * `[BUGFIX]`
+
+Submit a PR against the master branch titled "*: cut vx.y.z release ".
 
 ### 3. Draft the new release
 
