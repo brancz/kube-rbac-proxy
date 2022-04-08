@@ -1,3 +1,12 @@
+## 0.12.0 / 2022-04-08
+
+* [ENHANCEMENT] bump k8s to 1.23.5. #149, #155, #160
+* [ENHANCEMENT] add release documentation, #156
+* [ENHANCEMENT] use supported apiVersion for deployment and authorization. #150
+* [BUGFIX] ppc64le image build which in turn fixed multi-arch build. #147
+* [ENHANCEMENT] Support building on riscv64 architecture. #141
+* [ENHANCEMENT] move --upstream-force-h2c out of --insecure-listen-address. #140
+
 ## 0.11.0 / 2021-08-02
 
 * [FEATURE] Support for path patterns in --allow-paths and --ignore-paths. #135
