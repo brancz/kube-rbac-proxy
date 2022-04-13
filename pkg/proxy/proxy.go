@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"text/template"
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
@@ -91,6 +92,7 @@ func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
 	}
 
 	var wg sync.WaitGroup
+	var authzDone uint32
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	for _, attrs := range allAttrs {
@@ -102,24 +104,25 @@ func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
 			if err != nil {
 				msg := fmt.Sprintf("Authorization error (user=%s, verb=%s, resource=%s, subresource=%s)", u.User.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
 				klog.Errorf("%s: %s", msg, err)
-				http.Error(w, msg, http.StatusInternalServerError)
+				if atomic.CompareAndSwapUint32(&authzDone, 0, 1) {
+					http.Error(w, msg, http.StatusInternalServerError)
+				}
 				cancel()
 				return
 			}
 			if authorized != authorizer.DecisionAllow {
 				msg := fmt.Sprintf("Forbidden (user=%s, verb=%s, resource=%s, subresource=%s)", u.User.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
 				klog.V(2).Infof("%s. Reason: %q.", msg, reason)
-				http.Error(w, msg, http.StatusForbidden)
+				if atomic.CompareAndSwapUint32(&authzDone, 0, 1) {
+					http.Error(w, msg, http.StatusForbidden)
+				}
 				cancel()
 			}
 		}(attrs)
 	}
 	wg.Wait()
-	select {
-	case <-ctx.Done():
-		// If the context was cancelled by any goroutine, then there was an authz failure.
+	if authzDone == 1 {
 		return false
-	default:
 	}
 
 	if h.Config.Authentication.Header.Enabled {
