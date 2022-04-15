@@ -41,7 +41,7 @@ import (
 const DefaultTimeout = 60 * time.Second
 
 func CreatedManifests(client kubernetes.Interface, paths ...string) Setup {
-	return func(ctx *ScenarioContext) error {
+	return func(ctx context.Context) error {
 		for _, path := range paths {
 			content, err := ioutil.ReadFile(path)
 			if err != nil {
@@ -97,7 +97,8 @@ func CreatedManifests(client kubernetes.Interface, paths ...string) Setup {
 	}
 }
 
-func createClusterRole(client kubernetes.Interface, ctx *ScenarioContext, content []byte) error {
+// TODO: implement createClusterRoleScenarioContext createClusterRoleIndividualContext
+func createClusterRole(client kubernetes.Interface, ctx context.Context, content []byte) error {
 	r := bytes.NewReader(content)
 
 	var cr *rbacv1.ClusterRole
@@ -105,20 +106,23 @@ func createClusterRole(client kubernetes.Interface, ctx *ScenarioContext, conten
 		return err
 	}
 
-	roleCtx, roleCancel := context.WithTimeout(context.Background(), DefaultTimeout)
-	defer roleCancel()
-	_, err := client.RbacV1().ClusterRoles().Create(roleCtx, cr, metav1.CreateOptions{})
+	_, err := client.RbacV1().ClusterRoles().Create(ctx, cr, metav1.CreateOptions{})
 
-	ctx.AddFinalizer(func() error {
+	var finalizers []Finalizer
+	finalizers = append(finalizers, func() error {
+		return client.RbacV1().ClusterRoles().Delete(ctx, cr.Name, metav1.DeleteOptions{})
+	})
+	ctx = FinalizerIntoContext(ctx, finalizers)
+	/*ctx.AddFinalizer(func() error {
 		finalizerCtx, finalizerCancel := context.WithTimeout(context.Background(), DefaultTimeout)
 		defer finalizerCancel()
 		return client.RbacV1().ClusterRoles().Delete(finalizerCtx, cr.Name, metav1.DeleteOptions{})
-	})
+	})*/
 
 	return err
 }
 
-func createClusterRoleBinding(client kubernetes.Interface, ctx *ScenarioContext, content []byte) error {
+func createClusterRoleBinding(client kubernetes.Interface, ctx context.Context, content []byte) error {
 	r := bytes.NewReader(content)
 
 	var crb *rbacv1.ClusterRoleBinding
@@ -126,20 +130,18 @@ func createClusterRoleBinding(client kubernetes.Interface, ctx *ScenarioContext,
 		return err
 	}
 
-	rolebindingCtx, rolebindingCancel := context.WithTimeout(context.Background(), DefaultTimeout)
-	defer rolebindingCancel()
-	_, err := client.RbacV1().ClusterRoleBindings().Create(rolebindingCtx, crb, metav1.CreateOptions{})
+	_, err := client.RbacV1().ClusterRoleBindings().Create(ctx, crb, metav1.CreateOptions{})
 
-	ctx.AddFinalizer(func() error {
-		finalizerCtx, finalizerCancel := context.WithTimeout(context.Background(), DefaultTimeout)
-		defer finalizerCancel()
-		return client.RbacV1().ClusterRoleBindings().Delete(finalizerCtx, crb.Name, metav1.DeleteOptions{})
+	var finalizers []Finalizer
+	finalizers = append(finalizers, func() error {
+		return client.RbacV1().ClusterRoleBindings().Delete(ctx, crb.Name, metav1.DeleteOptions{})
 	})
+	ctx = FinalizerIntoContext(ctx, finalizers)
 
 	return err
 }
 
-func createDeployment(client kubernetes.Interface, ctx *ScenarioContext, content []byte) error {
+func createDeployment(client kubernetes.Interface, ctx context.Context, content []byte) error {
 	r := bytes.NewReader(content)
 
 	var d appsv1.Deployment
@@ -147,16 +149,13 @@ func createDeployment(client kubernetes.Interface, ctx *ScenarioContext, content
 		return err
 	}
 
-	d.Namespace = ctx.Namespace
+	d.Namespace = NamespaceFromContext(ctx)
 
-	createDeploymentCtx, createDeploymentCancel := context.WithTimeout(context.Background(), DefaultTimeout)
-	defer createDeploymentCancel()
-	_, err := client.AppsV1().Deployments(d.Namespace).Create(createDeploymentCtx, &d, metav1.CreateOptions{})
+	_, err := client.AppsV1().Deployments(d.Namespace).Create(ctx, &d, metav1.CreateOptions{})
 
-	ctx.AddFinalizer(func() error {
-		finalizerCtx, finalizerCancel := context.WithTimeout(context.Background(), 2 * DefaultTimeout)
-		defer finalizerCancel()
-		dep, err := client.AppsV1().Deployments(d.Namespace).Get(finalizerCtx, d.Name, metav1.GetOptions{})
+	var finalizers []Finalizer
+	finalizers = append(finalizers, func() error {
+		dep, err := client.AppsV1().Deployments(d.Namespace).Get(ctx, d.Name, metav1.GetOptions{})
 		if err != nil {
 			return err
 		}
@@ -168,35 +167,35 @@ func createDeployment(client kubernetes.Interface, ctx *ScenarioContext, content
 
 		dumpLogs(client, ctx, metav1.ListOptions{LabelSelector: sel.String()})
 
-		err = client.AppsV1().Deployments(dep.Namespace).Delete(finalizerCtx, dep.Name, metav1.DeleteOptions{})
+		err = client.AppsV1().Deployments(dep.Namespace).Delete(ctx, dep.Name, metav1.DeleteOptions{})
 		if err != nil {
 			return err
 		}
 
 		return PodsAreGone(client, sel.String())(ctx)
 	})
+	ctx = FinalizerIntoContext(ctx, finalizers)
 
 	return err
 }
 
-func dumpLogs(client kubernetes.Interface, ctx *ScenarioContext, opts metav1.ListOptions) {
-	dumpCtx, dumpCancel := context.WithTimeout(context.Background(), 2 * DefaultTimeout)
-	defer dumpCancel()
-	pods, err := client.CoreV1().Pods(ctx.Namespace).List(dumpCtx, opts)
+func dumpLogs(client kubernetes.Interface, ctx context.Context, opts metav1.ListOptions) {
+	namespace := NamespaceFromContext(ctx)
+	pods, err := client.CoreV1().Pods(namespace).List(ctx, opts)
 	if err != nil {
 		return
 	}
 
 	for _, p := range pods.Items {
 		for _, c := range p.Spec.Containers {
-			fmt.Println("=== LOGS", ctx.Namespace, p.Name, c.Name)
+			fmt.Println("=== LOGS", namespace, p.Name, c.Name)
 
-			rest := client.CoreV1().Pods(ctx.Namespace).GetLogs(p.GetName(), &corev1.PodLogOptions{
+			rest := client.CoreV1().Pods(namespace).GetLogs(p.GetName(), &corev1.PodLogOptions{
 				Container: c.Name,
 				Follow:    false,
 			})
 
-			stream, err := rest.Stream(dumpCtx)
+			stream, err := rest.Stream(ctx)
 			if err != nil {
 				return
 			}
@@ -206,7 +205,7 @@ func dumpLogs(client kubernetes.Interface, ctx *ScenarioContext, opts metav1.Lis
 	}
 }
 
-func createService(client kubernetes.Interface, ctx *ScenarioContext, content []byte) error {
+func createService(client kubernetes.Interface, ctx context.Context, content []byte) error {
 	r := bytes.NewReader(content)
 
 	var s *corev1.Service
@@ -214,22 +213,20 @@ func createService(client kubernetes.Interface, ctx *ScenarioContext, content []
 		return err
 	}
 
-	s.Namespace = ctx.Namespace
+	s.Namespace = NamespaceFromContext(ctx)
 
-	serviceCtx, serviceCancel := context.WithTimeout(context.Background(), 120 * time.Second)
-	defer serviceCancel()
-	_, err := client.CoreV1().Services(s.Namespace).Create(serviceCtx, s, metav1.CreateOptions{})
+	_, err := client.CoreV1().Services(s.Namespace).Create(ctx, s, metav1.CreateOptions{})
 
-	ctx.AddFinalizer(func() error {
-		finalizerCtx, finalizerCancel := context.WithTimeout(context.Background(), DefaultTimeout)
-		defer finalizerCancel()
-		return client.CoreV1().Services(s.Namespace).Delete(finalizerCtx, s.Name, metav1.DeleteOptions{})
+	var finalizers []Finalizer
+	finalizers = append(finalizers, func() error {
+		return client.CoreV1().Services(s.Namespace).Delete(ctx, s.Name, metav1.DeleteOptions{})
 	})
+	ctx = FinalizerIntoContext(ctx, finalizers)
 
 	return err
 }
 
-func createServiceAccount(client kubernetes.Interface, ctx *ScenarioContext, content []byte) error {
+func createServiceAccount(client kubernetes.Interface, ctx context.Context, content []byte) error {
 	r := bytes.NewReader(content)
 
 	var sa *corev1.ServiceAccount
@@ -237,22 +234,20 @@ func createServiceAccount(client kubernetes.Interface, ctx *ScenarioContext, con
 		return err
 	}
 
-	sa.Namespace = ctx.Namespace
+	sa.Namespace = NamespaceFromContext(ctx)
 
-	serviceAccountCtx, serviceAccountCancel := context.WithTimeout(context.Background(), DefaultTimeout)
-	defer serviceAccountCancel()
-	_, err := client.CoreV1().ServiceAccounts(sa.Namespace).Create(serviceAccountCtx, sa, metav1.CreateOptions{})
+	_, err := client.CoreV1().ServiceAccounts(sa.Namespace).Create(ctx, sa, metav1.CreateOptions{})
 
-	ctx.AddFinalizer(func() error {
-		finalizerCtx, finalizerCancel := context.WithTimeout(context.Background(), DefaultTimeout)
-		defer finalizerCancel()
-		return client.CoreV1().ServiceAccounts(sa.Namespace).Delete(finalizerCtx, sa.Name, metav1.DeleteOptions{})
+	var finalizers []Finalizer
+	finalizers = append(finalizers, func() error {
+		return client.CoreV1().ServiceAccounts(sa.Namespace).Delete(ctx, sa.Name, metav1.DeleteOptions{})
 	})
+	ctx = FinalizerIntoContext(ctx, finalizers)
 
 	return err
 }
 
-func createSecret(client kubernetes.Interface, ctx *ScenarioContext, content []byte) error {
+func createSecret(client kubernetes.Interface, ctx context.Context, content []byte) error {
 	r := bytes.NewReader(content)
 
 	var secret *corev1.Secret
@@ -260,22 +255,20 @@ func createSecret(client kubernetes.Interface, ctx *ScenarioContext, content []b
 		return err
 	}
 
-	secret.Namespace = ctx.Namespace
+	secret.Namespace = NamespaceFromContext(ctx)
 
-	createSecretCtx, createSecretCancel := context.WithTimeout(context.Background(), DefaultTimeout)
-	defer createSecretCancel()
-	_, err := client.CoreV1().Secrets(secret.Namespace).Create(createSecretCtx, secret, metav1.CreateOptions{})
+	_, err := client.CoreV1().Secrets(secret.Namespace).Create(ctx, secret, metav1.CreateOptions{})
 
-	ctx.AddFinalizer(func() error {
-		finalizerCtx, finalizerCancel := context.WithTimeout(context.Background(), DefaultTimeout)
-		defer finalizerCancel()
-		return client.CoreV1().Secrets(secret.Namespace).Delete(finalizerCtx, secret.Name, metav1.DeleteOptions{})
+	var finalizers []Finalizer
+	finalizers = append(finalizers, func() error {
+		return client.CoreV1().Secrets(secret.Namespace).Delete(ctx, secret.Name, metav1.DeleteOptions{})
 	})
+	ctx = FinalizerIntoContext(ctx, finalizers)
 
 	return err
 }
 
-func createConfigmap(client kubernetes.Interface, ctx *ScenarioContext, content []byte) error {
+func createConfigmap(client kubernetes.Interface, ctx context.Context, content []byte) error {
 	r := bytes.NewReader(content)
 
 	var configmap *corev1.ConfigMap
@@ -283,29 +276,25 @@ func createConfigmap(client kubernetes.Interface, ctx *ScenarioContext, content 
 		return err
 	}
 
-	configmap.Namespace = ctx.Namespace
+	configmap.Namespace = NamespaceFromContext(ctx)
 
-	createConfigmapCtx, createConfigmapCancel := context.WithTimeout(context.Background(), DefaultTimeout)
-	defer createConfigmapCancel()
-	_, err := client.CoreV1().ConfigMaps(configmap.Namespace).Create(createConfigmapCtx, configmap, metav1.CreateOptions{})
+	_, err := client.CoreV1().ConfigMaps(configmap.Namespace).Create(ctx, configmap, metav1.CreateOptions{})
 
-	ctx.AddFinalizer(func() error {
-		finalizerCtx, finalizerCancel := context.WithTimeout(context.Background(), DefaultTimeout)
-		defer finalizerCancel()
-		return client.CoreV1().ConfigMaps(configmap.Namespace).Delete(finalizerCtx, configmap.Name, metav1.DeleteOptions{})
+	var finalizers []Finalizer
+	finalizers = append(finalizers, func() error {
+		return client.CoreV1().ConfigMaps(configmap.Namespace).Delete(ctx, configmap.Name, metav1.DeleteOptions{})
 	})
+	ctx = FinalizerIntoContext(ctx, finalizers)
 
 	return err
 }
 
 // PodsAreReady waits for a number if replicas matching the given labels to be ready.
 // Returns a func directly (not Setup or Conditions) as it can be used in Given and When steps
-func PodsAreReady(client kubernetes.Interface, replicas int, labels string) func(*ScenarioContext) error {
-	return func(ctx *ScenarioContext) error {
+func PodsAreReady(client kubernetes.Interface, replicas int, labels string) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
 		return wait.Poll(time.Second, time.Minute, func() (bool, error) {
-			listPodsCtx, listPodsCancel := context.WithTimeout(context.Background(), DefaultTimeout)
-			defer listPodsCancel()
-			list, err := client.CoreV1().Pods(ctx.Namespace).List(listPodsCtx, metav1.ListOptions{
+			list, err := client.CoreV1().Pods(NamespaceFromContext(ctx)).List(ctx, metav1.ListOptions{
 				LabelSelector: labels,
 			})
 			if err != nil {
@@ -334,12 +323,10 @@ func PodsAreReady(client kubernetes.Interface, replicas int, labels string) func
 
 // PodsAreGone waits for pods being gone for the given labels.
 // Returns a func directly (not Setup or Conditions) as it can be used in Given and When steps
-func PodsAreGone(client kubernetes.Interface, labels string) func(*ScenarioContext) error {
-	return func(ctx *ScenarioContext) error {
+func PodsAreGone(client kubernetes.Interface, labels string) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
 		return wait.Poll(time.Second, time.Minute, func() (bool, error) {
-			listPodsCtx, listPodsCancel := context.WithTimeout(context.Background(), DefaultTimeout)
-			defer listPodsCancel()
-			list, err := client.CoreV1().Pods(ctx.Namespace).List(listPodsCtx, metav1.ListOptions{
+			list, err := client.CoreV1().Pods(NamespaceFromContext(ctx)).List(ctx, metav1.ListOptions{
 				LabelSelector: labels,
 			})
 
@@ -354,17 +341,16 @@ func PodsAreGone(client kubernetes.Interface, labels string) func(*ScenarioConte
 
 // ServiceIsReady waits for given service to exist and have at least 1 endpoint.
 // Returns a func directly (not Setup or Conditions) as it can be used in Given and When steps
-func ServiceIsReady(client kubernetes.Interface, service string) func(*ScenarioContext) error {
-	return func(ctx *ScenarioContext) error {
+func ServiceIsReady(client kubernetes.Interface, service string) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
 		return wait.Poll(time.Second, time.Minute, func() (bool, error) {
-			reqCtx, reqCancel := context.WithTimeout(context.Background(), 2 * DefaultTimeout)
-			defer reqCancel()
-			_, err := client.CoreV1().Services(ctx.Namespace).Get(reqCtx, service, metav1.GetOptions{})
+			namespace := NamespaceFromContext(ctx)
+			_, err := client.CoreV1().Services(namespace).Get(ctx, service, metav1.GetOptions{})
 			if err != nil {
 				return false, fmt.Errorf("failed to get service: %v", err)
 			}
 
-			endpoints, err := client.CoreV1().Endpoints(ctx.Namespace).Get(reqCtx, service, metav1.GetOptions{})
+			endpoints, err := client.CoreV1().Endpoints(namespace).Get(ctx, service, metav1.GetOptions{})
 			if err != nil {
 				return false, fmt.Errorf("failed to get endpoints: %v", err)
 			}
@@ -401,7 +387,7 @@ func podRunningAndReady(pod corev1.Pod) (bool, error) {
 }
 
 func Sleep(d time.Duration) Condition {
-	return func(ctx *ScenarioContext) error {
+	return func(ctx context.Context) error {
 		time.Sleep(d)
 		return nil
 	}
@@ -414,13 +400,13 @@ type RunOptions struct {
 }
 
 func RunSucceeds(client kubernetes.Interface, image string, name string, command []string, opts *RunOptions) Check {
-	return func(ctx *ScenarioContext) error {
+	return func(ctx context.Context) error {
 		return run(client, ctx, image, name, command, opts)
 	}
 }
 
 func RunFails(client kubernetes.Interface, image string, name string, command []string, opts *RunOptions) Check {
-	return func(ctx *ScenarioContext) error {
+	return func(ctx context.Context) error {
 		err := run(client, ctx, image, name, command, opts)
 		if err == nil {
 			return fmt.Errorf("expected run to fail")
@@ -435,7 +421,7 @@ func RunFails(client kubernetes.Interface, image string, name string, command []
 var errRun = fmt.Errorf("failed to run")
 
 // run the command and return the Check with the container's logs
-func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name string, command []string, opts *RunOptions) error {
+func run(client kubernetes.Interface, ctx context.Context, image string, name string, command []string, opts *RunOptions) error {
 	labels := map[string]string{
 		"app": name,
 	}
@@ -501,10 +487,11 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 	completions := int32(1)
 	activeDeadlineSeconds := int64(60)
 	backoffLimit := int32(10)
+	namespace := NamespaceFromContext(ctx)
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "kube-rbac-proxy-client-",
-			Namespace:    ctx.Namespace,
+			Namespace:    namespace,
 		},
 		Spec: batchv1.JobSpec{
 			Parallelism:           &parallelism,
@@ -515,26 +502,23 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 		},
 	}
 
-	reqCtx, cancel := context.WithTimeout(context.Background(), 2 * DefaultTimeout)
-	defer cancel()
-
-	batch, err := client.BatchV1().Jobs(ctx.Namespace).Create(reqCtx, job, metav1.CreateOptions{})
+	batch, err := client.BatchV1().Jobs(namespace).Create(ctx, job, metav1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to create job: %v", err)
 	}
 
-	ctx.AddFinalizer(func() error {
-		finalizerCtx, finalizerCancel := context.WithTimeout(context.Background(), DefaultTimeout)
-		defer finalizerCancel()
-		err := client.BatchV1().Jobs(ctx.Namespace).Delete(finalizerCtx, batch.Name, metav1.DeleteOptions{})
+	var finalizers []Finalizer
+	finalizers = append(finalizers, func() error {
+		err := client.BatchV1().Jobs(namespace).Delete(ctx, batch.Name, metav1.DeleteOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to delete job: %v", err)
 		}
 
 		return nil
 	})
+	ctx = FinalizerIntoContext(ctx, finalizers)
 
-	watch, err := client.BatchV1().Jobs(ctx.Namespace).Watch(reqCtx, metav1.SingleObject(batch.ObjectMeta))
+	watch, err := client.BatchV1().Jobs(namespace).Watch(ctx, metav1.SingleObject(batch.ObjectMeta))
 	if err != nil {
 		return fmt.Errorf("failed to watch job: %v", err)
 	}
@@ -570,25 +554,21 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 	return nil
 }
 
-func CreateNamespace(client kubernetes.Interface, name string) error {
+func CreateNamespace(client kubernetes.Interface, ctx context.Context) error {
+	namespace := NamespaceFromContext(ctx)
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
+			Name: namespace,
 		},
 	}
 
-	reqCtx, reqCancel := context.WithTimeout(context.Background(), DefaultTimeout)
-	defer reqCancel()
-
-	_, err := client.CoreV1().Namespaces().Create(reqCtx, ns, metav1.CreateOptions{})
+	_, err := client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to create namespace with name %v", name)
+		return fmt.Errorf("failed to create namespace with name %v", namespace)
 	}
 	return nil
 }
 
-func DeleteNamespace(client kubernetes.Interface, name string) error {
-	reqCtx, reqCancel := context.WithTimeout(context.Background(), DefaultTimeout)
-	defer reqCancel()
-	return client.CoreV1().Namespaces().Delete(reqCtx, name, metav1.DeleteOptions{})
+func DeleteNamespace(client kubernetes.Interface, ctx context.Context) error {
+	return client.CoreV1().Namespaces().Delete(ctx, NamespaceFromContext(ctx), metav1.DeleteOptions{})
 }

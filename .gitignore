@@ -2,3 +2,4 @@ _output/
 manifest-tool
 .idea/*
 tmp
+vendor

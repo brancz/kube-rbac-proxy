@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -504,7 +505,7 @@ func testIgnorePaths(s *kubetest.Suite) kubetest.TestSuite {
 }
 
 func ClientSucceeds(client kubernetes.Interface, command string, opts *kubetest.RunOptions) kubetest.Check {
-	return func(ctx *kubetest.ScenarioContext) error {
+	return func(ctx context.Context) error {
 		return kubetest.RunSucceeds(
 			client,
 			"quay.io/brancz/krp-curl:v0.0.2",
@@ -516,7 +517,7 @@ func ClientSucceeds(client kubernetes.Interface, command string, opts *kubetest.
 }
 
 func ClientFails(client kubernetes.Interface, command string, opts *kubetest.RunOptions) kubetest.Check {
-	return func(ctx *kubetest.ScenarioContext) error {
+	return func(ctx context.Context) error {
 		return kubetest.RunFails(
 			client,
 			"quay.io/brancz/krp-curl:v0.0.2",

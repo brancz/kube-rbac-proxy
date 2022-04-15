@@ -17,8 +17,8 @@ limitations under the License.
 package kubetest
 
 import (
+	"context"
 	"testing"
-	"time"
 
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/kubernetes"
@@ -56,26 +56,54 @@ type Scenario struct {
 	Then  Check
 }
 
-type ScenarioContext struct {
+/*type ScenarioContext struct {
 	Namespace string
 	Finalizer []Finalizer
+}*/
+
+func NamespaceFromContext(ctx context.Context) string {
+	return ctx.Value("namespace").(string)
 }
 
-func (ctx *ScenarioContext) AddFinalizer(f Finalizer) {
+func NamespaceIntoContext(ctx context.Context, namespace string) context.Context {
+	return context.WithValue(ctx, "namespace", namespace)
+}
+
+func FinalizerFromContext(ctx context.Context) []Finalizer {
+	return ctx.Value("finalizer").([]Finalizer)
+}
+
+func FinalizerIntoContext(ctx context.Context, finalizer []Finalizer) context.Context {
+	return context.WithValue(ctx, "finalizer", finalizer)
+}
+
+/*func (ctx *ScenarioContext) AddFinalizer(f Finalizer) {
 	ctx.Finalizer = append(ctx.Finalizer, f)
-}
+}*/
 
-type RunOpts func(ctx *ScenarioContext) *ScenarioContext
+type RunOpts func(ctx context.Context) context.Context
 
 func RandomNamespace(client kubernetes.Interface) RunOpts {
-	return func(ctx *ScenarioContext) *ScenarioContext {
-		ctx.Namespace = rand.String(8)
+	return func(ctx context.Context) context.Context {
+		ctx = NamespaceIntoContext(ctx, rand.String(8))
+		var finalizers []Finalizer
+		finalizers = append(finalizers, func() error {
+			return DeleteNamespace(client, ctx)
+		})
+
+		ctx = FinalizerIntoContext(ctx, finalizers)
+
+		/*ctx.Namespace = rand.String(8)
 
 		ctx.AddFinalizer(func() error {
 			return DeleteNamespace(client, ctx.Namespace)
-		})
+		})*/
 
-		if err := CreateNamespace(client, ctx.Namespace); err != nil {
+		/*if err := CreateNamespace(client, ctx.Namespace); err != nil {
+			panic(err)
+		}*/
+		// TODO: change CreateNamespace function signature
+		if err := CreateNamespace(client, ctx); err != nil {
 			panic(err)
 		}
 
@@ -83,24 +111,34 @@ func RandomNamespace(client kubernetes.Interface) RunOpts {
 	}
 }
 
-func Timeout(d time.Duration) RunOpts {
+/*func Timeout(d time.Duration) RunOpts {
 	return func(ctx *ScenarioContext) *ScenarioContext {
 		// TODO
 		return ctx
 	}
-}
+}*/
 
 func (s Scenario) Run(t *testing.T, opts ...RunOpts) bool {
-	ctx := &ScenarioContext{
+	/*ctx := &ScenarioContext{
 		Namespace: "default",
-	}
+	}*/
+	ctx := NamespaceIntoContext(context.Background(), "default")
 
 	for _, o := range opts {
 		o(ctx)
 	}
 
-	defer func(ctx *ScenarioContext) {
+	/*defer func(ctx *ScenarioContext) {
 		for _, f := range ctx.Finalizer {
+			if err := f(); err != nil {
+				panic(err)
+			}
+		}
+	}(ctx)*/
+
+	defer func(ctx context.Context) {
+		finalizers := FinalizerFromContext(ctx)
+		for _, f := range finalizers {
 			if err := f(); err != nil {
 				panic(err)
 			}
@@ -128,10 +166,10 @@ func (s Scenario) Run(t *testing.T, opts ...RunOpts) bool {
 	})
 }
 
-type Setup func(ctx *ScenarioContext) error
+type Setup func(ctx context.Context) error
 
 func Setups(ss ...Setup) Setup {
-	return func(ctx *ScenarioContext) error {
+	return func(ctx context.Context) error {
 		for _, s := range ss {
 			if err := s(ctx); err != nil {
 				return err
@@ -141,10 +179,10 @@ func Setups(ss ...Setup) Setup {
 	}
 }
 
-type Condition func(ctx *ScenarioContext) error
+type Condition func(ctx context.Context) error
 
 func Conditions(cs ...Condition) Condition {
-	return func(ctx *ScenarioContext) error {
+	return func(ctx context.Context) error {
 		for _, c := range cs {
 			if err := c(ctx); err != nil {
 				return err
@@ -154,10 +192,10 @@ func Conditions(cs ...Condition) Condition {
 	}
 }
 
-type Check func(ctx *ScenarioContext) error
+type Check func(ctx context.Context) error
 
 func Checks(cs ...Check) Check {
-	return func(ctx *ScenarioContext) error {
+	return func(ctx context.Context) error {
 		for _, c := range cs {
 			if err := c(ctx); err != nil {
 				return err
