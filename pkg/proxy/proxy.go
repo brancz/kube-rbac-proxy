@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"net/textproto"
 	"strings"
 	"text/template"
 
@@ -187,8 +188,10 @@ func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http
 		}
 	}
 	if n.authzConfig.Rewrites.ByHTTPHeader != nil && n.authzConfig.Rewrites.ByHTTPHeader.Name != "" {
-		if p := r.Header.Get(n.authzConfig.Rewrites.ByHTTPHeader.Name); p != "" {
-			params = append(params, p)
+		mimeHeader := textproto.MIMEHeader(r.Header)
+		mimeKey := textproto.CanonicalMIMEHeaderKey(n.authzConfig.Rewrites.ByHTTPHeader.Name)
+		if ps, ok := mimeHeader[mimeKey]; ok {
+			params = append(params, ps...)
 		}
 	}
 
