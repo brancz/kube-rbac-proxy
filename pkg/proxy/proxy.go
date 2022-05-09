@@ -216,49 +216,6 @@ func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http
 	return allAttrs
 }
 
-// DeepCopy of Proxy Configuration
-func (c *Config) DeepCopy() *Config {
-	res := &Config{
-		Authentication: &authn.AuthnConfig{},
-	}
-
-	if c.Authentication != nil {
-		res.Authentication = &authn.AuthnConfig{}
-
-		if c.Authentication.X509 != nil {
-			res.Authentication.X509 = &authn.X509Config{
-				ClientCAFile: c.Authentication.X509.ClientCAFile,
-			}
-		}
-
-		if c.Authentication.Header != nil {
-			res.Authentication.Header = &authn.AuthnHeaderConfig{
-				Enabled:         c.Authentication.Header.Enabled,
-				UserFieldName:   c.Authentication.Header.UserFieldName,
-				GroupsFieldName: c.Authentication.Header.GroupsFieldName,
-				GroupSeparator:  c.Authentication.Header.GroupSeparator,
-			}
-		}
-	}
-
-	if c.Authorization != nil {
-		if c.Authorization.ResourceAttributes != nil {
-			res.Authorization = &authz.Config{
-				ResourceAttributes: &authz.ResourceAttributes{
-					Namespace:   c.Authorization.ResourceAttributes.Namespace,
-					APIGroup:    c.Authorization.ResourceAttributes.APIGroup,
-					APIVersion:  c.Authorization.ResourceAttributes.APIVersion,
-					Resource:    c.Authorization.ResourceAttributes.Resource,
-					Subresource: c.Authorization.ResourceAttributes.Subresource,
-					Name:        c.Authorization.ResourceAttributes.Name,
-				},
-			}
-		}
-	}
-
-	return res
-}
-
 func templateWithValue(templateString, value string) string {
 	tmpl, _ := template.New("valueTemplate").Parse(templateString)
 	out := bytes.NewBuffer(nil)
