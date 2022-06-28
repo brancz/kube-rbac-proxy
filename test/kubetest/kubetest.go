@@ -57,7 +57,7 @@ type ScenarioContext struct {
 	Finalizer []Finalizer
 }
 
-func (ctx *ScenarioContext) AddFinalizer(f Finalizer) {
+func (ctx *ScenarioContext) AddCleanUp(f Finalizer) {
 	ctx.Finalizer = append(ctx.Finalizer, f)
 }
 
@@ -67,7 +67,7 @@ func RandomNamespace(client kubernetes.Interface) RunOpts {
 	return func(ctx *ScenarioContext) *ScenarioContext {
 		ctx.Namespace = rand.String(8)
 
-		ctx.AddFinalizer(func() error {
+		ctx.AddCleanUp(func() error {
 			return DeleteNamespace(client, ctx.Namespace)
 		})
 
