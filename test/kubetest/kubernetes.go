@@ -184,7 +184,7 @@ func dumpLogs(client kubernetes.Interface, ctx *ScenarioContext, opts metav1.Lis
 				return
 			}
 
-			io.Copy(os.Stdout, stream)
+			_, _ = io.Copy(os.Stdout, stream)
 		}
 	}
 }
