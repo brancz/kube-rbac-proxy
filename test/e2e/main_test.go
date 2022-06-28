@@ -22,12 +22,14 @@ import (
 	"os"
 	"testing"
 
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/brancz/kube-rbac-proxy/test/kubetest"
 )
 
-// Sadly there's no way to pass Suite from TestMain to Test,
+// Sadly there's no way to pass the k8s client from TestMain to Test,
 // so we need this global instance
-var suite *kubetest.Suite
+var client kubernetes.Interface
 
 // TestMain adds the kubeconfig flag to our tests
 func TestMain(m *testing.M) {
@@ -39,7 +41,7 @@ func TestMain(m *testing.M) {
 	flag.Parse()
 
 	var err error
-	suite, err = kubetest.NewSuiteFromKubeconfig(*kubeconfig)
+	client, err = kubetest.NewClientFromKubeconfig(*kubeconfig)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -49,14 +51,14 @@ func TestMain(m *testing.M) {
 
 func Test(t *testing.T) {
 	tests := map[string]kubetest.TestSuite{
-		"Basics":             testBasics(suite),
-		"H2CUpstream":        testH2CUpstream(suite),
-		"ClientCertificates": testClientCertificates(suite),
-		"TokenAudience":      testTokenAudience(suite),
-		"AllowPath":          testAllowPathsRegexp(suite),
-		"IgnorePath":         testIgnorePaths(suite),
-		"TLS":                testTLS(suite),
-		"StaticAuthorizer":   testStaticAuthorizer(suite),
+		"Basics":             testBasics(client),
+		"H2CUpstream":        testH2CUpstream(client),
+		"ClientCertificates": testClientCertificates(client),
+		"TokenAudience":      testTokenAudience(client),
+		"AllowPath":          testAllowPathsRegexp(client),
+		"IgnorePath":         testIgnorePaths(client),
+		"TLS":                testTLS(client),
+		"StaticAuthorizer":   testStaticAuthorizer(client),
 	}
 
 	for name, tc := range tests {
