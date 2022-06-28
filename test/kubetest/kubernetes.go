@@ -30,7 +30,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -525,22 +524,4 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 	}
 
 	return nil
-}
-
-func CreateNamespace(client kubernetes.Interface, name string) error {
-	ns := &v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
-	}
-
-	_, err := client.CoreV1().Namespaces().Create(context.TODO(), ns, metav1.CreateOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to create namespace with name %v", name)
-	}
-	return nil
-}
-
-func DeleteNamespace(client kubernetes.Interface, name string) error {
-	return client.CoreV1().Namespaces().Delete(context.TODO(), name, metav1.DeleteOptions{})
 }

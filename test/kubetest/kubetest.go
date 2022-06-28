@@ -18,9 +18,7 @@ package kubetest
 
 import (
 	"testing"
-	"time"
 
-	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -54,49 +52,20 @@ type Scenario struct {
 
 type ScenarioContext struct {
 	Namespace string
-	Finalizer []Finalizer
+	CleanUp   []CleanUp
 }
 
-func (ctx *ScenarioContext) AddCleanUp(f Finalizer) {
-	ctx.Finalizer = append(ctx.Finalizer, f)
+func (ctx *ScenarioContext) AddCleanUp(f CleanUp) {
+	ctx.CleanUp = append(ctx.CleanUp, f)
 }
 
-type RunOpts func(ctx *ScenarioContext) *ScenarioContext
-
-func RandomNamespace(client kubernetes.Interface) RunOpts {
-	return func(ctx *ScenarioContext) *ScenarioContext {
-		ctx.Namespace = rand.String(8)
-
-		ctx.AddCleanUp(func() error {
-			return DeleteNamespace(client, ctx.Namespace)
-		})
-
-		if err := CreateNamespace(client, ctx.Namespace); err != nil {
-			panic(err)
-		}
-
-		return ctx
-	}
-}
-
-func Timeout(d time.Duration) RunOpts {
-	return func(ctx *ScenarioContext) *ScenarioContext {
-		// TODO
-		return ctx
-	}
-}
-
-func (s Scenario) Run(t *testing.T, opts ...RunOpts) bool {
+func (s Scenario) Run(t *testing.T) bool {
 	ctx := &ScenarioContext{
 		Namespace: "default",
 	}
 
-	for _, o := range opts {
-		o(ctx)
-	}
-
 	defer func(ctx *ScenarioContext) {
-		for _, f := range ctx.Finalizer {
+		for _, f := range ctx.CleanUp {
 			if err := f(); err != nil {
 				panic(err)
 			}
@@ -163,4 +132,4 @@ func Checks(cs ...Check) Check {
 	}
 }
 
-type Finalizer func() error
+type CleanUp func() error
