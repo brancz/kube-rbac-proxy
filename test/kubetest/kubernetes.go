@@ -37,7 +37,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func CreatedManifests(client kubernetes.Interface, paths ...string) Setup {
+func CreatedManifests(client kubernetes.Interface, paths ...string) Action {
 	return func(ctx *ScenarioContext) error {
 		for _, path := range paths {
 			content, err := ioutil.ReadFile(path)
@@ -361,26 +361,19 @@ func podRunningAndReady(pod corev1.Pod) (bool, error) {
 	return false, nil
 }
 
-func Sleep(d time.Duration) Condition {
-	return func(ctx *ScenarioContext) error {
-		time.Sleep(d)
-		return nil
-	}
-}
-
 type RunOptions struct {
 	ServiceAccount     string
 	TokenAudience      string
 	ClientCertificates bool
 }
 
-func RunSucceeds(client kubernetes.Interface, image string, name string, command []string, opts *RunOptions) Check {
+func RunSucceeds(client kubernetes.Interface, image string, name string, command []string, opts *RunOptions) Action {
 	return func(ctx *ScenarioContext) error {
 		return run(client, ctx, image, name, command, opts)
 	}
 }
 
-func RunFails(client kubernetes.Interface, image string, name string, command []string, opts *RunOptions) Check {
+func RunFails(client kubernetes.Interface, image string, name string, command []string, opts *RunOptions) Action {
 	return func(ctx *ScenarioContext) error {
 		err := run(client, ctx, image, name, command, opts)
 		if err == nil {

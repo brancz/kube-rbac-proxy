@@ -45,18 +45,9 @@ type Scenario struct {
 	Name        string
 	Description string
 
-	Given Setup
-	When  Condition
-	Then  Check
-}
-
-type ScenarioContext struct {
-	Namespace string
-	CleanUp   []CleanUp
-}
-
-func (ctx *ScenarioContext) AddCleanUp(f CleanUp) {
-	ctx.CleanUp = append(ctx.CleanUp, f)
+	Given Action
+	When  Action
+	Then  Action
 }
 
 func (s Scenario) Run(t *testing.T) bool {
@@ -93,9 +84,20 @@ func (s Scenario) Run(t *testing.T) bool {
 	})
 }
 
-type Setup func(ctx *ScenarioContext) error
+type ScenarioContext struct {
+	Namespace string
+	CleanUp   []CleanUp
+}
 
-func Setups(ss ...Setup) Setup {
+func (ctx *ScenarioContext) AddCleanUp(f CleanUp) {
+	ctx.CleanUp = append(ctx.CleanUp, f)
+}
+
+type CleanUp func() error
+
+type Action func(ctx *ScenarioContext) error
+
+func Actions(ss ...Action) Action {
 	return func(ctx *ScenarioContext) error {
 		for _, s := range ss {
 			if err := s(ctx); err != nil {
@@ -105,31 +107,3 @@ func Setups(ss ...Setup) Setup {
 		return nil
 	}
 }
-
-type Condition func(ctx *ScenarioContext) error
-
-func Conditions(cs ...Condition) Condition {
-	return func(ctx *ScenarioContext) error {
-		for _, c := range cs {
-			if err := c(ctx); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-}
-
-type Check func(ctx *ScenarioContext) error
-
-func Checks(cs ...Check) Check {
-	return func(ctx *ScenarioContext) error {
-		for _, c := range cs {
-			if err := c(ctx); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-}
-
-type CleanUp func() error

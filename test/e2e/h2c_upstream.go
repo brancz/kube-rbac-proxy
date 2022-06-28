@@ -31,7 +31,7 @@ func testH2CUpstream(client kubernetes.Interface) kubetest.TestSuite {
 		kubetest.Scenario{
 			Name: "With H2C Upstream",
 
-			Given: kubetest.Setups(
+			Given: kubetest.Actions(
 				kubetest.CreatedManifests(
 					client,
 					"h2c-upstream/clusterRole.yaml",
@@ -43,7 +43,7 @@ func testH2CUpstream(client kubernetes.Interface) kubetest.TestSuite {
 					"h2c-upstream/clusterRoleBinding-client.yaml",
 				),
 			),
-			When: kubetest.Conditions(
+			When: kubetest.Actions(
 				kubetest.PodsAreReady(
 					client,
 					1,
@@ -54,7 +54,7 @@ func testH2CUpstream(client kubernetes.Interface) kubetest.TestSuite {
 					"kube-rbac-proxy",
 				),
 			),
-			Then: kubetest.Checks(
+			Then: kubetest.Actions(
 				ClientSucceeds(
 					client,
 					command,

@@ -31,12 +31,12 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 
 		for _, tc := range []struct {
 			name  string
-			given []kubetest.Setup
-			check []kubetest.Check
+			given kubetest.Action
+			check kubetest.Action
 		}{
 			{
 				name: "resource/namespace/metrics/query rewrite/granted",
-				given: []kubetest.Setup{
+				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
 						"static-auth/configmap-resource.yaml",
@@ -46,18 +46,18 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 						"static-auth/service.yaml",
 						"static-auth/serviceAccount.yaml",
 					),
-				},
-				check: []kubetest.Check{
+				),
+				check: kubetest.Actions(
 					ClientSucceeds(
 						client,
 						fmt.Sprintf(command, "/metrics?namespace=default"),
 						nil,
 					),
-				},
+				),
 			},
 			{
 				name: "resource/namespace/metrics/query rewrite/forbidden",
-				given: []kubetest.Setup{
+				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
 						"static-auth/configmap-resource.yaml",
@@ -67,18 +67,18 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 						"static-auth/service.yaml",
 						"static-auth/serviceAccount.yaml",
 					),
-				},
-				check: []kubetest.Check{
+				),
+				check: kubetest.Actions(
 					ClientFails(
 						client,
 						fmt.Sprintf(command, "/metrics?namespace=forbidden"),
 						nil,
 					),
-				},
+				),
 			},
 			{
 				name: "non-resource/get/metrics/granted",
-				given: []kubetest.Setup{
+				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
 						"static-auth/configmap-non-resource.yaml",
@@ -88,18 +88,18 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 						"static-auth/service.yaml",
 						"static-auth/serviceAccount.yaml",
 					),
-				},
-				check: []kubetest.Check{
+				),
+				check: kubetest.Actions(
 					ClientSucceeds(
 						client,
 						fmt.Sprintf(command, "/metrics"),
 						nil,
 					),
-				},
+				),
 			},
 			{
 				name: "non-resource/get/metrics/forbidden",
-				given: []kubetest.Setup{
+				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
 						"static-auth/configmap-non-resource.yaml",
@@ -109,20 +109,20 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 						"static-auth/service.yaml",
 						"static-auth/serviceAccount.yaml",
 					),
-				},
-				check: []kubetest.Check{
+				),
+				check: kubetest.Actions(
 					ClientFails(
 						client,
 						fmt.Sprintf(command, "/forbidden"),
 						nil,
 					),
-				},
+				),
 			},
 		} {
 			kubetest.Scenario{
 				Name:  tc.name,
-				Given: kubetest.Setups(tc.given...),
-				When: kubetest.Conditions(
+				Given: kubetest.Actions(tc.given),
+				When: kubetest.Actions(
 					kubetest.PodsAreReady(
 						client,
 						1,
@@ -133,7 +133,7 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 						"kube-rbac-proxy",
 					),
 				),
-				Then: kubetest.Checks(tc.check...),
+				Then: kubetest.Actions(tc.check),
 			}.Run(t)
 		}
 	}

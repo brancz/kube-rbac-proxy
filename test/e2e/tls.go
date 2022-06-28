@@ -53,7 +53,7 @@ func testTLS(client kubernetes.Interface) kubetest.TestSuite {
 			kubetest.Scenario{
 				Name: tc.name,
 
-				Given: kubetest.Setups(
+				Given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
 						"basics/clusterRole.yaml",
@@ -66,7 +66,7 @@ func testTLS(client kubernetes.Interface) kubetest.TestSuite {
 						"basics/clusterRoleBinding-client.yaml",
 					),
 				),
-				When: kubetest.Conditions(
+				When: kubetest.Actions(
 					kubetest.PodsAreReady(
 						client,
 						1,
@@ -77,7 +77,7 @@ func testTLS(client kubernetes.Interface) kubetest.TestSuite {
 						"kube-rbac-proxy",
 					),
 				),
-				Then: kubetest.Checks(
+				Then: kubetest.Actions(
 					ClientSucceeds(
 						client,
 						fmt.Sprintf(command, tc.tlsFlag),
