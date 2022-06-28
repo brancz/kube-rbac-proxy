@@ -127,7 +127,7 @@ type krpAuthorizerAttributesGetter struct {
 
 // GetRequestAttributes populates authorizer attributes for the requests to kube-rbac-proxy.
 func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http.Request) []authorizer.Attributes {
-	apiVerb := ""
+	apiVerb := "*"
 	switch r.Method {
 	case "POST":
 		apiVerb = "create"
