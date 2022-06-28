@@ -20,11 +20,12 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/brancz/kube-rbac-proxy/test/kubetest"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/brancz/kube-rbac-proxy/test/kubetest"
 )
 
-func testBasics(s *kubetest.Suite) kubetest.TestSuite {
+func testBasics(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
 
@@ -37,7 +38,7 @@ func testBasics(s *kubetest.Suite) kubetest.TestSuite {
 
 			Given: kubetest.Setups(
 				kubetest.CreatedManifests(
-					s.KubeClient,
+					client,
 					"basics/clusterRole.yaml",
 					"basics/clusterRoleBinding.yaml",
 					"basics/deployment.yaml",
@@ -47,18 +48,18 @@ func testBasics(s *kubetest.Suite) kubetest.TestSuite {
 			),
 			When: kubetest.Conditions(
 				kubetest.PodsAreReady(
-					s.KubeClient,
+					client,
 					1,
 					"app=kube-rbac-proxy",
 				),
 				kubetest.ServiceIsReady(
-					s.KubeClient,
+					client,
 					"kube-rbac-proxy",
 				),
 			),
 			Then: kubetest.Checks(
 				ClientFails(
-					s.KubeClient,
+					client,
 					command,
 					nil,
 				),
@@ -74,7 +75,7 @@ func testBasics(s *kubetest.Suite) kubetest.TestSuite {
 
 			Given: kubetest.Setups(
 				kubetest.CreatedManifests(
-					s.KubeClient,
+					client,
 					"basics/clusterRole.yaml",
 					"basics/clusterRoleBinding.yaml",
 					"basics/deployment.yaml",
@@ -87,18 +88,18 @@ func testBasics(s *kubetest.Suite) kubetest.TestSuite {
 			),
 			When: kubetest.Conditions(
 				kubetest.PodsAreReady(
-					s.KubeClient,
+					client,
 					1,
 					"app=kube-rbac-proxy",
 				),
 				kubetest.ServiceIsReady(
-					s.KubeClient,
+					client,
 					"kube-rbac-proxy",
 				),
 			),
 			Then: kubetest.Checks(
 				ClientSucceeds(
-					s.KubeClient,
+					client,
 					command,
 					nil,
 				),
@@ -107,7 +108,7 @@ func testBasics(s *kubetest.Suite) kubetest.TestSuite {
 	}
 }
 
-func testTokenAudience(s *kubetest.Suite) kubetest.TestSuite {
+func testTokenAudience(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/tokens/requestedtoken)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
 
@@ -120,7 +121,7 @@ func testTokenAudience(s *kubetest.Suite) kubetest.TestSuite {
 
 			Given: kubetest.Setups(
 				kubetest.CreatedManifests(
-					s.KubeClient,
+					client,
 					"tokenrequest/clusterRole.yaml",
 					"tokenrequest/clusterRoleBinding.yaml",
 					"tokenrequest/deployment.yaml",
@@ -132,18 +133,18 @@ func testTokenAudience(s *kubetest.Suite) kubetest.TestSuite {
 			),
 			When: kubetest.Conditions(
 				kubetest.PodsAreReady(
-					s.KubeClient,
+					client,
 					1,
 					"app=kube-rbac-proxy",
 				),
 				kubetest.ServiceIsReady(
-					s.KubeClient,
+					client,
 					"kube-rbac-proxy",
 				),
 			),
 			Then: kubetest.Checks(
 				ClientFails(
-					s.KubeClient,
+					client,
 					command,
 					&kubetest.RunOptions{TokenAudience: "wrong-audience"},
 				),
@@ -159,7 +160,7 @@ func testTokenAudience(s *kubetest.Suite) kubetest.TestSuite {
 
 			Given: kubetest.Setups(
 				kubetest.CreatedManifests(
-					s.KubeClient,
+					client,
 					"tokenrequest/clusterRole.yaml",
 					"tokenrequest/clusterRoleBinding.yaml",
 					"tokenrequest/deployment.yaml",
@@ -171,18 +172,18 @@ func testTokenAudience(s *kubetest.Suite) kubetest.TestSuite {
 			),
 			When: kubetest.Conditions(
 				kubetest.PodsAreReady(
-					s.KubeClient,
+					client,
 					1,
 					"app=kube-rbac-proxy",
 				),
 				kubetest.ServiceIsReady(
-					s.KubeClient,
+					client,
 					"kube-rbac-proxy",
 				),
 			),
 			Then: kubetest.Checks(
 				ClientSucceeds(
-					s.KubeClient,
+					client,
 					command,
 					&kubetest.RunOptions{TokenAudience: "kube-rbac-proxy"},
 				),
@@ -191,7 +192,7 @@ func testTokenAudience(s *kubetest.Suite) kubetest.TestSuite {
 	}
 }
 
-func testClientCertificates(s *kubetest.Suite) kubetest.TestSuite {
+func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `curl --connect-timeout 5 -v -s -k --fail --cert /certs/tls.crt --key /certs/tls.key https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
 
@@ -204,7 +205,7 @@ func testClientCertificates(s *kubetest.Suite) kubetest.TestSuite {
 
 			Given: kubetest.Setups(
 				kubetest.CreatedManifests(
-					s.KubeClient,
+					client,
 					"clientcertificates/certificate.yaml",
 					"clientcertificates/clusterRole.yaml",
 					"clientcertificates/clusterRoleBinding.yaml",
@@ -215,18 +216,18 @@ func testClientCertificates(s *kubetest.Suite) kubetest.TestSuite {
 			),
 			When: kubetest.Conditions(
 				kubetest.PodsAreReady(
-					s.KubeClient,
+					client,
 					1,
 					"app=kube-rbac-proxy",
 				),
 				kubetest.ServiceIsReady(
-					s.KubeClient,
+					client,
 					"kube-rbac-proxy",
 				),
 			),
 			Then: kubetest.Checks(
 				ClientFails(
-					s.KubeClient,
+					client,
 					command,
 					&kubetest.RunOptions{ClientCertificates: true},
 				),
@@ -242,7 +243,7 @@ func testClientCertificates(s *kubetest.Suite) kubetest.TestSuite {
 
 			Given: kubetest.Setups(
 				kubetest.CreatedManifests(
-					s.KubeClient,
+					client,
 					"clientcertificates/certificate.yaml",
 					"clientcertificates/clusterRole.yaml",
 					"clientcertificates/clusterRoleBinding.yaml",
@@ -255,18 +256,18 @@ func testClientCertificates(s *kubetest.Suite) kubetest.TestSuite {
 			),
 			When: kubetest.Conditions(
 				kubetest.PodsAreReady(
-					s.KubeClient,
+					client,
 					1,
 					"app=kube-rbac-proxy",
 				),
 				kubetest.ServiceIsReady(
-					s.KubeClient,
+					client,
 					"kube-rbac-proxy",
 				),
 			),
 			Then: kubetest.Checks(
 				ClientSucceeds(
-					s.KubeClient,
+					client,
 					command,
 					&kubetest.RunOptions{ClientCertificates: true},
 				),
@@ -282,7 +283,7 @@ func testClientCertificates(s *kubetest.Suite) kubetest.TestSuite {
 
 			Given: kubetest.Setups(
 				kubetest.CreatedManifests(
-					s.KubeClient,
+					client,
 					"clientcertificates/certificate.yaml",
 					"clientcertificates/clusterRole.yaml",
 					"clientcertificates/clusterRoleBinding.yaml",
@@ -295,18 +296,18 @@ func testClientCertificates(s *kubetest.Suite) kubetest.TestSuite {
 			),
 			When: kubetest.Conditions(
 				kubetest.PodsAreReady(
-					s.KubeClient,
+					client,
 					1,
 					"app=kube-rbac-proxy",
 				),
 				kubetest.ServiceIsReady(
-					s.KubeClient,
+					client,
 					"kube-rbac-proxy",
 				),
 			),
 			Then: kubetest.Checks(
 				ClientFails(
-					s.KubeClient,
+					client,
 					command,
 					&kubetest.RunOptions{ClientCertificates: true},
 				),
@@ -315,7 +316,7 @@ func testClientCertificates(s *kubetest.Suite) kubetest.TestSuite {
 	}
 }
 
-func testAllowPathsRegexp(s *kubetest.Suite) kubetest.TestSuite {
+func testAllowPathsRegexp(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `STATUS_CODE=$(curl --connect-timeout 5 -o /dev/null -v -s -k --write-out "%%{http_code}" -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443%s); if [[ "$STATUS_CODE" != %d ]]; then echo "expecting %d status code, got $STATUS_CODE instead" > /proc/self/fd/2; exit 1; fi`
 
@@ -328,7 +329,7 @@ func testAllowPathsRegexp(s *kubetest.Suite) kubetest.TestSuite {
 
 			Given: kubetest.Setups(
 				kubetest.CreatedManifests(
-					s.KubeClient,
+					client,
 					"allowpaths/clusterRole.yaml",
 					"allowpaths/clusterRoleBinding.yaml",
 					"allowpaths/deployment.yaml",
@@ -340,23 +341,23 @@ func testAllowPathsRegexp(s *kubetest.Suite) kubetest.TestSuite {
 			),
 			When: kubetest.Conditions(
 				kubetest.PodsAreReady(
-					s.KubeClient,
+					client,
 					1,
 					"app=kube-rbac-proxy",
 				),
 				kubetest.ServiceIsReady(
-					s.KubeClient,
+					client,
 					"kube-rbac-proxy",
 				),
 			),
 			Then: kubetest.Checks(
 				ClientSucceeds(
-					s.KubeClient,
+					client,
 					fmt.Sprintf(command, "/", 404, 404),
 					nil,
 				),
 				ClientSucceeds(
-					s.KubeClient,
+					client,
 					fmt.Sprintf(command, "/api/v1/label/name", 404, 404),
 					nil,
 				),
@@ -372,7 +373,7 @@ func testAllowPathsRegexp(s *kubetest.Suite) kubetest.TestSuite {
 
 			Given: kubetest.Setups(
 				kubetest.CreatedManifests(
-					s.KubeClient,
+					client,
 					"allowpaths/clusterRole.yaml",
 					"allowpaths/clusterRoleBinding.yaml",
 					"allowpaths/deployment.yaml",
@@ -384,23 +385,23 @@ func testAllowPathsRegexp(s *kubetest.Suite) kubetest.TestSuite {
 			),
 			When: kubetest.Conditions(
 				kubetest.PodsAreReady(
-					s.KubeClient,
+					client,
 					1,
 					"app=kube-rbac-proxy",
 				),
 				kubetest.ServiceIsReady(
-					s.KubeClient,
+					client,
 					"kube-rbac-proxy",
 				),
 			),
 			Then: kubetest.Checks(
 				ClientSucceeds(
-					s.KubeClient,
+					client,
 					fmt.Sprintf(command, "/metrics", 200, 200),
 					nil,
 				),
 				ClientSucceeds(
-					s.KubeClient,
+					client,
 					fmt.Sprintf(command, "/api/v1/label/job/values", 200, 200),
 					nil,
 				),
@@ -409,7 +410,7 @@ func testAllowPathsRegexp(s *kubetest.Suite) kubetest.TestSuite {
 	}
 }
 
-func testIgnorePaths(s *kubetest.Suite) kubetest.TestSuite {
+func testIgnorePaths(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		commandWithoutAuth := `STATUS_CODE=$(curl --connect-timeout 5 -o /dev/null -v -s -k --write-out "%%{http_code}" https://kube-rbac-proxy.default.svc.cluster.local:8443%s); if [[ "$STATUS_CODE" != %d ]]; then echo "expecting %d status code, got $STATUS_CODE instead" > /proc/self/fd/2; exit 1; fi`
 
@@ -422,7 +423,7 @@ func testIgnorePaths(s *kubetest.Suite) kubetest.TestSuite {
 
 			Given: kubetest.Setups(
 				kubetest.CreatedManifests(
-					s.KubeClient,
+					client,
 					"ignorepaths/clusterRole.yaml",
 					"ignorepaths/clusterRoleBinding.yaml",
 					"ignorepaths/deployment.yaml",
@@ -434,23 +435,23 @@ func testIgnorePaths(s *kubetest.Suite) kubetest.TestSuite {
 			),
 			When: kubetest.Conditions(
 				kubetest.PodsAreReady(
-					s.KubeClient,
+					client,
 					1,
 					"app=kube-rbac-proxy",
 				),
 				kubetest.ServiceIsReady(
-					s.KubeClient,
+					client,
 					"kube-rbac-proxy",
 				),
 			),
 			Then: kubetest.Checks(
 				ClientSucceeds(
-					s.KubeClient,
+					client,
 					fmt.Sprintf(commandWithoutAuth, "/metrics", 200, 200),
 					nil,
 				),
 				ClientSucceeds(
-					s.KubeClient,
+					client,
 					fmt.Sprintf(commandWithoutAuth, "/api/v1/labels", 200, 200),
 					nil,
 				),
@@ -466,7 +467,7 @@ func testIgnorePaths(s *kubetest.Suite) kubetest.TestSuite {
 
 			Given: kubetest.Setups(
 				kubetest.CreatedManifests(
-					s.KubeClient,
+					client,
 					"ignorepaths/clusterRole.yaml",
 					"ignorepaths/clusterRoleBinding.yaml",
 					"ignorepaths/deployment.yaml",
@@ -478,23 +479,23 @@ func testIgnorePaths(s *kubetest.Suite) kubetest.TestSuite {
 			),
 			When: kubetest.Conditions(
 				kubetest.PodsAreReady(
-					s.KubeClient,
+					client,
 					1,
 					"app=kube-rbac-proxy",
 				),
 				kubetest.ServiceIsReady(
-					s.KubeClient,
+					client,
 					"kube-rbac-proxy",
 				),
 			),
 			Then: kubetest.Checks(
 				ClientSucceeds(
-					s.KubeClient,
+					client,
 					fmt.Sprintf(commandWithoutAuth, "/", 401, 401),
 					nil,
 				),
 				ClientSucceeds(
-					s.KubeClient,
+					client,
 					fmt.Sprintf(commandWithoutAuth, "/api/v1/label/job/values", 401, 401),
 					nil,
 				),

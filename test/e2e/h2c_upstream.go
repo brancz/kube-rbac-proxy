@@ -19,10 +19,12 @@ package e2e
 import (
 	"testing"
 
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/brancz/kube-rbac-proxy/test/kubetest"
 )
 
-func testH2CUpstream(s *kubetest.Suite) kubetest.TestSuite {
+func testH2CUpstream(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
 
@@ -31,7 +33,7 @@ func testH2CUpstream(s *kubetest.Suite) kubetest.TestSuite {
 
 			Given: kubetest.Setups(
 				kubetest.CreatedManifests(
-					s.KubeClient,
+					client,
 					"h2c-upstream/clusterRole.yaml",
 					"h2c-upstream/clusterRoleBinding.yaml",
 					"h2c-upstream/deployment.yaml",
@@ -43,18 +45,18 @@ func testH2CUpstream(s *kubetest.Suite) kubetest.TestSuite {
 			),
 			When: kubetest.Conditions(
 				kubetest.PodsAreReady(
-					s.KubeClient,
+					client,
 					1,
 					"app=kube-rbac-proxy",
 				),
 				kubetest.ServiceIsReady(
-					s.KubeClient,
+					client,
 					"kube-rbac-proxy",
 				),
 			),
 			Then: kubetest.Checks(
 				ClientSucceeds(
-					s.KubeClient,
+					client,
 					command,
 					nil,
 				),

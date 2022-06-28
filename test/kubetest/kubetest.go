@@ -25,11 +25,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-type Suite struct {
-	KubeClient kubernetes.Interface
-}
-
-func NewSuiteFromKubeconfig(path string) (*Suite, error) {
+func NewClientFromKubeconfig(path string) (kubernetes.Interface, error) {
 	config, err := clientcmd.BuildConfigFromFlags("", path)
 	if err != nil {
 		return nil, err
@@ -40,7 +36,7 @@ func NewSuiteFromKubeconfig(path string) (*Suite, error) {
 		return nil, err
 	}
 
-	return &Suite{KubeClient: client}, nil
+	return client, nil
 }
 
 type TestSuite func(t *testing.T)
