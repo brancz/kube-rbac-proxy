@@ -78,7 +78,7 @@ func testTLS(client kubernetes.Interface) kubetest.TestSuite {
 					),
 				),
 				Then: kubetest.Actions(
-					ClientSucceeds(
+					kubetest.ClientSucceeds(
 						client,
 						fmt.Sprintf(command, tc.tlsFlag),
 						nil,

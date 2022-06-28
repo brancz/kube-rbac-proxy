@@ -58,7 +58,7 @@ func testBasics(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			),
 			Then: kubetest.Actions(
-				ClientFails(
+				kubetest.ClientFails(
 					client,
 					command,
 					nil,
@@ -98,7 +98,7 @@ func testBasics(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			),
 			Then: kubetest.Actions(
-				ClientSucceeds(
+				kubetest.ClientSucceeds(
 					client,
 					command,
 					nil,
@@ -143,7 +143,7 @@ func testTokenAudience(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			),
 			Then: kubetest.Actions(
-				ClientFails(
+				kubetest.ClientFails(
 					client,
 					command,
 					&kubetest.RunOptions{TokenAudience: "wrong-audience"},
@@ -182,7 +182,7 @@ func testTokenAudience(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			),
 			Then: kubetest.Actions(
-				ClientSucceeds(
+				kubetest.ClientSucceeds(
 					client,
 					command,
 					&kubetest.RunOptions{TokenAudience: "kube-rbac-proxy"},
@@ -226,7 +226,7 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			),
 			Then: kubetest.Actions(
-				ClientFails(
+				kubetest.ClientFails(
 					client,
 					command,
 					&kubetest.RunOptions{ClientCertificates: true},
@@ -266,7 +266,7 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			),
 			Then: kubetest.Actions(
-				ClientSucceeds(
+				kubetest.ClientSucceeds(
 					client,
 					command,
 					&kubetest.RunOptions{ClientCertificates: true},
@@ -306,7 +306,7 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			),
 			Then: kubetest.Actions(
-				ClientFails(
+				kubetest.ClientFails(
 					client,
 					command,
 					&kubetest.RunOptions{ClientCertificates: true},
@@ -351,12 +351,12 @@ func testAllowPathsRegexp(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			),
 			Then: kubetest.Actions(
-				ClientSucceeds(
+				kubetest.ClientSucceeds(
 					client,
 					fmt.Sprintf(command, "/", 404, 404),
 					nil,
 				),
-				ClientSucceeds(
+				kubetest.ClientSucceeds(
 					client,
 					fmt.Sprintf(command, "/api/v1/label/name", 404, 404),
 					nil,
@@ -395,12 +395,12 @@ func testAllowPathsRegexp(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			),
 			Then: kubetest.Actions(
-				ClientSucceeds(
+				kubetest.ClientSucceeds(
 					client,
 					fmt.Sprintf(command, "/metrics", 200, 200),
 					nil,
 				),
-				ClientSucceeds(
+				kubetest.ClientSucceeds(
 					client,
 					fmt.Sprintf(command, "/api/v1/label/job/values", 200, 200),
 					nil,
@@ -445,12 +445,12 @@ func testIgnorePaths(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			),
 			Then: kubetest.Actions(
-				ClientSucceeds(
+				kubetest.ClientSucceeds(
 					client,
 					fmt.Sprintf(commandWithoutAuth, "/metrics", 200, 200),
 					nil,
 				),
-				ClientSucceeds(
+				kubetest.ClientSucceeds(
 					client,
 					fmt.Sprintf(commandWithoutAuth, "/api/v1/labels", 200, 200),
 					nil,
@@ -489,41 +489,17 @@ func testIgnorePaths(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			),
 			Then: kubetest.Actions(
-				ClientSucceeds(
+				kubetest.ClientSucceeds(
 					client,
 					fmt.Sprintf(commandWithoutAuth, "/", 401, 401),
 					nil,
 				),
-				ClientSucceeds(
+				kubetest.ClientSucceeds(
 					client,
 					fmt.Sprintf(commandWithoutAuth, "/api/v1/label/job/values", 401, 401),
 					nil,
 				),
 			),
 		}.Run(t)
-	}
-}
-
-func ClientSucceeds(client kubernetes.Interface, command string, opts *kubetest.RunOptions) kubetest.Action {
-	return func(ctx *kubetest.ScenarioContext) error {
-		return kubetest.RunSucceeds(
-			client,
-			"quay.io/brancz/krp-curl:v0.0.2",
-			"kube-rbac-proxy-client",
-			[]string{"/bin/sh", "-c", command},
-			opts,
-		)(ctx)
-	}
-}
-
-func ClientFails(client kubernetes.Interface, command string, opts *kubetest.RunOptions) kubetest.Action {
-	return func(ctx *kubetest.ScenarioContext) error {
-		return kubetest.RunFails(
-			client,
-			"quay.io/brancz/krp-curl:v0.0.2",
-			"kube-rbac-proxy-client",
-			[]string{"/bin/sh", "-c", command},
-			opts,
-		)(ctx)
 	}
 }

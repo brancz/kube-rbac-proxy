@@ -48,7 +48,7 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 					),
 				),
 				check: kubetest.Actions(
-					ClientSucceeds(
+					kubetest.ClientSucceeds(
 						client,
 						fmt.Sprintf(command, "/metrics?namespace=default"),
 						nil,
@@ -69,7 +69,7 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 					),
 				),
 				check: kubetest.Actions(
-					ClientFails(
+					kubetest.ClientFails(
 						client,
 						fmt.Sprintf(command, "/metrics?namespace=forbidden"),
 						nil,
@@ -90,7 +90,7 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 					),
 				),
 				check: kubetest.Actions(
-					ClientSucceeds(
+					kubetest.ClientSucceeds(
 						client,
 						fmt.Sprintf(command, "/metrics"),
 						nil,
@@ -111,7 +111,7 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 					),
 				),
 				check: kubetest.Actions(
-					ClientFails(
+					kubetest.ClientFails(
 						client,
 						fmt.Sprintf(command, "/forbidden"),
 						nil,

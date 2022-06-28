@@ -55,7 +55,7 @@ func testH2CUpstream(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			),
 			Then: kubetest.Actions(
-				ClientSucceeds(
+				kubetest.ClientSucceeds(
 					client,
 					command,
 					nil,
