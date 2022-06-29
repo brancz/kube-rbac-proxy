@@ -1,3 +1,10 @@
+## 0.13.0 / 2022-06-29
+
+* [ENHANCEMENT] bump k8s to 1.24.2 #178
+* [ENHANCEMENT] bump Go to 1.18.3 #178
+* [ENHANCEMENT] update README.md to be more accurate and up to date #178, #173
+* [ENHANCEMENT] check all headers for rewrites and create additional authz requests #171
+
 ## 0.12.0 / 2022-04-08
 
 * [ENHANCEMENT] bump k8s to 1.23.5. #149, #155, #160
