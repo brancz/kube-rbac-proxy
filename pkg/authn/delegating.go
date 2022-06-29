@@ -17,6 +17,7 @@ limitations under the License.
 package authn
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -76,8 +77,8 @@ func (a *DelegatingAuthenticator) AuthenticateRequest(req *http.Request) (*authe
 	return a.requestAuthenticator.AuthenticateRequest(req)
 }
 
-func (a *DelegatingAuthenticator) Run(stopCh <-chan struct{}) {
+func (a *DelegatingAuthenticator) Run(ctx context.Context) {
 	if a.dynamicClientCA != nil {
-		a.dynamicClientCA.Run(1, stopCh)
+		a.dynamicClientCA.Run(ctx, 1)
 	}
 }

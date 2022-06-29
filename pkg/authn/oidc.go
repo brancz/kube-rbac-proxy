@@ -17,6 +17,7 @@ limitations under the License.
 package authn
 
 import (
+	"context"
 	"net/http"
 
 	"k8s.io/apiserver/pkg/authentication/authenticator"
@@ -65,8 +66,8 @@ func (o *OIDCAuthenticator) AuthenticateRequest(req *http.Request) (*authenticat
 	return o.requestAuthenticator.AuthenticateRequest(req)
 }
 
-func (o *OIDCAuthenticator) Run(stopCh <-chan struct{}) {
+func (o *OIDCAuthenticator) Run(ctx context.Context) {
 	if o.dynamicClientCA != nil {
-		o.dynamicClientCA.Run(1, stopCh)
+		o.dynamicClientCA.Run(ctx, 1)
 	}
 }
