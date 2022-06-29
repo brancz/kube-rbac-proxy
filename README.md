@@ -30,7 +30,7 @@ $ kube-rbac-proxy -h
 Usage of _output/kube-rbac-proxy:
       --add_dir_header                              If true, adds the file directory to the header of the log messages
       --allow-paths strings                         Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the request doesn't match, kube-rbac-proxy responds with a 404 status code. If omitted, the incoming request path isn't checked. Cannot be used with --ignore-paths.
-      --alsologtostderr                             log to standard error as well as files
+      --alsologtostderr                             log to standard error as well as files (no effect when -logtostderr=true)
       --auth-header-fields-enabled                  When set to true, kube-rbac-proxy adds auth-related fields to the headers of http requests sent to the upstream
       --auth-header-groups-field-name string        The name of the field inside a http(2) request header to tell the upstream server about the user's groups (default "x-remote-groups")
       --auth-header-groups-field-separator string   The separator string used for concatenating multiple group names in a groups header field's value (default "|")
@@ -42,9 +42,9 @@ Usage of _output/kube-rbac-proxy:
       --insecure-listen-address string              The address the kube-rbac-proxy HTTP server should listen on.
       --kubeconfig string                           Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used
       --log_backtrace_at traceLocation              when logging hits line file:N, emit a stack trace (default :0)
-      --log_dir string                              If non-empty, write log files in this directory
-      --log_file string                             If non-empty, use this log file
-      --log_file_max_size uint                      Defines the maximum size a log file can grow to. Unit is megabytes. If the value is 0, the maximum file size is unlimited. (default 1800)
+      --log_dir string                              If non-empty, write log files in this directory (no effect when -logtostderr=true)
+      --log_file string                             If non-empty, use this log file (no effect when -logtostderr=true)
+      --log_file_max_size uint                      Defines the maximum size a log file can grow to (no effect when -logtostderr=true). Unit is megabytes. If the value is 0, the maximum file size is unlimited. (default 1800)
       --logtostderr                                 log to standard error instead of files (default true)
       --oidc-ca-file string                         If set, the OpenID server's certificate will be verified by one of the authorities in the oidc-ca-file, otherwise the host's root CA set will be used.
       --oidc-clientID string                        The client ID for the OpenID Connect client, must be set if oidc-issuer-url is set.
@@ -53,11 +53,11 @@ Usage of _output/kube-rbac-proxy:
       --oidc-issuer string                          The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).
       --oidc-sign-alg stringArray                   Supported signing algorithms, default RS256 (default [RS256])
       --oidc-username-claim string                  Identifier of the user in JWT claim, by default set to 'email' (default "email")
-      --one_output                                  If true, only write logs to their native severity level (vs also writing to each lower severity level)
+      --one_output                                  If true, only write logs to their native severity level (vs also writing to each lower severity level; no effect when -logtostderr=true)
       --secure-listen-address string                The address the kube-rbac-proxy HTTPs server should listen on.
       --skip_headers                                If true, avoid header prefixes in the log messages
-      --skip_log_headers                            If true, avoid headers when opening log files
-      --stderrthreshold severity                    logs at or above this threshold go to stderr (default 2)
+      --skip_log_headers                            If true, avoid headers when opening log files (no effect when -logtostderr=true)
+      --stderrthreshold severity                    logs at or above this threshold go to stderr when writing to files and stderr (no effect when -logtostderr=true or -alsologtostderr=false) (default 2)
       --tls-cert-file string                        File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)
       --tls-cipher-suites strings                   Comma-separated list of cipher suites for the server. Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants). If omitted, the default Go cipher suites will be used
       --tls-min-version string                      Minimum TLS version supported. Value must match version names from https://golang.org/pkg/crypto/tls/#pkg-constants. (default "VersionTLS12")
