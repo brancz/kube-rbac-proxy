@@ -54,8 +54,8 @@ update-go-deps:
 	done
 	go mod tidy
 
-container: $(OUT_DIR)/$(BIN)-$(GOOS)-$(GOARCH) Dockerfile
-	docker build --build-arg BINARY=$(BIN)-$(GOOS)-$(GOARCH) --build-arg GOARCH=$(GOARCH) -t $(CONTAINER_NAME)-$(GOARCH) .
+container: Dockerfile
+	docker build --build-arg GOOS=$(GOOS) --build-arg GOARCH=$(GOARCH) -t $(CONTAINER_NAME)-$(GOOS)-$(GOARCH) .
 ifeq ($(GOARCH), amd64)
 	docker tag $(DOCKER_REPO):$(VERSION)-$(GOARCH) $(CONTAINER_NAME)
 endif
