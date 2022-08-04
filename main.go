@@ -36,7 +36,6 @@ import (
 	"github.com/oklog/run"
 	"github.com/spf13/pflag"
 	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authorization/union"
 	"k8s.io/client-go/kubernetes"
@@ -53,7 +52,6 @@ import (
 )
 
 type config struct {
-	insecureListenAddress string
 	secureListenAddress   string
 	upstream              string
 	upstreamForceH2C      bool
@@ -99,7 +97,6 @@ func main() {
 	flagset.AddGoFlagSet(klogFlags)
 
 	// kube-rbac-proxy flags
-	flagset.StringVar(&cfg.insecureListenAddress, "insecure-listen-address", "", "The address the kube-rbac-proxy HTTP server should listen on.")
 	flagset.StringVar(&cfg.secureListenAddress, "secure-listen-address", "", "The address the kube-rbac-proxy HTTPs server should listen on.")
 	flagset.StringVar(&cfg.upstream, "upstream", "", "The upstream URL to proxy to once requests have successfully been authenticated and authorized.")
 	flagset.BoolVar(&cfg.upstreamForceH2C, "upstream-force-h2c", false, "Force h2c to communiate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only")
@@ -379,28 +376,6 @@ func main() {
 				}
 				if err := l.Close(); err != nil {
 					klog.Errorf("failed to gracefully close secure listener: %v", err)
-				}
-			})
-		}
-	}
-	{
-		if cfg.insecureListenAddress != "" {
-			srv := &http.Server{Handler: h2c.NewHandler(mux, &http2.Server{})}
-
-			l, err := net.Listen("tcp", cfg.insecureListenAddress)
-			if err != nil {
-				klog.Fatalf("Failed to listen on insecure address: %v", err)
-			}
-
-			gr.Add(func() error {
-				klog.Infof("Listening insecurely on %v", cfg.insecureListenAddress)
-				return srv.Serve(l)
-			}, func(err error) {
-				if err := srv.Shutdown(context.Background()); err != nil {
-					klog.Errorf("failed to gracefully shutdown server: %v", err)
-				}
-				if err := l.Close(); err != nil {
-					klog.Errorf("failed to gracefully close listener: %v", err)
 				}
 			})
 		}
