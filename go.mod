@@ -17,7 +17,10 @@ require (
 	k8s.io/klog/v2 v2.70.0
 )
 
-replace github.com/emicklei/go-restful => github.com/emicklei/go-restful v2.16.0+incompatible // indirect
+replace (
+	github.com/emicklei/go-restful => github.com/emicklei/go-restful v2.16.0+incompatible // indirect
+	golang.org/x/crypto => golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa
+)
 
 require (
 	github.com/NYTimes/gziphandler v1.1.1 // indirect
