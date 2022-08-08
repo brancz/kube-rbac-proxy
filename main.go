@@ -41,7 +41,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	certutil "k8s.io/client-go/util/cert"
 	k8sapiflag "k8s.io/component-base/cli/flag"
 	"k8s.io/klog/v2"
 
@@ -52,15 +51,15 @@ import (
 )
 
 type config struct {
-	secureListenAddress   string
-	upstream              string
-	upstreamForceH2C      bool
-	upstreamCAFile        string
-	auth                  proxy.Config
-	tls                   tlsConfig
-	kubeconfigLocation    string
-	allowPaths            []string
-	ignorePaths           []string
+	secureListenAddress string
+	upstream            string
+	upstreamForceH2C    bool
+	upstreamCAFile      string
+	auth                proxy.Config
+	tls                 tlsConfig
+	kubeconfigLocation  string
+	allowPaths          []string
+	ignorePaths         []string
 }
 
 type tlsConfig struct {
@@ -141,6 +140,10 @@ func main() {
 	upstreamURL, err := url.Parse(cfg.upstream)
 	if err != nil {
 		klog.Fatalf("Failed to parse upstream URL: %v", err)
+	}
+
+	if cfg.tls.certFile == "" || cfg.tls.keyFile == "" {
+		klog.Fatal("Failed to read TLS cert and key")
 	}
 
 	if configFileName != "" {
@@ -309,38 +312,20 @@ func main() {
 		if cfg.secureListenAddress != "" {
 			srv := &http.Server{Handler: mux, TLSConfig: &tls.Config{}}
 
-			if cfg.tls.certFile == "" && cfg.tls.keyFile == "" {
-				klog.Info("Generating self signed cert as no cert is provided")
-				host, err := os.Hostname()
-				if err != nil {
-					klog.Fatalf("Failed to retrieve hostname for self-signed cert: %v", err)
-				}
-				certBytes, keyBytes, err := certutil.GenerateSelfSignedCertKey(host, nil, nil)
-				if err != nil {
-					klog.Fatalf("Failed to generate self signed cert and key: %v", err)
-				}
-				cert, err := tls.X509KeyPair(certBytes, keyBytes)
-				if err != nil {
-					klog.Fatalf("Failed to load generated self signed cert and key: %v", err)
-				}
-
-				srv.TLSConfig.Certificates = []tls.Certificate{cert}
-			} else {
-				klog.Info("Reading certificate files")
-				ctx, cancel := context.WithCancel(context.Background())
-				r, err := rbac_proxy_tls.NewCertReloader(cfg.tls.certFile, cfg.tls.keyFile, cfg.tls.reloadInterval)
-				if err != nil {
-					klog.Fatalf("Failed to initialize certificate reloader: %v", err)
-				}
-
-				srv.TLSConfig.GetCertificate = r.GetCertificate
-
-				gr.Add(func() error {
-					return r.Watch(ctx)
-				}, func(error) {
-					cancel()
-				})
+			klog.Info("Reading certificate files")
+			ctx, cancel := context.WithCancel(context.Background())
+			r, err := rbac_proxy_tls.NewCertReloader(cfg.tls.certFile, cfg.tls.keyFile, cfg.tls.reloadInterval)
+			if err != nil {
+				klog.Fatalf("Failed to initialize certificate reloader: %v", err)
 			}
+
+			srv.TLSConfig.GetCertificate = r.GetCertificate
+
+			gr.Add(func() error {
+				return r.Watch(ctx)
+			}, func(error) {
+				cancel()
+			})
 
 			version, err := k8sapiflag.TLSVersion(cfg.tls.minVersion)
 			if err != nil {
