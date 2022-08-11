@@ -17,6 +17,8 @@ require (
 	k8s.io/klog/v2 v2.70.0
 )
 
+replace github.com/emicklei/go-restful => github.com/emicklei/go-restful v2.16.0+incompatible // indirect
+
 require (
 	github.com/NYTimes/gziphandler v1.1.1 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
