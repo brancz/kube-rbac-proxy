@@ -156,7 +156,7 @@ Insecure listen address will be removed.
 Using --insecure-listen-address won't be possible!
 
 The ability to run kube-rbac-proxy without TLS certificates will be removed.
-Not using --tls-cert-file and --tls-private-key-file won't work any more!
+Not using --tls-cert-file and --tls-private-key-file won't be possible!
 
 For more information, please go to https://github.com/brancz/kube-rbac-proxy/issues/187
 
