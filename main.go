@@ -152,10 +152,10 @@ func main() {
 		klog.Warning(`
 ==== Deprecation Warning ======================
 
-We will remove insecure listen address.
-Using --insecure-listen-address will be forbidden!
+Insecure listen address will be removed.
+Using --insecure-listen-address won't be possible!
 
-We will remove the ability to run kube-rbac-proxy without TLS certificates.
+The ability to run kube-rbac-proxy without TLS certificates will be removed.
 Not using --tls-cert-file and --tls-private-key-file won't work any more!
 
 For more information, please go to https://github.com/brancz/kube-rbac-proxy/issues/187
