@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -167,7 +166,7 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 
 	if configFileName != "" {
 		klog.Infof("Reading config file: %s", configFileName)
-		b, err := ioutil.ReadFile(configFileName)
+		b, err := os.ReadFile(configFileName)
 		if err != nil {
 			klog.Fatalf("Failed to read resource-attribute file: %v", err)
 		}
