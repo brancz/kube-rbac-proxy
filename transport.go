@@ -21,9 +21,9 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -32,7 +32,7 @@ func initTransport(upstreamCAFile string) (http.RoundTripper, error) {
 		return http.DefaultTransport, nil
 	}
 
-	rootPEM, err := ioutil.ReadFile(upstreamCAFile)
+	rootPEM, err := os.ReadFile(upstreamCAFile)
 	if err != nil {
 		return nil, fmt.Errorf("error reading upstream CA file: %v", err)
 	}

@@ -21,7 +21,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"sync"
 	"time"
 
@@ -44,6 +44,7 @@ type CertReloader struct {
 	certRaw, keyRaw []byte
 }
 
+// NewCertReloader creates a new CertReloader that loads certs in an interval.
 func NewCertReloader(certPath, keyPath string, interval time.Duration) (*CertReloader, error) {
 	r := &CertReloader{
 		certPath: certPath,
@@ -77,12 +78,12 @@ func (r *CertReloader) Watch(ctx context.Context) error {
 }
 
 func (r *CertReloader) reload() error {
-	certRaw, err := ioutil.ReadFile(r.certPath)
+	certRaw, err := os.ReadFile(r.certPath)
 	if err != nil {
 		return fmt.Errorf("error loading certificate: %v", err)
 	}
 
-	keyRaw, err := ioutil.ReadFile(r.keyPath)
+	keyRaw, err := os.ReadFile(r.keyPath)
 	if err != nil {
 		return fmt.Errorf("error loading key: %v", err)
 	}

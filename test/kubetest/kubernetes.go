@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"time"
@@ -40,7 +39,7 @@ import (
 func CreatedManifests(client kubernetes.Interface, paths ...string) Action {
 	return func(ctx *ScenarioContext) error {
 		for _, path := range paths {
-			content, err := ioutil.ReadFile(path)
+			content, err := os.ReadFile(path)
 			if err != nil {
 				return err
 			}

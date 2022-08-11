@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -146,9 +145,28 @@ func main() {
 		klog.Fatalf("Failed to parse upstream URL: %v", err)
 	}
 
+	hasCerts := !(cfg.tls.certFile == "") && !(cfg.tls.keyFile == "")
+	hasInsecureListenAddress := cfg.insecureListenAddress != ""
+	if !hasCerts || hasInsecureListenAddress {
+		klog.Warning(`
+==== Deprecation Warning ======================
+
+Insecure listen address will be removed.
+Using --insecure-listen-address won't be possible!
+
+The ability to run kube-rbac-proxy without TLS certificates will be removed.
+Not using --tls-cert-file and --tls-private-key-file won't be possible!
+
+For more information, please go to https://github.com/brancz/kube-rbac-proxy/issues/187
+
+===============================================
+
+		`)
+	}
+
 	if configFileName != "" {
 		klog.Infof("Reading config file: %s", configFileName)
-		b, err := ioutil.ReadFile(configFileName)
+		b, err := os.ReadFile(configFileName)
 		if err != nil {
 			klog.Fatalf("Failed to read resource-attribute file: %v", err)
 		}
