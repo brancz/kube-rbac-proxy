@@ -18,18 +18,12 @@ package kubetest
 
 import (
 	"testing"
-	"time"
 
-	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-type Suite struct {
-	KubeClient kubernetes.Interface
-}
-
-func NewSuiteFromKubeconfig(path string) (*Suite, error) {
+func NewClientFromKubeconfig(path string) (kubernetes.Interface, error) {
 	config, err := clientcmd.BuildConfigFromFlags("", path)
 	if err != nil {
 		return nil, err
@@ -40,7 +34,7 @@ func NewSuiteFromKubeconfig(path string) (*Suite, error) {
 		return nil, err
 	}
 
-	return &Suite{KubeClient: client}, nil
+	return client, nil
 }
 
 type TestSuite func(t *testing.T)
@@ -51,56 +45,18 @@ type Scenario struct {
 	Name        string
 	Description string
 
-	Given Setup
-	When  Condition
-	Then  Check
+	Given Action
+	When  Action
+	Then  Action
 }
 
-type ScenarioContext struct {
-	Namespace string
-	Finalizer []Finalizer
-}
-
-func (ctx *ScenarioContext) AddFinalizer(f Finalizer) {
-	ctx.Finalizer = append(ctx.Finalizer, f)
-}
-
-type RunOpts func(ctx *ScenarioContext) *ScenarioContext
-
-func RandomNamespace(client kubernetes.Interface) RunOpts {
-	return func(ctx *ScenarioContext) *ScenarioContext {
-		ctx.Namespace = rand.String(8)
-
-		ctx.AddFinalizer(func() error {
-			return DeleteNamespace(client, ctx.Namespace)
-		})
-
-		if err := CreateNamespace(client, ctx.Namespace); err != nil {
-			panic(err)
-		}
-
-		return ctx
-	}
-}
-
-func Timeout(d time.Duration) RunOpts {
-	return func(ctx *ScenarioContext) *ScenarioContext {
-		// TODO
-		return ctx
-	}
-}
-
-func (s Scenario) Run(t *testing.T, opts ...RunOpts) bool {
+func (s Scenario) Run(t *testing.T) bool {
 	ctx := &ScenarioContext{
 		Namespace: "default",
 	}
 
-	for _, o := range opts {
-		o(ctx)
-	}
-
 	defer func(ctx *ScenarioContext) {
-		for _, f := range ctx.Finalizer {
+		for _, f := range ctx.CleanUp {
 			if err := f(); err != nil {
 				panic(err)
 			}
@@ -120,7 +76,7 @@ func (s Scenario) Run(t *testing.T, opts ...RunOpts) bool {
 			}
 		}
 
-		if s.Given != nil {
+		if s.Then != nil {
 			if err := s.Then(ctx); err != nil {
 				t.Errorf("checks failed: %v", err)
 			}
@@ -128,9 +84,20 @@ func (s Scenario) Run(t *testing.T, opts ...RunOpts) bool {
 	})
 }
 
-type Setup func(ctx *ScenarioContext) error
+type ScenarioContext struct {
+	Namespace string
+	CleanUp   []CleanUp
+}
 
-func Setups(ss ...Setup) Setup {
+func (ctx *ScenarioContext) AddCleanUp(f CleanUp) {
+	ctx.CleanUp = append(ctx.CleanUp, f)
+}
+
+type CleanUp func() error
+
+type Action func(ctx *ScenarioContext) error
+
+func Actions(ss ...Action) Action {
 	return func(ctx *ScenarioContext) error {
 		for _, s := range ss {
 			if err := s(ctx); err != nil {
@@ -140,31 +107,3 @@ func Setups(ss ...Setup) Setup {
 		return nil
 	}
 }
-
-type Condition func(ctx *ScenarioContext) error
-
-func Conditions(cs ...Condition) Condition {
-	return func(ctx *ScenarioContext) error {
-		for _, c := range cs {
-			if err := c(ctx); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-}
-
-type Check func(ctx *ScenarioContext) error
-
-func Checks(cs ...Check) Check {
-	return func(ctx *ScenarioContext) error {
-		for _, c := range cs {
-			if err := c(ctx); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-}
-
-type Finalizer func() error

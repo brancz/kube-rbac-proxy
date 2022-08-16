@@ -134,7 +134,7 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 				Rewrites:           &authz.SubjectAccessReviewRewrites{ByQueryParameter: &authz.QueryParameterRewriteConfig{Name: "namespace"}},
 				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
 			},
-			createRequest(map[string]string{"namespace": "tenant1"}, nil),
+			createRequest(map[string][]string{"namespace": {"tenant1"}}, nil),
 			[]authorizer.Attributes{
 				authorizer.AttributesRecord{
 					User:            nil,
@@ -164,12 +164,44 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 				Rewrites:           &authz.SubjectAccessReviewRewrites{ByHTTPHeader: &authz.HTTPHeaderRewriteConfig{Name: "namespace"}},
 				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
 			},
-			createRequest(nil, map[string]string{"namespace": "tenant1"}),
+			createRequest(nil, map[string][]string{"namespace": {"tenant1"}}),
 			[]authorizer.Attributes{
 				authorizer.AttributesRecord{
 					User:            nil,
 					Verb:            "get",
 					Namespace:       "tenant1",
+					APIGroup:        "",
+					APIVersion:      "v1",
+					Resource:        "namespace",
+					Subresource:     "metrics",
+					Name:            "",
+					ResourceRequest: true,
+				},
+			},
+		},
+		{
+			"with http header rewrites config and additional header",
+			&authz.Config{
+				Rewrites:           &authz.SubjectAccessReviewRewrites{ByHTTPHeader: &authz.HTTPHeaderRewriteConfig{Name: "namespace"}},
+				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
+			},
+			createRequest(nil, map[string][]string{"namespace": {"tenant1", "tenant2"}}),
+			[]authorizer.Attributes{
+				authorizer.AttributesRecord{
+					User:            nil,
+					Verb:            "get",
+					Namespace:       "tenant1",
+					APIGroup:        "",
+					APIVersion:      "v1",
+					Resource:        "namespace",
+					Subresource:     "metrics",
+					Name:            "",
+					ResourceRequest: true,
+				},
+				authorizer.AttributesRecord{
+					User:            nil,
+					Verb:            "get",
+					Namespace:       "tenant2",
 					APIGroup:        "",
 					APIVersion:      "v1",
 					Resource:        "namespace",
@@ -197,7 +229,10 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 				},
 				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
 			},
-			createRequest(map[string]string{"namespace": "tenant1"}, map[string]string{"namespace": "tenant2"}),
+			createRequest(
+				map[string][]string{"namespace": {"tenant1"}},
+				map[string][]string{"namespace": {"tenant2"}},
+			),
 			[]authorizer.Attributes{
 				authorizer.AttributesRecord{
 					User:            nil,
@@ -237,17 +272,21 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 	}
 }
 
-func createRequest(queryParams, headers map[string]string) *http.Request {
+func createRequest(queryParams, headers map[string][]string) *http.Request {
 	r := httptest.NewRequest("GET", "/accounts", nil)
 	if queryParams != nil {
 		q := r.URL.Query()
-		for k, v := range queryParams {
-			q.Add(k, v)
+		for key, values := range queryParams {
+			for _, value := range values {
+				q.Add(key, value)
+			}
 		}
 		r.URL.RawQuery = q.Encode()
 	}
-	for k, v := range headers {
-		r.Header.Set(k, v)
+	for key, values := range headers {
+		for _, value := range values {
+			r.Header.Add(key, value)
+		}
 	}
 	return r
 }

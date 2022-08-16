@@ -20,23 +20,25 @@ import (
 	"fmt"
 	"testing"
 
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/brancz/kube-rbac-proxy/test/kubetest"
 )
 
-func testStaticAuthorizer(s *kubetest.Suite) kubetest.TestSuite {
+func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443%v`
 
 		for _, tc := range []struct {
 			name  string
-			given []kubetest.Setup
-			check []kubetest.Check
+			given kubetest.Action
+			check kubetest.Action
 		}{
 			{
 				name: "resource/namespace/metrics/query rewrite/granted",
-				given: []kubetest.Setup{
+				given: kubetest.Actions(
 					kubetest.CreatedManifests(
-						s.KubeClient,
+						client,
 						"static-auth/configmap-resource.yaml",
 						"static-auth/clusterRole.yaml",
 						"static-auth/clusterRoleBinding.yaml",
@@ -44,20 +46,20 @@ func testStaticAuthorizer(s *kubetest.Suite) kubetest.TestSuite {
 						"static-auth/service.yaml",
 						"static-auth/serviceAccount.yaml",
 					),
-				},
-				check: []kubetest.Check{
-					ClientSucceeds(
-						s.KubeClient,
+				),
+				check: kubetest.Actions(
+					kubetest.ClientSucceeds(
+						client,
 						fmt.Sprintf(command, "/metrics?namespace=default"),
 						nil,
 					),
-				},
+				),
 			},
 			{
 				name: "resource/namespace/metrics/query rewrite/forbidden",
-				given: []kubetest.Setup{
+				given: kubetest.Actions(
 					kubetest.CreatedManifests(
-						s.KubeClient,
+						client,
 						"static-auth/configmap-resource.yaml",
 						"static-auth/clusterRole.yaml",
 						"static-auth/clusterRoleBinding.yaml",
@@ -65,20 +67,20 @@ func testStaticAuthorizer(s *kubetest.Suite) kubetest.TestSuite {
 						"static-auth/service.yaml",
 						"static-auth/serviceAccount.yaml",
 					),
-				},
-				check: []kubetest.Check{
-					ClientFails(
-						s.KubeClient,
+				),
+				check: kubetest.Actions(
+					kubetest.ClientFails(
+						client,
 						fmt.Sprintf(command, "/metrics?namespace=forbidden"),
 						nil,
 					),
-				},
+				),
 			},
 			{
 				name: "non-resource/get/metrics/granted",
-				given: []kubetest.Setup{
+				given: kubetest.Actions(
 					kubetest.CreatedManifests(
-						s.KubeClient,
+						client,
 						"static-auth/configmap-non-resource.yaml",
 						"static-auth/clusterRole.yaml",
 						"static-auth/clusterRoleBinding.yaml",
@@ -86,20 +88,20 @@ func testStaticAuthorizer(s *kubetest.Suite) kubetest.TestSuite {
 						"static-auth/service.yaml",
 						"static-auth/serviceAccount.yaml",
 					),
-				},
-				check: []kubetest.Check{
-					ClientSucceeds(
-						s.KubeClient,
+				),
+				check: kubetest.Actions(
+					kubetest.ClientSucceeds(
+						client,
 						fmt.Sprintf(command, "/metrics"),
 						nil,
 					),
-				},
+				),
 			},
 			{
 				name: "non-resource/get/metrics/forbidden",
-				given: []kubetest.Setup{
+				given: kubetest.Actions(
 					kubetest.CreatedManifests(
-						s.KubeClient,
+						client,
 						"static-auth/configmap-non-resource.yaml",
 						"static-auth/clusterRole.yaml",
 						"static-auth/clusterRoleBinding.yaml",
@@ -107,31 +109,31 @@ func testStaticAuthorizer(s *kubetest.Suite) kubetest.TestSuite {
 						"static-auth/service.yaml",
 						"static-auth/serviceAccount.yaml",
 					),
-				},
-				check: []kubetest.Check{
-					ClientFails(
-						s.KubeClient,
+				),
+				check: kubetest.Actions(
+					kubetest.ClientFails(
+						client,
 						fmt.Sprintf(command, "/forbidden"),
 						nil,
 					),
-				},
+				),
 			},
 		} {
 			kubetest.Scenario{
 				Name:  tc.name,
-				Given: kubetest.Setups(tc.given...),
-				When: kubetest.Conditions(
+				Given: kubetest.Actions(tc.given),
+				When: kubetest.Actions(
 					kubetest.PodsAreReady(
-						s.KubeClient,
+						client,
 						1,
 						"app=kube-rbac-proxy",
 					),
 					kubetest.ServiceIsReady(
-						s.KubeClient,
+						client,
 						"kube-rbac-proxy",
 					),
 				),
-				Then: kubetest.Checks(tc.check...),
+				Then: kubetest.Actions(tc.check),
 			}.Run(t)
 		}
 	}

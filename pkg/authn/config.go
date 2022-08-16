@@ -47,3 +47,15 @@ type X509Config struct {
 type TokenConfig struct {
 	Audiences []string
 }
+
+// OIDCConfig represents configuration used for JWT request authentication
+type OIDCConfig struct {
+	IssuerURL            string
+	ClientID             string
+	CAFile               string
+	UsernameClaim        string
+	UsernamePrefix       string
+	GroupsClaim          string
+	GroupsPrefix         string
+	SupportedSigningAlgs []string
+}

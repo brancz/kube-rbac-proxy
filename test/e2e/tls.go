@@ -20,10 +20,12 @@ import (
 	"fmt"
 	"testing"
 
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/brancz/kube-rbac-proxy/test/kubetest"
 )
 
-func testTLS(s *kubetest.Suite) kubetest.TestSuite {
+func testTLS(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `curl %v --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
 
@@ -51,9 +53,9 @@ func testTLS(s *kubetest.Suite) kubetest.TestSuite {
 			kubetest.Scenario{
 				Name: tc.name,
 
-				Given: kubetest.Setups(
+				Given: kubetest.Actions(
 					kubetest.CreatedManifests(
-						s.KubeClient,
+						client,
 						"basics/clusterRole.yaml",
 						"basics/clusterRoleBinding.yaml",
 						"basics/deployment.yaml",
@@ -64,20 +66,20 @@ func testTLS(s *kubetest.Suite) kubetest.TestSuite {
 						"basics/clusterRoleBinding-client.yaml",
 					),
 				),
-				When: kubetest.Conditions(
+				When: kubetest.Actions(
 					kubetest.PodsAreReady(
-						s.KubeClient,
+						client,
 						1,
 						"app=kube-rbac-proxy",
 					),
 					kubetest.ServiceIsReady(
-						s.KubeClient,
+						client,
 						"kube-rbac-proxy",
 					),
 				),
-				Then: kubetest.Checks(
-					ClientSucceeds(
-						s.KubeClient,
+				Then: kubetest.Actions(
+					kubetest.ClientSucceeds(
+						client,
 						fmt.Sprintf(command, tc.tlsFlag),
 						nil,
 					),

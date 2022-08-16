@@ -106,8 +106,8 @@ func main() {
 	flagset.BoolVar(&cfg.upstreamForceH2C, "upstream-force-h2c", false, "Force h2c to communiate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only")
 	flagset.StringVar(&cfg.upstreamCAFile, "upstream-ca-file", "", "The CA the upstream uses for TLS connection. This is required when the upstream uses TLS and its own CA certificate")
 	flagset.StringVar(&configFileName, "config-file", "", "Configuration file to configure kube-rbac-proxy.")
-	flagset.StringSliceVar(&cfg.allowPaths, "allow-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy matches the incoming request. If the request doesn't match, kube-rbac-proxy responds with a 404 status code. If omitted, the incoming request path isn't checked. Cannot be used with --ignore-paths.")
-	flagset.StringSliceVar(&cfg.ignorePaths, "ignore-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy will proxy without performing an authentication or authorization check. Cannot be used with --allow-paths.")
+	flagset.StringSliceVar(&cfg.allowPaths, "allow-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the request doesn't match, kube-rbac-proxy responds with a 404 status code. If omitted, the incoming request path isn't checked. Cannot be used with --ignore-paths.")
+	flagset.StringSliceVar(&cfg.ignorePaths, "ignore-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the requst matches, it will proxy the request without performing an authentication or authorization check. Cannot be used with --allow-paths.")
 
 	// TLS flags
 	flagset.StringVar(&cfg.tls.certFile, "tls-cert-file", "", "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)")
@@ -170,27 +170,33 @@ func main() {
 	}
 
 	var authenticator authenticator.Request
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// If OIDC configuration provided, use oidc authenticator
 	if cfg.auth.Authentication.OIDC.IssuerURL != "" {
-		authenticator, err = authn.NewOIDCAuthenticator(cfg.auth.Authentication.OIDC)
+		oidcAuthenticator, err := authn.NewOIDCAuthenticator(cfg.auth.Authentication.OIDC)
 		if err != nil {
 			klog.Fatalf("Failed to instantiate OIDC authenticator: %v", err)
 		}
+
+		go oidcAuthenticator.Run(ctx)
+		authenticator = oidcAuthenticator
 	} else {
 		//Use Delegating authenticator
 		klog.Infof("Valid token audiences: %s", strings.Join(cfg.auth.Authentication.Token.Audiences, ", "))
 
-		tokenClient := kubeClient.AuthenticationV1().TokenReviews()
+		tokenClient := kubeClient.AuthenticationV1()
 		delegatingAuthenticator, err := authn.NewDelegatingAuthenticator(tokenClient, cfg.auth.Authentication)
 		if err != nil {
 			klog.Fatalf("Failed to instantiate delegating authenticator: %v", err)
 		}
 
-		go delegatingAuthenticator.Run(1, context.Background().Done())
+		go delegatingAuthenticator.Run(ctx)
 		authenticator = delegatingAuthenticator
 	}
 
-	sarClient := kubeClient.AuthorizationV1().SubjectAccessReviews()
+	sarClient := kubeClient.AuthorizationV1()
 	sarAuthorizer, err := authz.NewSarAuthorizer(sarClient)
 
 	if err != nil {
@@ -242,12 +248,33 @@ func main() {
 
 	proxy := httputil.NewSingleHostReverseProxy(upstreamURL)
 	proxy.Transport = upstreamTransport
+
+	if cfg.upstreamForceH2C {
+		// Force http/2 for connections to the upstream i.e. do not start with HTTP1.1 UPGRADE req to
+		// initialize http/2 session.
+		// See https://github.com/golang/go/issues/14141#issuecomment-219212895 for more context
+		proxy.Transport = &http2.Transport{
+			// Allow http schema. This doesn't automatically disable TLS
+			AllowHTTP: true,
+			// Do disable TLS.
+			// In combination with the schema check above. We could enforce h2c against the upstream server
+			DialTLS: func(netw, addr string, cfg *tls.Config) (net.Conn, error) {
+				return net.Dial(netw, addr)
+			},
+		}
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		found := len(cfg.allowPaths) == 0
 		for _, pathAllowed := range cfg.allowPaths {
 			found, err = path.Match(pathAllowed, req.URL.Path)
 			if err != nil {
+				http.Error(
+					w,
+					http.StatusText(http.StatusInternalServerError),
+					http.StatusInternalServerError,
+				)
 				return
 			}
 			if found {
@@ -263,6 +290,11 @@ func main() {
 		for _, pathIgnored := range cfg.ignorePaths {
 			ignorePathFound, err = path.Match(pathIgnored, req.URL.Path)
 			if err != nil {
+				http.Error(
+					w,
+					http.StatusText(http.StatusInternalServerError),
+					http.StatusInternalServerError,
+				)
 				return
 			}
 			if ignorePathFound {
@@ -358,21 +390,6 @@ func main() {
 	}
 	{
 		if cfg.insecureListenAddress != "" {
-			if cfg.upstreamForceH2C {
-				// Force http/2 for connections to the upstream i.e. do not start with HTTP1.1 UPGRADE req to
-				// initialize http/2 session.
-				// See https://github.com/golang/go/issues/14141#issuecomment-219212895 for more context
-				proxy.Transport = &http2.Transport{
-					// Allow http schema. This doesn't automatically disable TLS
-					AllowHTTP: true,
-					// Do disable TLS.
-					// In combination with the schema check above. We could enforce h2c against the upstream server
-					DialTLS: func(netw, addr string, cfg *tls.Config) (net.Conn, error) {
-						return net.Dial(netw, addr)
-					},
-				}
-			}
-
 			srv := &http.Server{Handler: h2c.NewHandler(mux, &http2.Server{})}
 
 			l, err := net.Listen("tcp", cfg.insecureListenAddress)
