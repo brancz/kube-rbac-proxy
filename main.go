@@ -245,7 +245,6 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 	)
 
 	auth, err := server.New(kubeClient, cfg.auth, authorizer, authenticator)
-
 	if err != nil {
 		klog.Fatalf("Failed to create rbac-proxy: %v", err)
 	}
@@ -291,53 +290,74 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 		}
 	}
 
+	withAllowPaths := func(handler http.Handler, allowPaths []string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			found := len(allowPaths) == 0
+
+			for _, pathAllowed := range allowPaths {
+				found, err = path.Match(pathAllowed, req.URL.Path)
+				if err != nil {
+					http.Error(
+						w,
+						http.StatusText(http.StatusInternalServerError),
+						http.StatusInternalServerError,
+					)
+					return
+				}
+				if found {
+					break
+				}
+			}
+
+			if !found {
+				http.NotFound(w, req)
+				return
+			}
+
+			handler.ServeHTTP(w, req)
+		})
+	}
+
+	withIgnorePaths := func(ignored http.Handler, handler http.Handler, ignorePaths []string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			ignorePathFound := false
+
+			for _, pathIgnored := range cfg.ignorePaths {
+				ignorePathFound, err = path.Match(pathIgnored, req.URL.Path)
+				if err != nil {
+					http.Error(
+						w,
+						http.StatusText(http.StatusInternalServerError),
+						http.StatusInternalServerError,
+					)
+					return
+				}
+				if ignorePathFound {
+					break
+				}
+			}
+
+			if !ignorePathFound {
+				handler.ServeHTTP(w, req)
+			}
+
+			ignored.ServeHTTP(w, req)
+		})
+	}
+
 	mux := http.NewServeMux()
-	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		found := len(cfg.allowPaths) == 0
-		for _, pathAllowed := range cfg.allowPaths {
-			found, err = path.Match(pathAllowed, req.URL.Path)
-			if err != nil {
-				http.Error(
-					w,
-					http.StatusText(http.StatusInternalServerError),
-					http.StatusInternalServerError,
-				)
-				return
-			}
-			if found {
-				break
-			}
-		}
-		if !found {
-			http.NotFound(w, req)
-			return
-		}
-
-		ignorePathFound := false
-		for _, pathIgnored := range cfg.ignorePaths {
-			ignorePathFound, err = path.Match(pathIgnored, req.URL.Path)
-			if err != nil {
-				http.Error(
-					w,
-					http.StatusText(http.StatusInternalServerError),
-					http.StatusInternalServerError,
-				)
-				return
-			}
-			if ignorePathFound {
-				break
-			}
-		}
-
-		if !ignorePathFound {
-			ok := auth.Handle(w, req)
-			if !ok {
-				return
-			}
-		}
-
-		proxy.ServeHTTP(w, req)
-	}))
+	mux.Handle("/", withAllowPaths(
+		withIgnorePaths(
+			proxy,
+			http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if auth.Handle(w, req) {
+					proxy.ServeHTTP(w, req)
+				}
+			}),
+			cfg.ignorePaths,
+		),
+		cfg.allowPaths,
+	))
 
 	var gr run.Group
 	{
