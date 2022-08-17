@@ -47,7 +47,7 @@ import (
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
-	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
+	"github.com/brancz/kube-rbac-proxy/pkg/server"
 	rbac_proxy_tls "github.com/brancz/kube-rbac-proxy/pkg/tls"
 )
 
@@ -57,7 +57,7 @@ type config struct {
 	upstream              string
 	upstreamForceH2C      bool
 	upstreamCAFile        string
-	auth                  proxy.Config
+	auth                  server.Config
 	tls                   tlsConfig
 	kubeconfigLocation    string
 	allowPaths            []string
@@ -78,7 +78,7 @@ type configfile struct {
 
 func main() {
 	cfg := config{
-		auth: proxy.Config{
+		auth: server.Config{
 			Authentication: &authn.AuthnConfig{
 				X509:   &authn.X509Config{},
 				Header: &authn.AuthnHeaderConfig{},
@@ -244,7 +244,11 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 		sarAuthorizer,
 	)
 
-	auth := proxy.New(cfg.auth, authorizer, authenticator)
+	auth, err := server.New(kubeClient, cfg.auth, authorizer, authenticator)
+
+	if err != nil {
+		klog.Fatalf("Failed to create rbac-proxy: %v", err)
+	}
 
 	upstreamTransport, err := initTransport(cfg.upstreamCAFile)
 	if err != nil {
