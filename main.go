@@ -38,6 +38,7 @@ import (
 	"golang.org/x/net/http2/h2c"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authorization/union"
+	"k8s.io/apiserver/pkg/server/dynamiccertificates"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -48,7 +49,6 @@ import (
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
 	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
-	rbac_proxy_tls "github.com/brancz/kube-rbac-proxy/pkg/tls"
 )
 
 type config struct {
@@ -349,15 +349,27 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 			} else {
 				klog.Info("Reading certificate files")
 				ctx, cancel := context.WithCancel(context.Background())
-				r, err := rbac_proxy_tls.NewCertReloader(cfg.tls.certFile, cfg.tls.keyFile, cfg.tls.reloadInterval)
+				dynamicServingContent, err := dynamiccertificates.NewDynamicServingContentFromFiles(
+					"kube-rbac-proxy-serving-certificates",
+					cfg.tls.certFile, cfg.tls.keyFile,
+				)
 				if err != nil {
 					klog.Fatalf("Failed to initialize certificate reloader: %v", err)
 				}
 
-				srv.TLSConfig.GetCertificate = r.GetCertificate
+				srv.TLSConfig.GetCertificate = func(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
+					certPEM, keyPEM := dynamicServingContent.CurrentCertKeyContent()
+					cert, err := tls.X509KeyPair(certPEM, keyPEM)
+					if err != nil {
+						return nil, err
+					}
+
+					return &cert, nil
+				}
 
 				gr.Add(func() error {
-					return r.Watch(ctx)
+					dynamicServingContent.Run(ctx, 1)
+					return nil
 				}, func(error) {
 					cancel()
 				})
