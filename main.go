@@ -29,7 +29,6 @@ import (
 	"path"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/ghodss/yaml"
 	"github.com/oklog/run"
@@ -65,11 +64,10 @@ type config struct {
 }
 
 type tlsConfig struct {
-	certFile       string
-	keyFile        string
-	minVersion     string
-	cipherSuites   []string
-	reloadInterval time.Duration
+	certFile     string
+	keyFile      string
+	minVersion   string
+	cipherSuites []string
 }
 
 type configfile struct {
@@ -112,7 +110,6 @@ func main() {
 	flagset.StringVar(&cfg.tls.keyFile, "tls-private-key-file", "", "File containing the default x509 private key matching --tls-cert-file.")
 	flagset.StringVar(&cfg.tls.minVersion, "tls-min-version", "VersionTLS12", "Minimum TLS version supported. Value must match version names from https://golang.org/pkg/crypto/tls/#pkg-constants.")
 	flagset.StringSliceVar(&cfg.tls.cipherSuites, "tls-cipher-suites", nil, "Comma-separated list of cipher suites for the server. Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants). If omitted, the default Go cipher suites will be used")
-	flagset.DurationVar(&cfg.tls.reloadInterval, "tls-reload-interval", time.Minute, "The interval at which to watch for TLS certificate changes, by default set to 1 minute.")
 
 	// Auth flags
 	flagset.StringVar(&cfg.auth.Authentication.X509.ClientCAFile, "client-ca-file", "", "If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.")

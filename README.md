@@ -62,7 +62,6 @@ Usage of _output/kube-rbac-proxy:
       --tls-cipher-suites strings                   Comma-separated list of cipher suites for the server. Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants). If omitted, the default Go cipher suites will be used
       --tls-min-version string                      Minimum TLS version supported. Value must match version names from https://golang.org/pkg/crypto/tls/#pkg-constants. (default "VersionTLS12")
       --tls-private-key-file string                 File containing the default x509 private key matching --tls-cert-file.
-      --tls-reload-interval duration                The interval at which to watch for TLS certificate changes, by default set to 1 minute. (default 1m0s)
       --upstream string                             The upstream URL to proxy to once requests have successfully been authenticated and authorized.
       --upstream-ca-file string                     The CA the upstream uses for TLS connection. This is required when the upstream uses TLS and its own CA certificate
       --upstream-force-h2c                          Force h2c to communiate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only
