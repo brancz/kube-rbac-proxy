@@ -50,7 +50,8 @@ func NewDelegatingAuthenticator(client authenticationclient.AuthenticationV1Inte
 	)
 
 	authenticatorConfig := authenticatorfactory.DelegatingAuthenticatorConfig{
-		Anonymous:               false, // always require authentication
+		Anonymous: false, // always require authentication
+		// Better defaults would be here: apiserver/pkg/server/options/authentication.go.
 		CacheTTL:                2 * time.Minute,
 		TokenAccessReviewClient: client,
 		APIAudiences:            authenticator.Audiences(authn.Token.Audiences),

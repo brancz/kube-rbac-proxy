@@ -91,9 +91,11 @@ func NewSarAuthorizer(client authorizationclient.AuthorizationV1Interface) (auth
 	}
 	authorizerConfig := authorizerfactory.DelegatingAuthorizerConfig{
 		SubjectAccessReviewClient: client,
-		AllowCacheTTL:             5 * time.Minute,
-		DenyCacheTTL:              30 * time.Second,
-		WebhookRetryBackoff:       options.DefaultAuthWebhookRetryBackoff(),
+		// Defaults are most probably taken from: kubernetes/pkg/kubelet/apis/config/v1beta1/defaults.go
+		// Defaults that are more reasonable: apiserver/pkg/server/options/authorization.go
+		AllowCacheTTL:       5 * time.Minute,
+		DenyCacheTTL:        30 * time.Second,
+		WebhookRetryBackoff: options.DefaultAuthWebhookRetryBackoff(),
 	}
 	return authorizerConfig.New()
 }
