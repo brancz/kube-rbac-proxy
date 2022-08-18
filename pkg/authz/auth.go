@@ -24,6 +24,7 @@ import (
 
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	"k8s.io/apiserver/pkg/authorization/authorizerfactory"
+	"k8s.io/apiserver/pkg/server/options"
 	authorizationclient "k8s.io/client-go/kubernetes/typed/authorization/v1"
 )
 
@@ -84,7 +85,7 @@ type UserConfig struct {
 }
 
 // NewSarAuthorizer creates an authorizer compatible with the kubelet's needs
-func NewSarAuthorizer(client authorizationclient.SubjectAccessReviewInterface) (authorizer.Authorizer, error) {
+func NewSarAuthorizer(client authorizationclient.AuthorizationV1Interface) (authorizer.Authorizer, error) {
 	if client == nil {
 		return nil, errors.New("no client provided, cannot use webhook authorization")
 	}
@@ -92,6 +93,7 @@ func NewSarAuthorizer(client authorizationclient.SubjectAccessReviewInterface) (
 		SubjectAccessReviewClient: client,
 		AllowCacheTTL:             5 * time.Minute,
 		DenyCacheTTL:              30 * time.Second,
+		WebhookRetryBackoff:       options.DefaultAuthWebhookRetryBackoff(),
 	}
 	return authorizerConfig.New()
 }

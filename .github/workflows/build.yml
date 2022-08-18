@@ -4,8 +4,8 @@ on: [push, pull_request]
 
 env:
   QUAY_PATH: quay.io/brancz/kube-rbac-proxy
-  go-version: '1.15'
-  kind-version: 'v0.11.0'
+  go-version: '1.18.3'
+  kind-version: 'v0.14.0'
 
 jobs:
   check-license:
@@ -32,6 +32,7 @@ jobs:
       uses: golangci/golangci-lint-action@v2
       with:
         version: latest
+        args: --timeout=5m
   build:
     runs-on: ubuntu-latest
     name: Build
@@ -64,6 +65,10 @@ jobs:
         wait: 300s
     - name: Wait for cluster to finish bootstraping
       run: kubectl wait --for=condition=Ready pods --all --all-namespaces --timeout=300s
+    - name: Setup golang for make test-e2e
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{ env.go-version }}
     - name: Create container & run tests
       run: |
         VERSION=local make container
@@ -86,6 +91,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+      - name: Setup golang for building
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.go-version }}
       - name: Login to Quay.io
         uses: docker/login-action@v1
         with:
