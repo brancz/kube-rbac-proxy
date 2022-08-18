@@ -285,64 +285,9 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 		}
 	}
 
-	withAllowPaths := func(handler http.Handler, allowPaths []string) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			found := len(allowPaths) == 0
-
-			for _, pathAllowed := range allowPaths {
-				found, err = path.Match(pathAllowed, req.URL.Path)
-				if err != nil {
-					http.Error(
-						w,
-						http.StatusText(http.StatusInternalServerError),
-						http.StatusInternalServerError,
-					)
-					return
-				}
-				if found {
-					break
-				}
-			}
-
-			if !found {
-				http.NotFound(w, req)
-				return
-			}
-
-			handler.ServeHTTP(w, req)
-		})
-	}
-
-	withIgnorePaths := func(ignored http.Handler, handler http.Handler, ignorePaths []string) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			ignorePathFound := false
-
-			for _, pathIgnored := range cfg.ignorePaths {
-				ignorePathFound, err = path.Match(pathIgnored, req.URL.Path)
-				if err != nil {
-					http.Error(
-						w,
-						http.StatusText(http.StatusInternalServerError),
-						http.StatusInternalServerError,
-					)
-					return
-				}
-				if ignorePathFound {
-					break
-				}
-			}
-
-			if !ignorePathFound {
-				handler.ServeHTTP(w, req)
-			}
-
-			ignored.ServeHTTP(w, req)
-		})
-	}
-
 	mux := http.NewServeMux()
-	mux.Handle("/", withAllowPaths(
-		withIgnorePaths(
+	mux.Handle("/", server.WithAllowPaths(
+		server.WithIgnorePaths(
 			proxy,
 			server.WithAuthentication(
 				server.WithAuthorization(

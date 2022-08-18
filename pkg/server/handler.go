@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/textproto"
+	"path"
 	"strings"
 	"text/template"
 
@@ -37,6 +38,61 @@ import (
 type Config struct {
 	Authentication *authn.AuthnConfig
 	Authorization  *authz.Config
+}
+
+func WithAllowPaths(handler http.Handler, allowPaths []string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		found := len(allowPaths) == 0
+
+		for _, pathAllowed := range allowPaths {
+			found, err := path.Match(pathAllowed, req.URL.Path)
+			if err != nil {
+				http.Error(
+					w,
+					http.StatusText(http.StatusInternalServerError),
+					http.StatusInternalServerError,
+				)
+				return
+			}
+			if found {
+				break
+			}
+		}
+
+		if !found {
+			http.NotFound(w, req)
+			return
+		}
+
+		handler.ServeHTTP(w, req)
+	})
+}
+
+func WithIgnorePaths(ignored http.Handler, handler http.Handler, ignorePaths []string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		ignorePathFound := false
+
+		for _, pathIgnored := range ignorePaths {
+			ignorePathFound, err := path.Match(pathIgnored, req.URL.Path)
+			if err != nil {
+				http.Error(
+					w,
+					http.StatusText(http.StatusInternalServerError),
+					http.StatusInternalServerError,
+				)
+				return
+			}
+			if ignorePathFound {
+				break
+			}
+		}
+
+		if !ignorePathFound {
+			handler.ServeHTTP(w, req)
+		}
+
+		ignored.ServeHTTP(w, req)
+	})
 }
 
 func WithAuthentication(handler http.Handler, authReq authenticator.Request, audiences []string) http.Handler {
