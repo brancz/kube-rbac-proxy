@@ -29,7 +29,6 @@ import (
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/user"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
-	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 )
 
@@ -55,8 +54,8 @@ func new(authenticator authenticator.Request, authorizer authorizer.Authorizer, 
 }
 
 // New creates an authenticator, an authorizer, and a matching authorizer attributes getter compatible with the kube-rbac-proxy
-func New(client clientset.Interface, config Config, authorizer authorizer.Authorizer, authenticator authenticator.Request) (*kubeRBACProxy, error) {
-	return new(authenticator, authorizer, config), nil
+func New(config Config, authorizer authorizer.Authorizer, authenticator authenticator.Request) *kubeRBACProxy {
+	return new(authenticator, authorizer, config)
 }
 
 // Handle authenticates the client and authorizes the request.

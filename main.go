@@ -230,11 +230,7 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 		sarAuthorizer,
 	)
 
-	auth, err := proxy.New(kubeClient, cfg.auth, authorizer, authenticator)
-
-	if err != nil {
-		klog.Fatalf("Failed to create rbac-proxy: %v", err)
-	}
+	auth := proxy.New(cfg.auth, authorizer, authenticator)
 
 	upstreamTransport, err := initTransport(cfg.upstreamCAFile)
 	if err != nil {
