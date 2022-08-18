@@ -51,15 +51,23 @@ func TestProxyWithOIDCSupport(t *testing.T) {
 
 	scenario := setupTestScenario()
 	for _, v := range scenario {
-
 		t.Run(v.description, func(t *testing.T) {
-
 			w := httptest.NewRecorder()
-			proxy := New(cfg, v.authorizer, authenticator)
-			proxy.Handle(w, v.req)
+
+			WithAuthentication(
+				WithAuthorization(
+					WithAuthHeaders(
+						http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}),
+						cfg.Authentication.Header,
+					),
+					v.authorizer,
+					cfg.Authorization,
+				),
+				authenticator,
+				cfg.Authentication.Token.Audiences,
+			).ServeHTTP(w, v.req)
 
 			resp := w.Result()
-
 			if resp.StatusCode != v.status {
 				t.Errorf("Expected response: %d received : %d", v.status, resp.StatusCode)
 			}

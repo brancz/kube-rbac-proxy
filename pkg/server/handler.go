@@ -29,6 +29,7 @@ import (
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/user"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
+	"k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/klog/v2"
 )
 
@@ -38,82 +39,88 @@ type Config struct {
 	Authorization  *authz.Config
 }
 
-type kubeRBACProxy struct {
-	// authenticator identifies the user for requests to kube-rbac-proxy
-	authenticator.Request
-	// authorizer determines whether a given authorization.Attributes is allowed
-	authorizer.Authorizer
-	// authorizerAttributesGetter implements retrieving authorization attributes for a respective request.
-	authorizerAttributesGetter *krpAuthorizerAttributesGetter
-	// config for kube-rbac-proxy
-	Config Config
-}
+func WithAuthentication(handler http.Handler, authReq authenticator.Request, audiences []string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		ctx := req.Context()
+		if len(audiences) > 0 {
+			ctx = authenticator.WithAudiences(ctx, audiences)
+			req = req.WithContext(ctx)
+		}
 
-func new(authenticator authenticator.Request, authorizer authorizer.Authorizer, config Config) *kubeRBACProxy {
-	return &kubeRBACProxy{authenticator, authorizer, newKubeRBACProxyAuthorizerAttributesGetter(config.Authorization), config}
-}
-
-// New creates an authenticator, an authorizer, and a matching authorizer attributes getter compatible with the kube-rbac-proxy
-func New(config Config, authorizer authorizer.Authorizer, authenticator authenticator.Request) *kubeRBACProxy {
-	return new(authenticator, authorizer, config)
-}
-
-// Handle authenticates the client and authorizes the request.
-// If the authn fails, a 401 error is returned. If the authz fails, a 403 error is returned
-func (h *kubeRBACProxy) Handle(w http.ResponseWriter, req *http.Request) bool {
-	ctx := req.Context()
-	if len(h.Config.Authentication.Token.Audiences) > 0 {
-		ctx = authenticator.WithAudiences(ctx, h.Config.Authentication.Token.Audiences)
-		req = req.WithContext(ctx)
-	}
-
-	// Authenticate
-	u, ok, err := h.AuthenticateRequest(req)
-	if err != nil {
-		klog.Errorf("Unable to authenticate the request due to an error: %v", err)
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return false
-	}
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return false
-	}
-
-	// Get authorization attributes
-	allAttrs := h.authorizerAttributesGetter.GetRequestAttributes(u.User, req)
-	if len(allAttrs) == 0 {
-		msg := "Bad Request. The request or configuration is malformed."
-		klog.V(2).Info(msg)
-		http.Error(w, msg, http.StatusBadRequest)
-		return false
-	}
-
-	for _, attrs := range allAttrs {
-		// Authorize
-		authorized, reason, err := h.Authorize(ctx, attrs)
+		res, ok, err := authReq.AuthenticateRequest(req)
 		if err != nil {
-			msg := fmt.Sprintf("Authorization error (user=%s, verb=%s, resource=%s, subresource=%s)", u.User.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
-			klog.Errorf("%s: %s", msg, err)
-			http.Error(w, msg, http.StatusInternalServerError)
-			return false
+			klog.Errorf("Unable to authenticate the request due to an error: %v", err)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
 		}
-		if authorized != authorizer.DecisionAllow {
-			msg := fmt.Sprintf("Forbidden (user=%s, verb=%s, resource=%s, subresource=%s)", u.User.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
-			klog.V(2).Infof("%s. Reason: %q.", msg, reason)
-			http.Error(w, msg, http.StatusForbidden)
-			return false
+		if !ok {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
 		}
-	}
 
-	if h.Config.Authentication.Header.Enabled {
-		// Seemingly well-known headers to tell the upstream about user's identity
-		// so that the upstream can achieve the original goal of delegating RBAC authn/authz to kube-rbac-proxy
-		headerCfg := h.Config.Authentication.Header
-		req.Header.Set(headerCfg.UserFieldName, u.User.GetName())
-		req.Header.Set(headerCfg.GroupsFieldName, strings.Join(u.User.GetGroups(), headerCfg.GroupSeparator))
-	}
+		req = req.WithContext(request.WithUser(req.Context(), res.User))
+		handler.ServeHTTP(w, req)
+	})
+}
 
-	return true
+func WithAuthorization(
+	handler http.Handler,
+	authz authorizer.Authorizer,
+	cfg *authz.Config,
+) http.Handler {
+	authzAttrGetter := newKubeRBACProxyAuthorizerAttributesGetter(cfg).GetRequestAttributes
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		u, ok := request.UserFrom(req.Context())
+		if !ok {
+			http.Error(w, "user not in context", http.StatusUnauthorized)
+			return
+		}
+
+		allAttrs := authzAttrGetter(u, req)
+		if len(allAttrs) == 0 {
+			msg := "Bad Request. The request or configuration is malformed."
+			klog.V(2).Info(msg)
+			http.Error(w, msg, http.StatusBadRequest)
+			return
+		}
+
+		for _, attrs := range allAttrs {
+			// Authorize
+			authorized, reason, err := authz.Authorize(req.Context(), attrs)
+			if err != nil {
+				msg := fmt.Sprintf("Authorization error (user=%s, verb=%s, resource=%s, subresource=%s)", u.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
+				klog.Errorf("%s: %s", msg, err)
+				http.Error(w, msg, http.StatusInternalServerError)
+				return
+			}
+			if authorized != authorizer.DecisionAllow {
+				msg := fmt.Sprintf("Forbidden (user=%s, verb=%s, resource=%s, subresource=%s)", u.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
+				klog.V(2).Infof("%s. Reason: %q.", msg, reason)
+				http.Error(w, msg, http.StatusForbidden)
+				return
+			}
+		}
+
+		handler.ServeHTTP(w, req)
+	})
+}
+
+// WithAuthHeaders adds identity information to the headers.
+// Must not be used, if connection is not encrypted with TLS.
+func WithAuthHeaders(handler http.Handler, cfg *authn.AuthnHeaderConfig) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if cfg.Enabled {
+			u, ok := request.UserFrom(req.Context())
+			if ok {
+				// Seemingly well-known headers to tell the upstream about user's identity
+				// so that the upstream can achieve the original goal of delegating RBAC authn/authz to kube-rbac-proxy
+				req.Header.Set(cfg.UserFieldName, u.GetName())
+				req.Header.Set(cfg.GroupsFieldName, strings.Join(u.GetGroups(), cfg.GroupSeparator))
+			}
+		}
+
+		handler.ServeHTTP(w, req)
+	})
 }
 
 func newKubeRBACProxyAuthorizerAttributesGetter(authzConfig *authz.Config) *krpAuthorizerAttributesGetter {

@@ -244,11 +244,6 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 		sarAuthorizer,
 	)
 
-	auth, err := server.New(kubeClient, cfg.auth, authorizer, authenticator)
-	if err != nil {
-		klog.Fatalf("Failed to create rbac-proxy: %v", err)
-	}
-
 	upstreamTransport, err := initTransport(cfg.upstreamCAFile)
 	if err != nil {
 		klog.Fatalf("Failed to set up upstream TLS connection: %v", err)
@@ -349,11 +344,15 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 	mux.Handle("/", withAllowPaths(
 		withIgnorePaths(
 			proxy,
-			http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-				if auth.Handle(w, req) {
-					proxy.ServeHTTP(w, req)
-				}
-			}),
+			server.WithAuthentication(
+				server.WithAuthorization(
+					server.WithAuthHeaders(proxy, cfg.auth.Authentication.Header),
+					authorizer,
+					cfg.auth.Authorization,
+				),
+				authenticator,
+				cfg.auth.Authentication.Token.Audiences,
+			),
 			cfg.ignorePaths,
 		),
 		cfg.allowPaths,
