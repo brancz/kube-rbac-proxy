@@ -104,7 +104,7 @@ type staticAuthorizer struct {
 	config []StaticAuthorizationConfig
 }
 
-func (saConfig StaticAuthorizationConfig) Equal(a authorizer.Attributes) bool {
+func (saConfig StaticAuthorizationConfig) Matches(a authorizer.Attributes) bool {
 	isAllowed := func(staticConf string, requestVal string) bool {
 		if staticConf == "" {
 			return true
@@ -135,7 +135,7 @@ func (saConfig StaticAuthorizationConfig) Equal(a authorizer.Attributes) bool {
 func (sa staticAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
 	// compare a against the configured static auths
 	for _, saConfig := range sa.config {
-		if saConfig.Equal(a) {
+		if saConfig.Matches(a) {
 			return authorizer.DecisionAllow, "found corresponding static auth config", nil
 		}
 	}
