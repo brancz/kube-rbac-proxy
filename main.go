@@ -286,12 +286,16 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 	}
 
 	mux := http.NewServeMux()
+	// TODO: create k8s typical handler = middleware1(handler, cfg) logic
 	mux.Handle("/", server.WithAllowPaths(
 		server.WithIgnorePaths(
 			proxy,
 			server.WithAuthentication(
 				server.WithAuthorization(
-					server.WithAuthHeaders(proxy, cfg.auth.Authentication.Header),
+					server.WithAuthHeaders(
+						proxy,
+						cfg.auth.Authentication.Header,
+					),
 					authorizer,
 					cfg.auth.Authorization,
 				),
