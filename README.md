@@ -36,6 +36,7 @@ Usage of _output/kube-rbac-proxy:
       --auth-header-groups-field-separator string   The separator string used for concatenating multiple group names in a groups header field's value (default "|")
       --auth-header-user-field-name string          The name of the field inside a http(2) request header to tell the upstream server about the user's name (default "x-remote-user")
       --auth-token-audiences strings                Comma-separated list of token audiences to accept. By default a token does not have to have any specific audience. It is recommended to set a specific audience.
+      --authentication-skip-lookup                  If false, the authentication-kubeconfig will be used to lookup missing authentication configuration from the cluster. (default true)
       --client-ca-file string                       If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.
       --config-file string                          Configuration file to configure kube-rbac-proxy.
       --ignore-paths strings                        Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the requst matches, it will proxy the request without performing an authentication or authorization check. Cannot be used with --allow-paths.
@@ -119,6 +120,13 @@ Additionally, to my knowledge Envoy neither has nor plans Kubernetes specific RB
 To run tests locally, you need to have [kind](https://kind.sigs.k8s.io/) installed. By default it uses the default cluster, so be aware that it might override your default cluster.
 
 The command to execute the tests is: `VERSION=local make clean container kind-create-cluster test`.
+
+If testing e2e from mac:
+
+```
+GOOS=linux VERSION=local make clean container kind-create-cluster
+VERSION=local make test-e2e
+```
 
 ## Roadmap
 

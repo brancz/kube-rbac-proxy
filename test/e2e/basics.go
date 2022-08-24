@@ -313,6 +313,46 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			),
 		}.Run(t)
+		kubetest.Scenario{
+			Name: "InClusterLookup",
+			Description: `
+                               As a client with client certificates authentication with in cluster client CA lookup,
+                               I succeed with my request
+                       `,
+
+			Given: kubetest.Actions(
+				kubetest.CreatedManifests(
+					client,
+					"clientcertificates/certificate.yaml",
+					"clientcertificates/clusterRole-inclusterlookup.yaml",
+					"clientcertificates/clusterRoleBinding.yaml",
+					"clientcertificates/deployment-inclusterlookup.yaml",
+					"clientcertificates/service.yaml",
+					"clientcertificates/serviceAccount.yaml",
+					"clientcertificates/clusterRole-client.yaml",
+					"clientcertificates/clusterRoleBinding-client.yaml",
+				),
+				kubetest.UpdateClientCertificates(client),
+			),
+			When: kubetest.Actions(
+				kubetest.PodsAreReady(
+					client,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					client,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Actions(
+				kubetest.ClientSucceeds(
+					client,
+					command,
+					&kubetest.RunOptions{ClientCertificates: true},
+				),
+			),
+		}.Run(t)
 	}
 }
 
@@ -491,12 +531,12 @@ func testIgnorePaths(client kubernetes.Interface) kubetest.TestSuite {
 			Then: kubetest.Actions(
 				kubetest.ClientSucceeds(
 					client,
-					fmt.Sprintf(commandWithoutAuth, "/", 401, 401),
+					fmt.Sprintf(commandWithoutAuth, "/", 403, 403),
 					nil,
 				),
 				kubetest.ClientSucceeds(
 					client,
-					fmt.Sprintf(commandWithoutAuth, "/api/v1/label/job/values", 401, 401),
+					fmt.Sprintf(commandWithoutAuth, "/api/v1/label/job/values", 403, 403),
 					nil,
 				),
 			),

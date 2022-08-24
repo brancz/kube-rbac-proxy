@@ -19,6 +19,11 @@ package kubetest
 import (
 	"bytes"
 	"context"
+	cryptorand "crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"os"
@@ -28,12 +33,15 @@ import (
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	kubeyaml "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/cert"
+	"k8s.io/client-go/util/certificate/csr"
 )
 
 func CreatedManifests(client kubernetes.Interface, paths ...string) Action {
@@ -89,6 +97,83 @@ func CreatedManifests(client kubernetes.Interface, paths ...string) Action {
 				return fmt.Errorf("unable to unmarshal manifest with unknown kind: %s", kind)
 			}
 		}
+		return nil
+	}
+}
+
+func UpdateClientCertificates(client kubernetes.Interface) Action {
+	return func(ctx *ScenarioContext) error {
+		privateKey, err := rsa.GenerateKey(cryptorand.Reader, 2048)
+		if err != nil {
+			return err
+		}
+		csrData, err := cert.MakeCSR(privateKey, &pkix.Name{CommonName: "kube-rbac-proxy-certificates-test"}, nil, nil)
+		if err != nil {
+			return err
+		}
+		csrName, csrUID, err := csr.RequestCertificate(client, csrData, "kube-rbac-proxy-client", certificatesv1.KubeAPIServerClientSignerName,
+			nil, []certificatesv1.KeyUsage{certificatesv1.UsageClientAuth}, privateKey)
+		if err != nil {
+			return err
+		}
+		csrObj, err := client.CertificatesV1().CertificateSigningRequests().Get(context.TODO(), csrName, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		csrObj.Status.Conditions = []certificatesv1.CertificateSigningRequestCondition{
+			{
+				Type:    certificatesv1.CertificateApproved,
+				Status:  corev1.ConditionTrue,
+				Reason:  "TestInClusterLookup",
+				Message: "kube-rbac-proxy-client",
+			},
+		}
+		_, err = client.CertificatesV1().CertificateSigningRequests().UpdateApproval(context.TODO(), csrName, csrObj, metav1.UpdateOptions{})
+		if err != nil {
+			return err
+		}
+
+		certData, err := csr.WaitForCertificate(context.TODO(), client, csrName, csrUID)
+		if err != nil {
+			return err
+		}
+
+		certs, err := cert.ParseCertsPEM(certData)
+		if err != nil {
+			return err
+		}
+		if len(certs) == 0 {
+			return fmt.Errorf("failed to get client certificate")
+		}
+		secret, err := client.CoreV1().Secrets(ctx.Namespace).Get(context.TODO(), "kube-rbac-proxy-client-certificates", metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		newSecret := *secret
+		newSecret.Data["tls.key"] = pem.EncodeToMemory(
+			&pem.Block{
+				Type:  "RSA PRIVATE KEY",
+				Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+			},
+		)
+		newSecret.Data["tls.crt"] = pem.EncodeToMemory(
+			&pem.Block{
+				Type:  "CERTIFICATE",
+				Bytes: certs[0].Raw,
+			},
+		)
+		_, err = client.CoreV1().Secrets(ctx.Namespace).Update(context.TODO(), &newSecret, metav1.UpdateOptions{})
+		if err != nil {
+			return err
+		}
+
+		ctx.AddCleanUp(func() error {
+			_, err := client.CoreV1().Secrets(ctx.Namespace).Update(context.TODO(), secret, metav1.UpdateOptions{})
+			if err != nil {
+				err = client.CertificatesV1().CertificateSigningRequests().Delete(context.TODO(), csrName, metav1.DeleteOptions{})
+			}
+			return err
+		})
 		return nil
 	}
 }

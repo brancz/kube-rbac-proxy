@@ -20,6 +20,8 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -27,6 +29,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -38,17 +41,16 @@ import (
 	"golang.org/x/net/http2/h2c"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authorization/union"
+	"k8s.io/apiserver/pkg/server"
+	genericapiserveroptions "k8s.io/apiserver/pkg/server/options"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	certutil "k8s.io/client-go/util/cert"
-	k8sapiflag "k8s.io/component-base/cli/flag"
 	"k8s.io/klog/v2"
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
 	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
-	rbac_proxy_tls "github.com/brancz/kube-rbac-proxy/pkg/tls"
 )
 
 type config struct {
@@ -62,40 +64,36 @@ type config struct {
 	kubeconfigLocation    string
 	allowPaths            []string
 	ignorePaths           []string
+	configFileName        string
+	ServingOptions        *genericapiserveroptions.SecureServingOptionsWithLoopback
+	AuthenticationOptions *genericapiserveroptions.DelegatingAuthenticationOptions
 }
 
-type tlsConfig struct {
-	certFile       string
-	keyFile        string
-	minVersion     string
-	cipherSuites   []string
-	reloadInterval time.Duration
-}
-
-type configfile struct {
-	AuthorizationConfig *authz.Config `json:"authorization,omitempty"`
-}
-
-func main() {
-	cfg := config{
+func NewConfig() *config {
+	return &config{
 		auth: proxy.Config{
 			Authentication: &authn.AuthnConfig{
-				X509:   &authn.X509Config{},
 				Header: &authn.AuthnHeaderConfig{},
 				OIDC:   &authn.OIDCConfig{},
 				Token:  &authn.TokenConfig{},
 			},
 			Authorization: &authz.Config{},
 		},
+		ServingOptions:        genericapiserveroptions.NewSecureServingOptions().WithLoopback(),
+		AuthenticationOptions: genericapiserveroptions.NewDelegatingAuthenticationOptions(),
 	}
-	configFileName := ""
+}
 
-	// Add klog flags
-	klogFlags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	klog.InitFlags(klogFlags)
+// tlsConfig is no longer used. TLS configuration is now managed by SecureServingOptions
+// This is here to keep tls-reload-interval for backward compatibility
+type tlsConfig struct {
+	reloadInterval time.Duration
+}
 
-	flagset := pflag.NewFlagSet(os.Args[0], pflag.ExitOnError)
-	flagset.AddGoFlagSet(klogFlags)
+func (cfg *config) AddFlags(flagset *pflag.FlagSet) {
+	if cfg.ServingOptions == nil || cfg.AuthenticationOptions == nil {
+		return
+	}
 
 	// kube-rbac-proxy flags
 	flagset.StringVar(&cfg.insecureListenAddress, "insecure-listen-address", "", "The address the kube-rbac-proxy HTTP server should listen on.")
@@ -103,19 +101,22 @@ func main() {
 	flagset.StringVar(&cfg.upstream, "upstream", "", "The upstream URL to proxy to once requests have successfully been authenticated and authorized.")
 	flagset.BoolVar(&cfg.upstreamForceH2C, "upstream-force-h2c", false, "Force h2c to communiate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only")
 	flagset.StringVar(&cfg.upstreamCAFile, "upstream-ca-file", "", "The CA the upstream uses for TLS connection. This is required when the upstream uses TLS and its own CA certificate")
-	flagset.StringVar(&configFileName, "config-file", "", "Configuration file to configure kube-rbac-proxy.")
+	flagset.StringVar(&cfg.configFileName, "config-file", "", "Configuration file to configure kube-rbac-proxy.")
 	flagset.StringSliceVar(&cfg.allowPaths, "allow-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the request doesn't match, kube-rbac-proxy responds with a 404 status code. If omitted, the incoming request path isn't checked. Cannot be used with --ignore-paths.")
 	flagset.StringSliceVar(&cfg.ignorePaths, "ignore-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the requst matches, it will proxy the request without performing an authentication or authorization check. Cannot be used with --allow-paths.")
 
 	// TLS flags
-	flagset.StringVar(&cfg.tls.certFile, "tls-cert-file", "", "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)")
-	flagset.StringVar(&cfg.tls.keyFile, "tls-private-key-file", "", "File containing the default x509 private key matching --tls-cert-file.")
-	flagset.StringVar(&cfg.tls.minVersion, "tls-min-version", "VersionTLS12", "Minimum TLS version supported. Value must match version names from https://golang.org/pkg/crypto/tls/#pkg-constants.")
-	flagset.StringSliceVar(&cfg.tls.cipherSuites, "tls-cipher-suites", nil, "Comma-separated list of cipher suites for the server. Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants). If omitted, the default Go cipher suites will be used")
+	flagset.StringVar(&cfg.ServingOptions.ServerCert.CertKey.CertFile, "tls-cert-file", "", "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)")
+	flagset.StringVar(&cfg.ServingOptions.ServerCert.CertKey.KeyFile, "tls-private-key-file", "", "File containing the default x509 private key matching --tls-cert-file.")
+	flagset.StringVar(&cfg.ServingOptions.MinTLSVersion, "tls-min-version", "VersionTLS12", "Minimum TLS version supported. Value must match version names from https://golang.org/pkg/crypto/tls/#pkg-constants.")
+	flagset.StringSliceVar(&cfg.ServingOptions.CipherSuites, "tls-cipher-suites", nil, "Comma-separated list of cipher suites for the server. Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants). If omitted, the default Go cipher suites will be used")
 	flagset.DurationVar(&cfg.tls.reloadInterval, "tls-reload-interval", time.Minute, "The interval at which to watch for TLS certificate changes, by default set to 1 minute.")
 
 	// Auth flags
-	flagset.StringVar(&cfg.auth.Authentication.X509.ClientCAFile, "client-ca-file", "", "If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.")
+	flagset.StringVar(&cfg.AuthenticationOptions.ClientCert.ClientCA, "client-ca-file", "", "If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.")
+	flagset.BoolVar(&cfg.AuthenticationOptions.SkipInClusterLookup, "authentication-skip-lookup", true, ""+
+		"If false, the authentication-kubeconfig will be used to lookup missing authentication "+
+		"configuration from the cluster.")
 	flagset.BoolVar(&cfg.auth.Authentication.Header.Enabled, "auth-header-fields-enabled", false, "When set to true, kube-rbac-proxy adds auth-related fields to the headers of http requests sent to the upstream")
 	flagset.StringVar(&cfg.auth.Authentication.Header.UserFieldName, "auth-header-user-field-name", "x-remote-user", "The name of the field inside a http(2) request header to tell the upstream server about the user's name")
 	flagset.StringVar(&cfg.auth.Authentication.Header.GroupsFieldName, "auth-header-groups-field-name", "x-remote-groups", "The name of the field inside a http(2) request header to tell the upstream server about the user's groups")
@@ -133,6 +134,69 @@ func main() {
 
 	//Kubeconfig flag
 	flagset.StringVar(&cfg.kubeconfigLocation, "kubeconfig", "", "Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used")
+}
+
+type configfile struct {
+	AuthorizationConfig *authz.Config `json:"authorization,omitempty"`
+}
+
+func (cfg *config) ApplyTo(secureServingInfo **server.SecureServingInfo, loopbackClientConfig **rest.Config, authenticationInfo *server.AuthenticationInfo) error {
+	var err error
+
+	if cfg.configFileName != "" {
+		klog.Infof("Reading config file: %s", cfg.configFileName)
+		b, err := ioutil.ReadFile(cfg.configFileName)
+		if err != nil {
+			return fmt.Errorf("failed to read resource-attribute file: %v", err)
+		}
+
+		configfile := configfile{}
+
+		err = yaml.Unmarshal(b, &configfile)
+		if err != nil {
+			return fmt.Errorf("failed to parse config file content: %v", err)
+		}
+
+		cfg.auth.Authorization = configfile.AuthorizationConfig
+	}
+
+	if cfg.secureListenAddress != "" {
+		host, portString, err := net.SplitHostPort(cfg.secureListenAddress)
+		if err != nil {
+			return fmt.Errorf("secureListenAddress is invalid: %v", err)
+		}
+		port, err := strconv.Atoi(portString)
+		if err != nil {
+			return fmt.Errorf("secureListenAddress port is invalid: %v", err)
+		}
+		if t := net.ParseIP(host); t == nil {
+			return fmt.Errorf("secureListenAddress host is invalid: %v", err)
+		}
+		cfg.ServingOptions.BindAddress = net.ParseIP(host)
+		cfg.ServingOptions.BindPort = port
+
+	}
+
+	if err = cfg.ServingOptions.ApplyTo(secureServingInfo, loopbackClientConfig); err != nil {
+		klog.Fatalf("Failed to apply serving options: %v", err)
+	}
+	if err = cfg.AuthenticationOptions.ApplyTo(authenticationInfo, *secureServingInfo, nil); err != nil {
+		klog.Fatalf("Failed to apply authentication options: %v", err)
+	}
+	return err
+}
+
+func main() {
+	cfg := NewConfig()
+
+	// Add klog flags
+	klogFlags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	klog.InitFlags(klogFlags)
+
+	flagset := pflag.NewFlagSet(os.Args[0], pflag.ExitOnError)
+	flagset.AddGoFlagSet(klogFlags)
+
+	cfg.AddFlags(flagset)
 
 	err := flagset.Parse(os.Args[1:])
 	if err != nil {
@@ -145,7 +209,7 @@ func main() {
 		klog.Fatalf("Failed to parse upstream URL: %v", err)
 	}
 
-	hasCerts := !(cfg.tls.certFile == "") && !(cfg.tls.keyFile == "")
+	hasCerts := !(cfg.ServingOptions.ServerCert.CertKey.CertFile == "") && !(cfg.ServingOptions.ServerCert.CertKey.KeyFile == "")
 	hasInsecureListenAddress := cfg.insecureListenAddress != ""
 	if !hasCerts || hasInsecureListenAddress {
 		klog.Warning(`
@@ -163,24 +227,16 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 
 		`)
 	}
+	if cfg.tls.reloadInterval != time.Minute {
+		klog.Warning(`
+==== Deprecation Warning ======================
 
-	if configFileName != "" {
-		klog.Infof("Reading config file: %s", configFileName)
-		b, err := os.ReadFile(configFileName)
-		if err != nil {
-			klog.Fatalf("Failed to read resource-attribute file: %v", err)
-		}
+Flag --tls-reload-interval will be removed from future releases. It is here for
+backward compatibility. New tls reload mechanism takes care of this automatically.
 
-		configfile := configfile{}
-
-		err = yaml.Unmarshal(b, &configfile)
-		if err != nil {
-			klog.Fatalf("Failed to parse config file content: %v", err)
-		}
-
-		cfg.auth.Authorization = configfile.AuthorizationConfig
+===============================================
+        `)
 	}
-
 	kubeClient, err := kubernetes.NewForConfig(kcfg)
 	if err != nil {
 		klog.Fatalf("Failed to instantiate Kubernetes client: %v", err)
@@ -189,6 +245,17 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 	var authenticator authenticator.Request
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	var (
+		secureServingInfo *server.SecureServingInfo
+		// loopbackClientConfig is a placeholder so that SecureServingOptionsWithLoopback.ApplyTo
+		// will create self-signed certificate. This is needed in case no tls certificate is passed in.
+		loopbackClientConfig *rest.Config
+		authenticationInfo   server.AuthenticationInfo
+	)
+	if err = cfg.ApplyTo(&secureServingInfo, &loopbackClientConfig, &authenticationInfo); err != nil {
+		klog.Fatalf("Failed to apply config: %v", err)
+	}
 
 	// If OIDC configuration provided, use oidc authenticator
 	if cfg.auth.Authentication.OIDC.IssuerURL != "" {
@@ -200,17 +267,9 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 		go oidcAuthenticator.Run(ctx)
 		authenticator = oidcAuthenticator
 	} else {
-		//Use Delegating authenticator
 		klog.Infof("Valid token audiences: %s", strings.Join(cfg.auth.Authentication.Token.Audiences, ", "))
 
-		tokenClient := kubeClient.AuthenticationV1()
-		delegatingAuthenticator, err := authn.NewDelegatingAuthenticator(tokenClient, cfg.auth.Authentication)
-		if err != nil {
-			klog.Fatalf("Failed to instantiate delegating authenticator: %v", err)
-		}
-
-		go delegatingAuthenticator.Run(ctx)
-		authenticator = delegatingAuthenticator
+		authenticator = authenticationInfo.Authenticator
 	}
 
 	sarClient := kubeClient.AuthorizationV1()
@@ -324,76 +383,31 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 	var gr run.Group
 	{
 		if cfg.secureListenAddress != "" {
-			srv := &http.Server{Handler: mux, TLSConfig: &tls.Config{}}
-
-			if cfg.tls.certFile == "" && cfg.tls.keyFile == "" {
-				klog.Info("Generating self signed cert as no cert is provided")
-				host, err := os.Hostname()
-				if err != nil {
-					klog.Fatalf("Failed to retrieve hostname for self-signed cert: %v", err)
-				}
-				certBytes, keyBytes, err := certutil.GenerateSelfSignedCertKey(host, nil, nil)
-				if err != nil {
-					klog.Fatalf("Failed to generate self signed cert and key: %v", err)
-				}
-				cert, err := tls.X509KeyPair(certBytes, keyBytes)
-				if err != nil {
-					klog.Fatalf("Failed to load generated self signed cert and key: %v", err)
-				}
-
-				srv.TLSConfig.Certificates = []tls.Certificate{cert}
-			} else {
-				klog.Info("Reading certificate files")
-				ctx, cancel := context.WithCancel(context.Background())
-				r, err := rbac_proxy_tls.NewCertReloader(cfg.tls.certFile, cfg.tls.keyFile, cfg.tls.reloadInterval)
-				if err != nil {
-					klog.Fatalf("Failed to initialize certificate reloader: %v", err)
-				}
-
-				srv.TLSConfig.GetCertificate = r.GetCertificate
-
-				gr.Add(func() error {
-					return r.Watch(ctx)
-				}, func(error) {
-					cancel()
-				})
-			}
-
-			version, err := k8sapiflag.TLSVersion(cfg.tls.minVersion)
-			if err != nil {
-				klog.Fatalf("TLS version invalid: %v", err)
-			}
-
-			cipherSuiteIDs, err := k8sapiflag.TLSCipherSuites(cfg.tls.cipherSuites)
-			if err != nil {
-				klog.Fatalf("Failed to convert TLS cipher suite name to ID: %v", err)
-			}
-
-			srv.TLSConfig.CipherSuites = cipherSuiteIDs
-			srv.TLSConfig.MinVersion = version
-			srv.TLSConfig.ClientAuth = tls.RequestClientCert
-
-			if err := http2.ConfigureServer(srv, nil); err != nil {
-				klog.Fatalf("failed to configure http2 server: %v", err)
-			}
-
-			klog.Infof("Starting TCP socket on %v", cfg.secureListenAddress)
-			l, err := net.Listen("tcp", cfg.secureListenAddress)
-			if err != nil {
-				klog.Fatalf("failed to listen on secure address: %v", err)
-			}
-
+			stopCh := make(chan struct{})
 			gr.Add(func() error {
+				shutdownTimeout := time.Duration(60) * time.Second
+				var stoppedCh <-chan struct{}
+				var listenerStoppedCh <-chan struct{}
 				klog.Infof("Listening securely on %v", cfg.secureListenAddress)
-				tlsListener := tls.NewListener(l, srv.TLSConfig)
-				return srv.Serve(tlsListener)
+
+				var err error
+				stoppedCh, listenerStoppedCh, err = secureServingInfo.Serve(mux, shutdownTimeout, stopCh)
+				if err != nil {
+					klog.Infof("Serve returns error: %v", err)
+					close(stopCh)
+					return err
+				}
+				if listenerStoppedCh != nil {
+					<-listenerStoppedCh
+				}
+				if stoppedCh != nil {
+					<-stoppedCh
+				}
+
+				return err
+
 			}, func(err error) {
-				if err := srv.Shutdown(context.Background()); err != nil {
-					klog.Errorf("failed to gracefully shutdown server: %v", err)
-				}
-				if err := l.Close(); err != nil {
-					klog.Errorf("failed to gracefully close secure listener: %v", err)
-				}
+				close(stopCh)
 			})
 		}
 	}
