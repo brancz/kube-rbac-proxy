@@ -145,6 +145,20 @@ func main() {
 		klog.Fatalf("Failed to parse upstream URL: %v", err)
 	}
 
+	if cfg.tls.reloadInterval != time.Minute {
+		klog.Warning(`
+==== Deprecation Warning ======================
+
+tls-reload-interval will be removed.
+Using --tls-reload-interval won't be possible!
+
+For more information, please go to https://github.com/brancz/kube-rbac-proxy/issues/196
+
+===============================================
+		`)
+
+	}
+
 	hasCerts := !(cfg.tls.certFile == "") && !(cfg.tls.keyFile == "")
 	hasInsecureListenAddress := cfg.insecureListenAddress != ""
 	if !hasCerts || hasInsecureListenAddress {
