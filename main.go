@@ -21,7 +21,6 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -52,6 +51,8 @@ import (
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
 	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
 )
+
+var serverShutdownTimeout = 60 * time.Second
 
 type config struct {
 	insecureListenAddress string
@@ -140,21 +141,19 @@ type configfile struct {
 	AuthorizationConfig *authz.Config `json:"authorization,omitempty"`
 }
 
-func (cfg *config) ApplyTo(secureServingInfo **server.SecureServingInfo, loopbackClientConfig **rest.Config, authenticationInfo *server.AuthenticationInfo) error {
-	var err error
-
+func (cfg *config) ApplyTo(secureServingInfo **server.SecureServingInfo,
+	loopbackClientConfig **rest.Config, authenticationInfo *server.AuthenticationInfo) error {
 	if cfg.configFileName != "" {
 		klog.Infof("Reading config file: %s", cfg.configFileName)
-		b, err := ioutil.ReadFile(cfg.configFileName)
+		b, err := os.ReadFile(cfg.configFileName)
 		if err != nil {
-			return fmt.Errorf("failed to read resource-attribute file: %v", err)
+			return fmt.Errorf("failed to read resource-attribute file: %w", err)
 		}
 
 		configfile := configfile{}
 
-		err = yaml.Unmarshal(b, &configfile)
-		if err != nil {
-			return fmt.Errorf("failed to parse config file content: %v", err)
+		if err := yaml.Unmarshal(b, &configfile); err != nil {
+			return fmt.Errorf("failed to parse config file content: %w", err)
 		}
 
 		cfg.auth.Authorization = configfile.AuthorizationConfig
@@ -163,27 +162,27 @@ func (cfg *config) ApplyTo(secureServingInfo **server.SecureServingInfo, loopbac
 	if cfg.secureListenAddress != "" {
 		host, portString, err := net.SplitHostPort(cfg.secureListenAddress)
 		if err != nil {
-			return fmt.Errorf("secureListenAddress is invalid: %v", err)
+			return fmt.Errorf("secureListenAddress is invalid: %w", err)
 		}
 		port, err := strconv.Atoi(portString)
 		if err != nil {
-			return fmt.Errorf("secureListenAddress port is invalid: %v", err)
+			return fmt.Errorf("secureListenAddress port is invalid: %w", err)
 		}
 		if t := net.ParseIP(host); t == nil {
-			return fmt.Errorf("secureListenAddress host is invalid: %v", err)
+			return fmt.Errorf("secureListenAddress host is invalid: %w", err)
 		}
 		cfg.ServingOptions.BindAddress = net.ParseIP(host)
 		cfg.ServingOptions.BindPort = port
 
 	}
 
-	if err = cfg.ServingOptions.ApplyTo(secureServingInfo, loopbackClientConfig); err != nil {
-		klog.Fatalf("Failed to apply serving options: %v", err)
+	if err := cfg.ServingOptions.ApplyTo(secureServingInfo, loopbackClientConfig); err != nil {
+		klog.Fatalf("Failed to apply serving options: %w", err)
 	}
-	if err = cfg.AuthenticationOptions.ApplyTo(authenticationInfo, *secureServingInfo, nil); err != nil {
-		klog.Fatalf("Failed to apply authentication options: %v", err)
+	if err := cfg.AuthenticationOptions.ApplyTo(authenticationInfo, *secureServingInfo, nil); err != nil {
+		klog.Fatalf("Failed to apply authentication options: %w", err)
 	}
-	return err
+	return nil
 }
 
 func main() {
@@ -200,13 +199,13 @@ func main() {
 
 	err := flagset.Parse(os.Args[1:])
 	if err != nil {
-		klog.Fatalf("Failed to parse CLI flags: %v", err)
+		klog.Fatalf("Failed to parse CLI flags: %w", err)
 	}
 	kcfg := initKubeConfig(cfg.kubeconfigLocation)
 
 	upstreamURL, err := url.Parse(cfg.upstream)
 	if err != nil {
-		klog.Fatalf("Failed to parse upstream URL: %v", err)
+		klog.Fatalf("Failed to parse upstream URL: %w", err)
 	}
 
 	hasCerts := !(cfg.ServingOptions.ServerCert.CertKey.CertFile == "") && !(cfg.ServingOptions.ServerCert.CertKey.KeyFile == "")
@@ -233,13 +232,14 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 
 Flag --tls-reload-interval will be removed from future releases. It is here for
 backward compatibility. New tls reload mechanism takes care of this automatically.
+As of now, k8s default configs are being used. 
 
 ===============================================
         `)
 	}
 	kubeClient, err := kubernetes.NewForConfig(kcfg)
 	if err != nil {
-		klog.Fatalf("Failed to instantiate Kubernetes client: %v", err)
+		klog.Fatalf("Failed to instantiate Kubernetes client: %w", err)
 	}
 
 	var authenticator authenticator.Request
@@ -254,14 +254,14 @@ backward compatibility. New tls reload mechanism takes care of this automaticall
 		authenticationInfo   server.AuthenticationInfo
 	)
 	if err = cfg.ApplyTo(&secureServingInfo, &loopbackClientConfig, &authenticationInfo); err != nil {
-		klog.Fatalf("Failed to apply config: %v", err)
+		klog.Fatalf("Failed to apply config: %w", err)
 	}
 
 	// If OIDC configuration provided, use oidc authenticator
 	if cfg.auth.Authentication.OIDC.IssuerURL != "" {
 		oidcAuthenticator, err := authn.NewOIDCAuthenticator(cfg.auth.Authentication.OIDC)
 		if err != nil {
-			klog.Fatalf("Failed to instantiate OIDC authenticator: %v", err)
+			klog.Fatalf("Failed to instantiate OIDC authenticator: %w", err)
 		}
 
 		go oidcAuthenticator.Run(ctx)
@@ -276,12 +276,12 @@ backward compatibility. New tls reload mechanism takes care of this automaticall
 	sarAuthorizer, err := authz.NewSarAuthorizer(sarClient)
 
 	if err != nil {
-		klog.Fatalf("Failed to create sar authorizer: %v", err)
+		klog.Fatalf("Failed to create sar authorizer: %w", err)
 	}
 
 	staticAuthorizer, err := authz.NewStaticAuthorizer(cfg.auth.Authorization.Static)
 	if err != nil {
-		klog.Fatalf("Failed to create static authorizer: %v", err)
+		klog.Fatalf("Failed to create static authorizer: %w", err)
 	}
 
 	authorizer := union.New(
@@ -293,7 +293,7 @@ backward compatibility. New tls reload mechanism takes care of this automaticall
 
 	upstreamTransport, err := initTransport(cfg.upstreamCAFile)
 	if err != nil {
-		klog.Fatalf("Failed to set up upstream TLS connection: %v", err)
+		klog.Fatalf("Failed to set up upstream TLS connection: %w", err)
 	}
 
 	if len(cfg.allowPaths) > 0 && len(cfg.ignorePaths) > 0 {
@@ -383,31 +383,23 @@ backward compatibility. New tls reload mechanism takes care of this automaticall
 	var gr run.Group
 	{
 		if cfg.secureListenAddress != "" {
-			stopCh := make(chan struct{})
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 			gr.Add(func() error {
-				shutdownTimeout := time.Duration(60) * time.Second
-				var stoppedCh <-chan struct{}
-				var listenerStoppedCh <-chan struct{}
 				klog.Infof("Listening securely on %v", cfg.secureListenAddress)
 
-				var err error
-				stoppedCh, listenerStoppedCh, err = secureServingInfo.Serve(mux, shutdownTimeout, stopCh)
+				stoppedCh, listenerStoppedCh, err := secureServingInfo.Serve(mux, serverShutdownTimeout, ctx.Done())
 				if err != nil {
-					klog.Infof("Serve returns error: %v", err)
-					close(stopCh)
+					klog.Infof("Serve returns error: %w", err)
 					return err
 				}
-				if listenerStoppedCh != nil {
-					<-listenerStoppedCh
-				}
-				if stoppedCh != nil {
-					<-stoppedCh
-				}
+				<-listenerStoppedCh
+				<-stoppedCh
 
 				return err
 
 			}, func(err error) {
-				close(stopCh)
+				cancel()
 			})
 		}
 	}
@@ -417,7 +409,7 @@ backward compatibility. New tls reload mechanism takes care of this automaticall
 
 			l, err := net.Listen("tcp", cfg.insecureListenAddress)
 			if err != nil {
-				klog.Fatalf("Failed to listen on insecure address: %v", err)
+				klog.Fatalf("Failed to listen on insecure address: %w", err)
 			}
 
 			gr.Add(func() error {
@@ -425,10 +417,10 @@ backward compatibility. New tls reload mechanism takes care of this automaticall
 				return srv.Serve(l)
 			}, func(err error) {
 				if err := srv.Shutdown(context.Background()); err != nil {
-					klog.Errorf("failed to gracefully shutdown server: %v", err)
+					klog.Errorf("failed to gracefully shutdown server: %w", err)
 				}
 				if err := l.Close(); err != nil {
-					klog.Errorf("failed to gracefully close listener: %v", err)
+					klog.Errorf("failed to gracefully close listener: %w", err)
 				}
 			})
 		}
@@ -446,7 +438,7 @@ backward compatibility. New tls reload mechanism takes care of this automaticall
 	}
 
 	if err := gr.Run(); err != nil {
-		klog.Fatalf("failed to run groups: %v", err)
+		klog.Fatalf("failed to run groups: %w", err)
 	}
 }
 
@@ -456,14 +448,14 @@ func initKubeConfig(kcLocation string) *rest.Config {
 	if kcLocation != "" {
 		kubeConfig, err := clientcmd.BuildConfigFromFlags("", kcLocation)
 		if err != nil {
-			klog.Fatalf("unable to build rest config based on provided path to kubeconfig file: %v", err)
+			klog.Fatalf("unable to build rest config based on provided path to kubeconfig file: %w", err)
 		}
 		return kubeConfig
 	}
 
 	kubeConfig, err := rest.InClusterConfig()
 	if err != nil {
-		klog.Fatalf("cannot find Service Account in pod to build in-cluster rest config: %v", err)
+		klog.Fatalf("cannot find Service Account in pod to build in-cluster rest config: %w", err)
 	}
 
 	return kubeConfig
