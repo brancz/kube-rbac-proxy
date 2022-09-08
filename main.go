@@ -71,7 +71,7 @@ type config struct {
 }
 
 func NewConfig() *config {
-	return &config{
+	cfg := &config{
 		auth: proxy.Config{
 			Authentication: &authn.AuthnConfig{
 				Header: &authn.AuthnHeaderConfig{},
@@ -83,6 +83,8 @@ func NewConfig() *config {
 		ServingOptions:        genericapiserveroptions.NewSecureServingOptions().WithLoopback(),
 		AuthenticationOptions: genericapiserveroptions.NewDelegatingAuthenticationOptions(),
 	}
+	cfg.AuthenticationOptions.DisableAnonymous = true
+	return cfg
 }
 
 // tlsConfig is no longer used. TLS configuration is now managed by SecureServingOptions

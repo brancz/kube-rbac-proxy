@@ -531,12 +531,12 @@ func testIgnorePaths(client kubernetes.Interface) kubetest.TestSuite {
 			Then: kubetest.Actions(
 				kubetest.ClientSucceeds(
 					client,
-					fmt.Sprintf(commandWithoutAuth, "/", 403, 403),
+					fmt.Sprintf(commandWithoutAuth, "/", 401, 401),
 					nil,
 				),
 				kubetest.ClientSucceeds(
 					client,
-					fmt.Sprintf(commandWithoutAuth, "/api/v1/label/job/values", 403, 403),
+					fmt.Sprintf(commandWithoutAuth, "/api/v1/label/job/values", 401, 401),
 					nil,
 				),
 			),
