@@ -1,3 +1,10 @@
+## 0.13.1 / 2022-10-04
+
+* [ENHANCEMENT] bump k8s to 1.25.2 #200 (contains fixes for CVEs)
+* [ENHANCEMENT] bump Go to 1.19.1 #178 (contains fixes for CVEs)
+* [ENHANCEMENT] bump golang.org/x/crypto due to CVE-2022-27191 #188
+* [CHANGE] add warning messages for features that will be removed
+
 ## 0.13.0 / 2022-06-29
 
 * [ENHANCEMENT] bump k8s to 1.24.2 #178
