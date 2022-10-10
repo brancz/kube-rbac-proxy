@@ -287,8 +287,7 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 		}
 	}
 
-	mux := http.NewServeMux()
-	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		found := len(cfg.allowPaths) == 0
 		for _, pathAllowed := range cfg.allowPaths {
 			found, err = path.Match(pathAllowed, req.URL.Path)
@@ -333,7 +332,10 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 		}
 
 		proxy.ServeHTTP(w, req)
-	}))
+	})
+
+	mux := http.NewServeMux()
+	mux.Handle("/", handler)
 
 	var gr run.Group
 	{
