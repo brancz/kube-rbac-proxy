@@ -47,6 +47,7 @@ import (
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
+	"github.com/brancz/kube-rbac-proxy/pkg/filters"
 	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
 	rbac_proxy_tls "github.com/brancz/kube-rbac-proxy/pkg/tls"
 )
@@ -287,28 +288,7 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 		}
 	}
 
-	mux := http.NewServeMux()
-	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		found := len(cfg.allowPaths) == 0
-		for _, pathAllowed := range cfg.allowPaths {
-			found, err = path.Match(pathAllowed, req.URL.Path)
-			if err != nil {
-				http.Error(
-					w,
-					http.StatusText(http.StatusInternalServerError),
-					http.StatusInternalServerError,
-				)
-				return
-			}
-			if found {
-				break
-			}
-		}
-		if !found {
-			http.NotFound(w, req)
-			return
-		}
-
+	handler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ignorePathFound := false
 		for _, pathIgnored := range cfg.ignorePaths {
 			ignorePathFound, err = path.Match(pathIgnored, req.URL.Path)
@@ -333,7 +313,11 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 		}
 
 		proxy.ServeHTTP(w, req)
-	}))
+	})
+	handler = filters.WithAllowPaths(cfg.allowPaths, handler)
+
+	mux := http.NewServeMux()
+	mux.Handle("/", handler)
 
 	var gr run.Group
 	{
