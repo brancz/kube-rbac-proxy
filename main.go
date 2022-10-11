@@ -245,7 +245,7 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 		sarAuthorizer,
 	)
 
-	auth := proxy.New(cfg.auth, authorizer, authenticator)
+	authz := proxy.New(cfg.auth, authorizer)
 
 	upstreamTransport, err := initTransport(cfg.upstreamCAFile)
 	if err != nil {
@@ -306,10 +306,20 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 		}
 
 		if !ignorePathFound {
-			ok := auth.Handle(w, req)
-			if !ok {
-				return
-			}
+			filters.WithAuthentication(
+				authenticator,
+				cfg.auth.Authentication.Token.Audiences,
+				func(w http.ResponseWriter, r *http.Request) {
+					ok := authz.Handle(w, req)
+					if !ok {
+						return
+					}
+
+					proxy.ServeHTTP(w, req)
+				},
+			)
+
+			return
 		}
 
 		proxy.ServeHTTP(w, req)
