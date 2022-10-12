@@ -11,6 +11,7 @@ import (
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
 	"github.com/brancz/kube-rbac-proxy/pkg/filters"
 	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
+
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/request/bearertoken"
 	"k8s.io/apiserver/pkg/authentication/user"
@@ -40,13 +41,12 @@ func TestProxyWithOIDCSupport(t *testing.T) {
 		t.Run(v.description, func(t *testing.T) {
 			w := httptest.NewRecorder()
 
-			filters.WithAuthentication(
-				authenticator, cfg.Authentication.Token.Audiences,
-				func(w http.ResponseWriter, req *http.Request) {
-					proxy.New(cfg, v.authorizer).Handle(w, req)
-				},
-			)(w, v.req)
+			handler := func(w http.ResponseWriter, r *http.Request) {}
+			handler = filters.WithAuthHeaders(cfg.Authentication.Header, handler)
+			handler = filters.WithAuthorization(v.authorizer, cfg.Authorization, handler)
+			handler = filters.WithAuthentication(authenticator, cfg.Authentication.Token.Audiences, handler)
 
+			handler(w, v.req)
 			resp := w.Result()
 
 			if resp.StatusCode != v.status {

@@ -1,14 +1,25 @@
 package filters
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
+
+	"github.com/brancz/kube-rbac-proxy/pkg/authn"
+	"github.com/brancz/kube-rbac-proxy/pkg/authz"
+	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
 
 	"k8s.io/apiserver/pkg/authentication/authenticator"
+	"k8s.io/apiserver/pkg/authorization/authorizer"
 	"k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/klog/v2"
 )
 
-func WithAuthentication(authReq authenticator.Request, audiences []string, handler http.HandlerFunc) http.HandlerFunc {
+func WithAuthentication(
+	authReq authenticator.Request,
+	audiences []string,
+	handler http.HandlerFunc,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		if len(audiences) > 0 {
@@ -28,6 +39,72 @@ func WithAuthentication(authReq authenticator.Request, audiences []string, handl
 		}
 
 		req = req.WithContext(request.WithUser(req.Context(), res.User))
+		handler.ServeHTTP(w, req)
+	}
+}
+
+func WithAuthorization(
+	authz authorizer.Authorizer,
+	cfg *authz.Config,
+	handler http.HandlerFunc,
+) http.HandlerFunc {
+	getRequestAttributes := proxy.
+		NewKubeRBACProxyAuthorizerAttributesGetter(cfg).
+		GetRequestAttributes
+
+	return func(w http.ResponseWriter, req *http.Request) {
+		u, ok := request.UserFrom(req.Context())
+		if !ok {
+			http.Error(w, "user not in context", http.StatusBadRequest)
+			return
+		}
+
+		// Get authorization attributes
+		allAttrs := getRequestAttributes(u, req)
+		if len(allAttrs) == 0 {
+			msg := "Bad Request. The request or configuration is malformed."
+			klog.V(2).Info(msg)
+			http.Error(w, msg, http.StatusBadRequest)
+			return
+		}
+
+		for _, attrs := range allAttrs {
+			// Authorize
+			authorized, reason, err := authz.Authorize(req.Context(), attrs)
+			if err != nil {
+				msg := fmt.Sprintf("Authorization error (user=%s, verb=%s, resource=%s, subresource=%s)", u.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
+				klog.Errorf("%s: %s", msg, err)
+				http.Error(w, msg, http.StatusInternalServerError)
+				return
+			}
+			if authorized != authorizer.DecisionAllow {
+				msg := fmt.Sprintf("Forbidden (user=%s, verb=%s, resource=%s, subresource=%s)", u.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
+				klog.V(2).Infof("%s. Reason: %q.", msg, reason)
+				http.Error(w, msg, http.StatusForbidden)
+				return
+			}
+		}
+
+		handler.ServeHTTP(w, req)
+	}
+}
+
+// WithAuthHeaders adds identity information to the headers.
+// Must not be used, if connection is not encrypted with TLS.
+func WithAuthHeaders(cfg *authn.AuthnHeaderConfig, handler http.HandlerFunc) http.HandlerFunc {
+	if !cfg.Enabled {
+		return handler
+	}
+
+	return func(w http.ResponseWriter, req *http.Request) {
+		u, ok := request.UserFrom(req.Context())
+		if ok {
+			// Seemingly well-known headers to tell the upstream about user's identity
+			// so that the upstream can achieve the original goal of delegating RBAC authn/authz to kube-rbac-proxy
+			req.Header.Set(cfg.UserFieldName, u.GetName())
+			req.Header.Set(cfg.GroupsFieldName, strings.Join(u.GetGroups(), cfg.GroupSeparator))
+		}
+
 		handler.ServeHTTP(w, req)
 	}
 }
