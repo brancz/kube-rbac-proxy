@@ -18,10 +18,12 @@ package main
 import (
 	"net/http"
 	"testing"
+
+	"golang.org/x/net/http2"
 )
 
 func TestInitTransportWithDefault(t *testing.T) {
-	roundTripper, err := initTransport("")
+	roundTripper, err := initTransport(upstreamConfig{})
 	if err != nil {
 		t.Errorf("want err to be nil, but got %v", err)
 		return
@@ -32,7 +34,7 @@ func TestInitTransportWithDefault(t *testing.T) {
 }
 
 func TestInitTransportWithCustomCA(t *testing.T) {
-	roundTripper, err := initTransport("test/ca.pem")
+	roundTripper, err := initTransport(upstreamConfig{caFile: "test/ca.pem"})
 	if err != nil {
 		t.Errorf("want err to be nil, but got %v", err)
 		return
@@ -40,5 +42,28 @@ func TestInitTransportWithCustomCA(t *testing.T) {
 	transport := roundTripper.(*http.Transport)
 	if transport.TLSClientConfig.RootCAs == nil {
 		t.Error("expected root CA to be set, got nil")
+	}
+}
+
+func TestInitTransportInsecure(t *testing.T) {
+	roundTripper, err := initTransport(upstreamConfig{insecureSkipVerify: true})
+	if err != nil {
+		t.Errorf("want err to be nil, but got %v", err)
+		return
+	}
+	transport := roundTripper.(*http.Transport)
+	if transport.TLSClientConfig.InsecureSkipVerify == false {
+		t.Error("expected insecure transport")
+	}
+}
+
+func TestInitH2CTransport(t *testing.T) {
+	roundTripper, err := initTransport(upstreamConfig{forceH2C: true})
+	if err != nil {
+		t.Errorf("want err to be nil, but got %v", err)
+		return
+	}
+	if _, ok := roundTripper.(*http2.Transport); ok == false {
+		t.Error("expected http2 transport")
 	}
 }

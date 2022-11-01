@@ -55,14 +55,14 @@ import (
 type config struct {
 	insecureListenAddress string
 	secureListenAddress   string
-	upstream              string
-	upstreamForceH2C      bool
-	upstreamCAFile        string
-	auth                  proxy.Config
-	tls                   tlsConfig
-	kubeconfigLocation    string
-	allowPaths            []string
-	ignorePaths           []string
+
+	auth     proxy.Config
+	tls      tlsConfig
+	upstream upstreamConfig
+
+	kubeconfigLocation string
+	allowPaths         []string
+	ignorePaths        []string
 }
 
 type tlsConfig struct {
@@ -71,6 +71,13 @@ type tlsConfig struct {
 	minVersion     string
 	cipherSuites   []string
 	reloadInterval time.Duration
+}
+
+type upstreamConfig struct {
+	url                string
+	forceH2C           bool
+	caFile             string
+	insecureSkipVerify bool
 }
 
 type configfile struct {
@@ -101,12 +108,15 @@ func main() {
 	// kube-rbac-proxy flags
 	flagset.StringVar(&cfg.insecureListenAddress, "insecure-listen-address", "", "The address the kube-rbac-proxy HTTP server should listen on.")
 	flagset.StringVar(&cfg.secureListenAddress, "secure-listen-address", "", "The address the kube-rbac-proxy HTTPs server should listen on.")
-	flagset.StringVar(&cfg.upstream, "upstream", "", "The upstream URL to proxy to once requests have successfully been authenticated and authorized.")
-	flagset.BoolVar(&cfg.upstreamForceH2C, "upstream-force-h2c", false, "Force h2c to communiate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only")
-	flagset.StringVar(&cfg.upstreamCAFile, "upstream-ca-file", "", "The CA the upstream uses for TLS connection. This is required when the upstream uses TLS and its own CA certificate")
 	flagset.StringVar(&configFileName, "config-file", "", "Configuration file to configure kube-rbac-proxy.")
 	flagset.StringSliceVar(&cfg.allowPaths, "allow-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the request doesn't match, kube-rbac-proxy responds with a 404 status code. If omitted, the incoming request path isn't checked. Cannot be used with --ignore-paths.")
 	flagset.StringSliceVar(&cfg.ignorePaths, "ignore-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the requst matches, it will proxy the request without performing an authentication or authorization check. Cannot be used with --allow-paths.")
+
+	// Upstream flags
+	flagset.StringVar(&cfg.upstream.url, "upstream", "", "The upstream URL to proxy to once requests have successfully been authenticated and authorized.")
+	flagset.BoolVar(&cfg.upstream.forceH2C, "upstream-force-h2c", false, "Force h2c to communicate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only.")
+	flagset.StringVar(&cfg.upstream.caFile, "upstream-ca-file", "", "The CA the upstream uses for TLS connection. This is required when the upstream uses TLS and its own CA certificate.")
+	flagset.BoolVar(&cfg.upstream.insecureSkipVerify, "upstream-insecure-skip-verify", false, "Skip upstream certificate validation. Useful if an upstream uses TLS encryption with self-signed certificates.")
 
 	// TLS flags
 	flagset.StringVar(&cfg.tls.certFile, "tls-cert-file", "", "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)")
@@ -141,7 +151,7 @@ func main() {
 	}
 	kcfg := initKubeConfig(cfg.kubeconfigLocation)
 
-	upstreamURL, err := url.Parse(cfg.upstream)
+	upstreamURL, err := url.Parse(cfg.upstream.url)
 	if err != nil {
 		klog.Fatalf("Failed to parse upstream URL: %v", err)
 	}
@@ -245,7 +255,7 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 		sarAuthorizer,
 	)
 
-	upstreamTransport, err := initTransport(cfg.upstreamCAFile)
+	upstreamTransport, err := initTransport(cfg.upstream)
 	if err != nil {
 		klog.Fatalf("Failed to set up upstream TLS connection: %v", err)
 	}
@@ -270,21 +280,6 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 
 	proxy := httputil.NewSingleHostReverseProxy(upstreamURL)
 	proxy.Transport = upstreamTransport
-
-	if cfg.upstreamForceH2C {
-		// Force http/2 for connections to the upstream i.e. do not start with HTTP1.1 UPGRADE req to
-		// initialize http/2 session.
-		// See https://github.com/golang/go/issues/14141#issuecomment-219212895 for more context
-		proxy.Transport = &http2.Transport{
-			// Allow http schema. This doesn't automatically disable TLS
-			AllowHTTP: true,
-			// Do disable TLS.
-			// In combination with the schema check above. We could enforce h2c against the upstream server
-			DialTLS: func(netw, addr string, cfg *tls.Config) (net.Conn, error) {
-				return net.Dial(netw, addr)
-			},
-		}
-	}
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ignorePathFound := false
