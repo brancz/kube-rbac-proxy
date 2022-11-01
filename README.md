@@ -38,7 +38,8 @@ Usage of _output/kube-rbac-proxy:
       --auth-token-audiences strings                Comma-separated list of token audiences to accept. By default a token does not have to have any specific audience. It is recommended to set a specific audience.
       --client-ca-file string                       If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.
       --config-file string                          Configuration file to configure kube-rbac-proxy.
-      --ignore-paths strings                        Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the requst matches, it will proxy the request without performing an authentication or authorization check. Cannot be used with --allow-paths.
+      --healthz-path string                         The path to serve the liveness check endpoint. If empty, the healthz endpoint will not be exposed.
+      --ignore-paths strings                        Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the request matches, it will proxy the request without performing an authentication or authorization check. Cannot be used with --allow-paths.
       --insecure-listen-address string              The address the kube-rbac-proxy HTTP server should listen on.
       --kubeconfig string                           Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used
       --log_backtrace_at traceLocation              when logging hits line file:N, emit a stack trace (default :0)
@@ -65,7 +66,7 @@ Usage of _output/kube-rbac-proxy:
       --tls-reload-interval duration                The interval at which to watch for TLS certificate changes, by default set to 1 minute. (default 1m0s)
       --upstream string                             The upstream URL to proxy to once requests have successfully been authenticated and authorized.
       --upstream-ca-file string                     The CA the upstream uses for TLS connection. This is required when the upstream uses TLS and its own CA certificate
-      --upstream-force-h2c                          Force h2c to communiate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only
+      --upstream-force-h2c                          Force h2c to communicate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only
   -v, --v Level                                     number for the log level verbosity
       --vmodule moduleSpec                          comma-separated list of pattern=N settings for file-filtered logging
 ```
