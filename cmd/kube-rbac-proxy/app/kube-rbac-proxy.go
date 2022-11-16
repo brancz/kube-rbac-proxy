@@ -129,9 +129,11 @@ type completedProxyRunOptions struct {
 	secureListenAddress   string
 	healthzPath           string
 
-	upstreamURL      *url.URL
-	upstreamForceH2C bool
-	upstreamCABundle *x509.CertPool
+	upstreamURL        *url.URL
+	upstreamForceH2C   bool
+	upstreamUnixSocket string
+	upstreamCABundle   *x509.CertPool
+	upstreamClientCert *tls.Certificate
 
 	auth *proxy.Config
 	tls  *options.TLSConfig
@@ -211,12 +213,18 @@ func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
 		ignorePaths: o.IgnorePaths,
 	}
 
+	if o.Upstream == "" && o.UpstreamUnixSocket != "" {
+		o.Upstream = "http://localhost"
+	}
+
 	completed.upstreamURL, err = url.Parse(o.Upstream)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse upstream URL: %w", err)
 	}
 
-	if upstreamCAPath := o.UpstreamCAFile; len(upstreamCAPath) > 0 {
+	completed.upstreamUnixSocket = o.UpstreamUnixSocket
+
+	if upstreamCAPath := o.TLS.UpstreamCAFile; len(upstreamCAPath) > 0 {
 		upstreamCAPEM, err := os.ReadFile(upstreamCAPath)
 		if err != nil {
 			return nil, err
@@ -227,6 +235,14 @@ func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
 			return nil, errors.New("error parsing upstream CA certificate")
 		}
 		completed.upstreamCABundle = upstreamCACertPool
+	}
+
+	if len(o.TLS.UpstreamClientCertFile) > 0 {
+		certKeyPair, err := tls.LoadX509KeyPair(o.TLS.UpstreamClientCertFile, o.TLS.UpstreamClientKeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read upstream client cert/key: %w", err)
+		}
+		completed.upstreamClientCert = &certKeyPair
 	}
 
 	completed.auth = o.Auth
@@ -296,15 +312,16 @@ func Run(cfg *completedProxyRunOptions) error {
 		sarAuthorizer,
 	)
 
-	upstreamTransport, err := initTransport(cfg.upstreamCABundle, cfg.tls.UpstreamClientCertFile, cfg.tls.UpstreamClientKeyFile)
+	upstreamTransport, err := initTransport(cfg.upstreamCABundle, cfg.upstreamClientCert, cfg.upstreamUnixSocket)
 	if err != nil {
-		return fmt.Errorf("failed to set up upstream TLS connection: %w", err)
+		return fmt.Errorf("failed to init upstream transport: %w", err)
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(cfg.upstreamURL)
 	proxy.Transport = upstreamTransport
 
 	if cfg.upstreamForceH2C {
+		upstreamUnixSocket := cfg.upstreamUnixSocket
 		// Force http/2 for connections to the upstream i.e. do not start with HTTP1.1 UPGRADE req to
 		// initialize http/2 session.
 		// See https://github.com/golang/go/issues/14141#issuecomment-219212895 for more context
@@ -314,6 +331,9 @@ func Run(cfg *completedProxyRunOptions) error {
 			// Do disable TLS.
 			// In combination with the schema check above. We could enforce h2c against the upstream server
 			DialTLS: func(netw, addr string, cfg *tls.Config) (net.Conn, error) {
+				if upstreamUnixSocket != "" {
+					return net.Dial("unix", upstreamUnixSocket)
+				}
 				return net.Dial(netw, addr)
 			},
 		}

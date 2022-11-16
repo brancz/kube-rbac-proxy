@@ -37,8 +37,12 @@ import (
 	"k8s.io/client-go/util/keyutil"
 )
 
+const (
+	okResponse = "ok"
+)
+
 func TestInitTransportWithDefault(t *testing.T) {
-	roundTripper, err := initTransport(nil, "", "")
+	roundTripper, err := initTransport(nil, nil, "")
 	if err != nil {
 		t.Errorf("want err to be nil, but got %v", err)
 		return
@@ -57,7 +61,7 @@ func TestInitTransportWithCustomCA(t *testing.T) {
 	upstreamCAPool := x509.NewCertPool()
 	upstreamCAPool.AppendCertsFromPEM(upstreamCAPEM)
 
-	roundTripper, err := initTransport(upstreamCAPool, "", "")
+	roundTripper, err := initTransport(upstreamCAPool, nil, "")
 	if err != nil {
 		t.Fatalf("want err to be nil, but got %v", err)
 	}
@@ -69,8 +73,7 @@ func TestInitTransportWithCustomCA(t *testing.T) {
 
 func testHTTPHandler(w http.ResponseWriter, req *http.Request) {
 	if len(req.TLS.PeerCertificates) > 0 {
-		_, _ = w.Write([]byte("ok"))
-		return
+		okTestHTTPHandler(w, req)
 	} else {
 		reqDump, _ := httputil.DumpRequest(req, false)
 		resp := fmt.Sprintf("got request without client certificates:\n%s\n", reqDump)
@@ -128,10 +131,14 @@ func TestInitTransportWithClientCertAuth(t *testing.T) {
 	if err := keyutil.WriteKey(clientKeyPath, clientKey); err != nil {
 		t.Fatalf("failed to write client key: %v", err)
 	}
+	certKeyPair, err := tls.X509KeyPair(clientCert, clientKey)
+	if err != nil {
+		t.Fatalf("failed to read client cert/key: %v", err)
+	}
 
 	serverCA := x509.NewCertPool()
 	serverCA.AppendCertsFromPEM(cert)
-	roundTripper, err := initTransport(serverCA, clientCertPath, clientKeyPath)
+	roundTripper, err := initTransport(serverCA, &certKeyPair, "")
 	if err != nil {
 		t.Errorf("want err to be nil, but got %v", err)
 		return
@@ -155,6 +162,57 @@ func TestInitTransportWithClientCertAuth(t *testing.T) {
 		}
 		t.Logf("response with failure logs:\n%s", respBody)
 		t.Errorf("expected the response code to be '%d', but it is '%d'", http.StatusOK, resp.StatusCode)
+	}
+}
+
+func TestInitTransportWithUnixSocket(t *testing.T) {
+	// start http server listening on unix socket
+	unixSocketPath := "/tmp/kube-rbac-proxy-test.sock"
+	l, err := net.Listen("unix", unixSocketPath)
+	if err != nil {
+		t.Fatalf("failed to listen on unix socket: %v", err)
+	}
+	defer l.Close()
+	go func() {
+		srv := &http.Server{
+			Handler: http.HandlerFunc(okTestHTTPHandler),
+		}
+		if err := srv.Serve(l); err != http.ErrServerClosed {
+			t.Logf("failed to run the test server: %v", err)
+		}
+	}()
+
+	// get http transport with unix socket
+	roundTripper, err := initTransport(nil, nil, unixSocketPath)
+	if err != nil {
+		t.Errorf("want err to be nil, but got %v", err)
+		return
+	}
+
+	// send test HTTP request to the server using the transport
+	httpReq, err := http.NewRequest(http.MethodPost, "http://localhost", nil)
+	if err != nil {
+		t.Fatalf("failed to create an HTTP request: %v", err)
+	}
+
+	resp, err := roundTripper.RoundTrip(httpReq)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Logf("failed to read response body: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		t.Logf("response with failure logs:\n%s", respBody)
+		t.Errorf("expected the response code to be '%d', but it is '%d'", http.StatusOK, resp.StatusCode)
+	} else {
+		if string(respBody) != okResponse {
+			t.Errorf("expected the reponse body to be %q, but it is %q", okResponse, string(respBody))
+		}
 	}
 }
 
@@ -201,4 +259,8 @@ func generateClientCert(t *testing.T) ([]byte, []byte, *x509.CertPool, error) {
 	}
 
 	return certPEM, privKeyPEM, caPool, nil
+}
+
+func okTestHTTPHandler(w http.ResponseWriter, req *http.Request) {
+	_, _ = w.Write([]byte(okResponse))
 }

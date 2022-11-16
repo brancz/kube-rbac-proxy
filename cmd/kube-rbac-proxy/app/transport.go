@@ -17,48 +17,89 @@ limitations under the License.
 package app
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"net"
 	"net/http"
 	"time"
 )
 
-func initTransport(upstreamCAPool *x509.CertPool, upstreamClientCertPath, upstreamClientKeyPath string) (http.RoundTripper, error) {
-	if upstreamCAPool == nil {
+func initTransport(upstreamCAPool *x509.CertPool, upstreamClientCert *tls.Certificate, upstreamUnixSocket string) (http.RoundTripper, error) {
+	if upstreamCAPool == nil && upstreamClientCert == nil && upstreamUnixSocket == "" {
 		return http.DefaultTransport, nil
 	}
 
-	var certKeyPair tls.Certificate
-	if len(upstreamClientCertPath) > 0 {
-		var err error
-		certKeyPair, err = tls.LoadX509KeyPair(upstreamClientCertPath, upstreamClientKeyPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read upstream client cert/key: %w", err)
-		}
+	builder := newHTTPTransportBuilder()
+
+	if upstreamCAPool != nil {
+		builder.withRootCAs(upstreamCAPool)
 	}
 
-	// http.Transport sourced from go 1.10.7
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
+	if upstreamClientCert != nil {
+		builder.withClientCerts(*upstreamClientCert)
+	}
+
+	if upstreamUnixSocket != "" {
+		builder.withUnixDialContext(upstreamUnixSocket)
+	}
+
+	return builder.build(), nil
+}
+
+type httpTransportBuilder struct {
+	tlsClientConfig *tls.Config
+	dialContext     func(ctx context.Context, network, addr string) (net.Conn, error)
+}
+
+func newHTTPTransportBuilder() *httpTransportBuilder {
+	return &httpTransportBuilder{
+		dialContext: (&net.Dialer{
 			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,
 			DualStack: true,
 		}).DialContext,
+	}
+}
+
+func (b *httpTransportBuilder) withRootCAs(certs *x509.CertPool) *httpTransportBuilder {
+	if b.tlsClientConfig != nil {
+		b.tlsClientConfig.RootCAs = certs
+	} else {
+		b.tlsClientConfig = &tls.Config{RootCAs: certs}
+	}
+	return b
+}
+
+func (b *httpTransportBuilder) withClientCerts(certs ...tls.Certificate) *httpTransportBuilder {
+	if b.tlsClientConfig != nil {
+		b.tlsClientConfig.Certificates = certs
+	} else {
+		b.tlsClientConfig = &tls.Config{Certificates: certs}
+	}
+	return b
+}
+
+func (b *httpTransportBuilder) withUnixDialContext(socket string) *httpTransportBuilder {
+	b.dialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext(ctx, "unix", socket)
+	}
+	return b
+}
+
+func (b *httpTransportBuilder) build() *http.Transport {
+	// http.Transport sourced from go 1.10.7
+	return &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           b.dialContext,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig: &tls.Config{
-			RootCAs: upstreamCAPool,
-		},
+		TLSClientConfig:       b.tlsClientConfig,
 	}
-
-	if certKeyPair.Certificate != nil {
-		transport.TLSClientConfig.Certificates = []tls.Certificate{certKeyPair}
-	}
-
-	return transport, nil
 }
