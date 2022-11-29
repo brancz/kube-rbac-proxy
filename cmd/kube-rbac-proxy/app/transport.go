@@ -14,40 +14,29 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package app
 
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
-	"os"
 	"time"
 )
 
-func initTransport(upstreamCAFile, upstreamClientCertPath, upstreamClientKeyPath string) (http.RoundTripper, error) {
-	if upstreamCAFile == "" {
+func initTransport(upstreamCAPool *x509.CertPool, upstreamClientCertPath, upstreamClientKeyPath string) (http.RoundTripper, error) {
+	if upstreamCAPool == nil {
 		return http.DefaultTransport, nil
-	}
-
-	upstreamCAPEM, err := os.ReadFile(upstreamCAFile)
-	if err != nil {
-		return nil, fmt.Errorf("error reading upstream CA file: %w", err)
 	}
 
 	var certKeyPair tls.Certificate
 	if len(upstreamClientCertPath) > 0 {
+		var err error
 		certKeyPair, err = tls.LoadX509KeyPair(upstreamClientCertPath, upstreamClientKeyPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read upstream client cert/key: %w", err)
 		}
-	}
-
-	upstreamCAPool := x509.NewCertPool()
-	if ok := upstreamCAPool.AppendCertsFromPEM([]byte(upstreamCAPEM)); !ok {
-		return nil, errors.New("error parsing upstream CA certificate")
 	}
 
 	// http.Transport sourced from go 1.10.7
