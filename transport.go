@@ -27,18 +27,26 @@ import (
 	"time"
 )
 
-func initTransport(upstreamCAFile string) (http.RoundTripper, error) {
+func initTransport(upstreamCAFile, upstreamClientCertPath, upstreamClientKeyPath string) (http.RoundTripper, error) {
 	if upstreamCAFile == "" {
 		return http.DefaultTransport, nil
 	}
 
-	rootPEM, err := os.ReadFile(upstreamCAFile)
+	upstreamCAPEM, err := os.ReadFile(upstreamCAFile)
 	if err != nil {
-		return nil, fmt.Errorf("error reading upstream CA file: %v", err)
+		return nil, fmt.Errorf("error reading upstream CA file: %w", err)
 	}
 
-	roots := x509.NewCertPool()
-	if ok := roots.AppendCertsFromPEM([]byte(rootPEM)); !ok {
+	var certKeyPair tls.Certificate
+	if len(upstreamClientCertPath) > 0 {
+		certKeyPair, err = tls.LoadX509KeyPair(upstreamClientCertPath, upstreamClientKeyPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read upstream client cert/key: %w", err)
+		}
+	}
+
+	upstreamCAPool := x509.NewCertPool()
+	if ok := upstreamCAPool.AppendCertsFromPEM([]byte(upstreamCAPEM)); !ok {
 		return nil, errors.New("error parsing upstream CA certificate")
 	}
 
@@ -54,7 +62,13 @@ func initTransport(upstreamCAFile string) (http.RoundTripper, error) {
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       &tls.Config{RootCAs: roots},
+		TLSClientConfig: &tls.Config{
+			RootCAs: upstreamCAPool,
+		},
+	}
+
+	if certKeyPair.Certificate != nil {
+		transport.TLSClientConfig.Certificates = []tls.Certificate{certKeyPair}
 	}
 
 	return transport, nil
