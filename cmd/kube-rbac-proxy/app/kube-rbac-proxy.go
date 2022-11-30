@@ -239,7 +239,11 @@ func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
 		}
 	}
 
-	kubeconfig := initKubeConfig(o.KubeconfigLocation)
+	kubeconfig, err := initKubeConfig(o.KubeconfigLocation)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load kubeconfig: %w", err)
+	}
+
 	completed.kubeClient, err = kubernetes.NewForConfig(kubeconfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to instantiate Kubernetes client: %w", err)
@@ -257,7 +261,7 @@ func Run(cfg *completedProxyRunOptions) error {
 	if cfg.auth.Authentication.OIDC.IssuerURL != "" {
 		oidcAuthenticator, err := authn.NewOIDCAuthenticator(cfg.auth.Authentication.OIDC)
 		if err != nil {
-			klog.Fatalf("Failed to instantiate OIDC authenticator: %v", err)
+			return fmt.Errorf("failed to instantiate OIDC authenticator: %w", err)
 		}
 
 		go oidcAuthenticator.Run(ctx)
@@ -269,7 +273,7 @@ func Run(cfg *completedProxyRunOptions) error {
 		tokenClient := cfg.kubeClient.AuthenticationV1()
 		delegatingAuthenticator, err := authn.NewDelegatingAuthenticator(tokenClient, cfg.auth.Authentication)
 		if err != nil {
-			klog.Fatalf("Failed to instantiate delegating authenticator: %v", err)
+			return fmt.Errorf("failed to instantiate delegating authenticator: %w", err)
 		}
 
 		go delegatingAuthenticator.Run(ctx)
@@ -279,12 +283,12 @@ func Run(cfg *completedProxyRunOptions) error {
 	sarClient := cfg.kubeClient.AuthorizationV1()
 	sarAuthorizer, err := authz.NewSarAuthorizer(sarClient)
 	if err != nil {
-		klog.Fatalf("Failed to create sar authorizer: %v", err)
+		return fmt.Errorf("failed to create sar authorizer: %w", err)
 	}
 
 	staticAuthorizer, err := authz.NewStaticAuthorizer(cfg.auth.Authorization.Static)
 	if err != nil {
-		klog.Fatalf("Failed to create static authorizer: %v", err)
+		return fmt.Errorf("failed to create static authorizer: %w", err)
 	}
 
 	authorizer := union.New(
@@ -294,7 +298,7 @@ func Run(cfg *completedProxyRunOptions) error {
 
 	upstreamTransport, err := initTransport(cfg.upstreamCABundle, cfg.tls.UpstreamClientCertFile, cfg.tls.UpstreamClientKeyFile)
 	if err != nil {
-		klog.Fatalf("Failed to set up upstream TLS connection: %v", err)
+		return fmt.Errorf("failed to set up upstream TLS connection: %w", err)
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(cfg.upstreamURL)
@@ -362,28 +366,28 @@ func Run(cfg *completedProxyRunOptions) error {
 				klog.Info("Generating self signed cert as no cert is provided")
 				host, err := os.Hostname()
 				if err != nil {
-					klog.Fatalf("Failed to retrieve hostname for self-signed cert: %v", err)
+					return fmt.Errorf("failed to retrieve hostname for self-signed cert: %w", err)
 				}
 				certBytes, keyBytes, err := certutil.GenerateSelfSignedCertKey(host, nil, nil)
 				if err != nil {
-					klog.Fatalf("Failed to generate self signed cert and key: %v", err)
+					return fmt.Errorf("failed to generate self signed cert and key: %w", err)
 				}
 				cert, err := tls.X509KeyPair(certBytes, keyBytes)
 				if err != nil {
-					klog.Fatalf("Failed to load generated self signed cert and key: %v", err)
+					return fmt.Errorf("failed to load generated self signed cert and key: %w", err)
 				}
 
 				srv.TLSConfig.Certificates = []tls.Certificate{cert}
 			} else {
 				klog.Info("Reading certificate files")
-				ctx, cancel := context.WithCancel(context.Background())
 				r, err := rbac_proxy_tls.NewCertReloader(cfg.tls.CertFile, cfg.tls.KeyFile, cfg.tls.ReloadInterval)
 				if err != nil {
-					klog.Fatalf("Failed to initialize certificate reloader: %v", err)
+					return fmt.Errorf("failed to initialize certificate reloader: %w", err)
 				}
 
 				srv.TLSConfig.GetCertificate = r.GetCertificate
 
+				ctx, cancel := context.WithCancel(context.Background())
 				gr.Add(func() error {
 					return r.Watch(ctx)
 				}, func(error) {
@@ -393,12 +397,12 @@ func Run(cfg *completedProxyRunOptions) error {
 
 			version, err := k8sapiflag.TLSVersion(cfg.tls.MinVersion)
 			if err != nil {
-				klog.Fatalf("TLS version invalid: %v", err)
+				return fmt.Errorf("TLS version invalid: %w", err)
 			}
 
 			cipherSuiteIDs, err := k8sapiflag.TLSCipherSuites(cfg.tls.CipherSuites)
 			if err != nil {
-				klog.Fatalf("Failed to convert TLS cipher suite name to ID: %v", err)
+				return fmt.Errorf("failed to convert TLS cipher suite name to ID: %w", err)
 			}
 
 			srv.TLSConfig.CipherSuites = cipherSuiteIDs
@@ -406,13 +410,13 @@ func Run(cfg *completedProxyRunOptions) error {
 			srv.TLSConfig.ClientAuth = tls.RequestClientCert
 
 			if err := http2.ConfigureServer(srv, nil); err != nil {
-				klog.Fatalf("failed to configure http2 server: %v", err)
+				return fmt.Errorf("failed to configure http2 server: %w", err)
 			}
 
 			klog.Infof("Starting TCP socket on %v", cfg.secureListenAddress)
 			l, err := net.Listen("tcp", cfg.secureListenAddress)
 			if err != nil {
-				klog.Fatalf("failed to listen on secure address: %v", err)
+				return fmt.Errorf("failed to listen on secure address: %w", err)
 			}
 
 			gr.Add(func() error {
@@ -421,10 +425,10 @@ func Run(cfg *completedProxyRunOptions) error {
 				return srv.Serve(tlsListener)
 			}, func(err error) {
 				if err := srv.Shutdown(context.Background()); err != nil {
-					klog.Errorf("failed to gracefully shutdown server: %v", err)
+					klog.Errorf("failed to gracefully shutdown server: %w", err)
 				}
 				if err := l.Close(); err != nil {
-					klog.Errorf("failed to gracefully close secure listener: %v", err)
+					klog.Errorf("failed to gracefully close secure listener: %w", err)
 				}
 			})
 		}
@@ -435,7 +439,7 @@ func Run(cfg *completedProxyRunOptions) error {
 
 			l, err := net.Listen("tcp", cfg.insecureListenAddress)
 			if err != nil {
-				klog.Fatalf("Failed to listen on insecure address: %v", err)
+				return fmt.Errorf("failed to listen on insecure address: %w", err)
 			}
 
 			gr.Add(func() error {
@@ -443,10 +447,10 @@ func Run(cfg *completedProxyRunOptions) error {
 				return srv.Serve(l)
 			}, func(err error) {
 				if err := srv.Shutdown(context.Background()); err != nil {
-					klog.Errorf("failed to gracefully shutdown server: %v", err)
+					klog.Errorf("failed to gracefully shutdown server: %w", err)
 				}
 				if err := l.Close(); err != nil {
-					klog.Errorf("failed to gracefully close listener: %v", err)
+					klog.Errorf("failed to gracefully close listener: %w", err)
 				}
 			})
 		}
@@ -464,35 +468,35 @@ func Run(cfg *completedProxyRunOptions) error {
 	}
 
 	if err := gr.Run(); err != nil {
-		klog.Fatalf("failed to run groups: %v", err)
+		return fmt.Errorf("failed to run groups: %w", err)
 	}
 
 	return nil
 }
 
 // Returns intiliazed config, allows local usage (outside cluster) based on provided kubeconfig or in-cluter
-func initKubeConfig(kcLocation string) *rest.Config {
+func initKubeConfig(kcLocation string) (*rest.Config, error) {
 	if kcLocation != "" {
 		kubeConfig, err := clientcmd.BuildConfigFromFlags("", kcLocation)
 		if err != nil {
-			klog.Fatalf("unable to build rest config based on provided path to kubeconfig file: %v", err)
+			return nil, fmt.Errorf("unable to build rest config based on provided path to kubeconfig file: %w", err)
 		}
-		return kubeConfig
+		return kubeConfig, nil
 	}
 
 	kubeConfig, err := rest.InClusterConfig()
 	if err != nil {
-		klog.Fatalf("cannot find Service Account in pod to build in-cluster rest config: %v", err)
+		return nil, fmt.Errorf("cannot find Service Account in pod to build in-cluster rest config: %w", err)
 	}
 
-	return kubeConfig
+	return kubeConfig, nil
 }
 
 func parseAuthorizationConfigFile(filePath string) (*authz.Config, error) {
 	klog.Infof("Reading config file: %s", filePath)
 	b, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read resource-attribute file: %v", err)
+		return nil, fmt.Errorf("failed to read resource-attribute file: %w", err)
 	}
 
 	configFile := configfile{}
