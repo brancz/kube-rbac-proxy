@@ -232,21 +232,11 @@ func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
 	completed.auth = o.Auth
 	completed.tls = o.TLS
 
-	if configFileName := o.ConfigFileName; configFileName != "" {
-		klog.Infof("Reading config file: %s", configFileName)
-		b, err := os.ReadFile(configFileName)
+	if configFileName := o.ConfigFileName; len(configFileName) > 0 {
+		completed.auth.Authorization, err = parseAuthorizationConfigFile(configFileName)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read resource-attribute file: %v", err)
+			return nil, fmt.Errorf("failed to read the config file: %w", err)
 		}
-
-		configfile := configfile{}
-
-		err = yaml.Unmarshal(b, &configfile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse config file content: %v", err)
-		}
-
-		completed.auth.Authorization = configfile.AuthorizationConfig
 	}
 
 	kubeconfig := initKubeConfig(o.KubeconfigLocation)
@@ -496,4 +486,20 @@ func initKubeConfig(kcLocation string) *rest.Config {
 	}
 
 	return kubeConfig
+}
+
+func parseAuthorizationConfigFile(filePath string) (*authz.Config, error) {
+	klog.Infof("Reading config file: %s", filePath)
+	b, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read resource-attribute file: %v", err)
+	}
+
+	configFile := configfile{}
+
+	if err := yaml.Unmarshal(b, &configFile); err != nil {
+		return nil, fmt.Errorf("failed to parse config file content: %w", err)
+	}
+
+	return configFile.AuthorizationConfig, nil
 }
