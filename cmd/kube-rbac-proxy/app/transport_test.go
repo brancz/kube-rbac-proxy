@@ -13,7 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package main
+package app
 
 import (
 	"crypto/rand"
@@ -28,6 +28,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -37,7 +38,7 @@ import (
 )
 
 func TestInitTransportWithDefault(t *testing.T) {
-	roundTripper, err := initTransport("", "", "")
+	roundTripper, err := initTransport(nil, "", "")
 	if err != nil {
 		t.Errorf("want err to be nil, but got %v", err)
 		return
@@ -48,10 +49,17 @@ func TestInitTransportWithDefault(t *testing.T) {
 }
 
 func TestInitTransportWithCustomCA(t *testing.T) {
-	roundTripper, err := initTransport("test/ca.pem", "", "")
+	upstreamCAPEM, err := os.ReadFile("../../../test/ca.pem")
 	if err != nil {
-		t.Errorf("want err to be nil, but got %v", err)
-		return
+		t.Fatalf("failed to read '../../../test/ca.pem': %v", err)
+	}
+
+	upstreamCAPool := x509.NewCertPool()
+	upstreamCAPool.AppendCertsFromPEM(upstreamCAPEM)
+
+	roundTripper, err := initTransport(upstreamCAPool, "", "")
+	if err != nil {
+		t.Fatalf("want err to be nil, but got %v", err)
 	}
 	transport := roundTripper.(*http.Transport)
 	if transport.TLSClientConfig.RootCAs == nil {
@@ -111,13 +119,9 @@ func TestInitTransportWithClientCertAuth(t *testing.T) {
 	defer tlsServer.Close()
 
 	tmpDir := t.TempDir()
-	serverCertPath := filepath.Join(tmpDir, "server.crt")
 	clientCertPath := filepath.Join(tmpDir, "client.crt")
 	clientKeyPath := filepath.Join(tmpDir, "client.key")
 
-	if err := certutil.WriteCert(serverCertPath, cert); err != nil {
-		t.Fatalf("failed to write server cert: %v", err)
-	}
 	if err := certutil.WriteCert(clientCertPath, clientCert); err != nil {
 		t.Fatalf("failed to write client cert: %v", err)
 	}
@@ -125,7 +129,9 @@ func TestInitTransportWithClientCertAuth(t *testing.T) {
 		t.Fatalf("failed to write client key: %v", err)
 	}
 
-	roundTripper, err := initTransport(serverCertPath, clientCertPath, clientKeyPath)
+	serverCA := x509.NewCertPool()
+	serverCA.AppendCertsFromPEM(cert)
+	roundTripper, err := initTransport(serverCA, clientCertPath, clientKeyPath)
 	if err != nil {
 		t.Errorf("want err to be nil, but got %v", err)
 		return

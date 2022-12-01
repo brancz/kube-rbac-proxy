@@ -9,5 +9,5 @@ data:
         - user:
             name: system:serviceaccount:default:default
           resourceRequest: false
-          verbs: get
+          verb: get
           path: /metrics
