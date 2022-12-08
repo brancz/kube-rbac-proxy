@@ -25,8 +25,6 @@ import (
 	"net/http/httputil"
 	"os"
 	"os/signal"
-	"path"
-	"strings"
 	"syscall"
 	"time"
 
@@ -38,7 +36,10 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authorization/union"
+	kubefilters "k8s.io/apiserver/pkg/endpoints/filters"
+	"k8s.io/apiserver/pkg/endpoints/request"
 	serverconfig "k8s.io/apiserver/pkg/server"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	k8sapiflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/cli/globalflag"
@@ -51,6 +52,7 @@ import (
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
 	"github.com/brancz/kube-rbac-proxy/pkg/filters"
+	krbproxy "github.com/brancz/kube-rbac-proxy/pkg/proxy"
 	"github.com/brancz/kube-rbac-proxy/pkg/server"
 )
 
@@ -72,16 +74,22 @@ that can perform RBAC authorization against the Kubernetes API using SubjectAcce
 		RunE: func(cmd *cobra.Command, args []string) error {
 			verflag.PrintAndExitIfRequested()
 
-			fs := cmd.Flags()
-
-			k8sapiflag.PrintFlags(fs)
-
 			// convert previous version of options
 			// FIXME: this may rewrite some of the above secure serving defaults, prevent that
 			// in case legacy options were unset
-			if err := o.LegacyOptions.ConvertIntoSecureServingOptions(o.SecureServing); err != nil {
+			if err := o.LegacyOptions.ConvertToNewOptions(
+				o.SecureServing,
+				o.DelegatingAuthentication,
+				o.DelegatingAuthorization,
+			); err != nil {
 				return err
 			}
+
+			fs := cmd.Flags()
+			k8sapiflag.PrintFlags(fs)
+
+			// TODO: this should be done somewhere elsewhere?
+			o.DelegatingAuthorization.WithAlwaysAllowPaths(o.ProxyOptions.IgnorePaths...)
 
 			// set default options
 			completedOptions, err := Complete(o)
@@ -127,6 +135,8 @@ type completedProxyRunOptions struct {
 func (o *completedProxyRunOptions) Validate() []error {
 	var errs []error
 	errs = append(errs, o.SecureServing.Validate()...)
+	errs = append(errs, o.DelegatingAuthentication.Validate()...)
+	errs = append(errs, o.DelegatingAuthorization.Validate()...)
 	errs = append(errs, o.ProxyOptions.Validate()...)
 	errs = append(errs, o.LegacyOptions.Validate(o.SecureServing.ServerCert.CertKey.CertFile, o.SecureServing.ServerCert.CertKey.KeyFile)...)
 
@@ -170,8 +180,8 @@ func Run(opts *completedProxyRunOptions) error {
 
 	var authenticator authenticator.Request
 	// If OIDC configuration provided, use oidc authenticator
-	if cfg.KubeRBACProxyInfo.Auth.Authentication.OIDC.IssuerURL != "" {
-		oidcAuthenticator, err := authn.NewOIDCAuthenticator(cfg.KubeRBACProxyInfo.Auth.Authentication.OIDC)
+	if cfg.KubeRBACProxyInfo.OIDC.IssuerURL != "" {
+		oidcAuthenticator, err := authn.NewOIDCAuthenticator(cfg.KubeRBACProxyInfo.OIDC)
 		if err != nil {
 			return fmt.Errorf("failed to instantiate OIDC authenticator: %w", err)
 		}
@@ -179,23 +189,7 @@ func Run(opts *completedProxyRunOptions) error {
 		go oidcAuthenticator.Run(ctx)
 		authenticator = oidcAuthenticator
 	} else {
-		//Use Delegating authenticator
-		klog.Infof("Valid token audiences: %s", strings.Join(cfg.KubeRBACProxyInfo.Auth.Authentication.Token.Audiences, ", "))
-
-		tokenClient := cfg.KubeRBACProxyInfo.KubeClient.AuthenticationV1()
-		delegatingAuthenticator, err := authn.NewDelegatingAuthenticator(tokenClient, cfg.KubeRBACProxyInfo.Auth.Authentication)
-		if err != nil {
-			return fmt.Errorf("failed to instantiate delegating authenticator: %w", err)
-		}
-
-		go delegatingAuthenticator.Run(ctx)
-		authenticator = delegatingAuthenticator
-	}
-
-	sarClient := cfg.KubeRBACProxyInfo.KubeClient.AuthorizationV1()
-	sarAuthorizer, err := authz.NewSarAuthorizer(sarClient)
-	if err != nil {
-		return fmt.Errorf("failed to create sar authorizer: %w", err)
+		authenticator = cfg.DelegatingAuthentication.Authenticator
 	}
 
 	staticAuthorizer, err := authz.NewStaticAuthorizer(cfg.KubeRBACProxyInfo.Auth.Authorization.Static)
@@ -205,7 +199,7 @@ func Run(opts *completedProxyRunOptions) error {
 
 	authorizer := union.New(
 		staticAuthorizer,
-		sarAuthorizer,
+		cfg.DelegatingAuthorization.Authorizer,
 	)
 
 	proxy := httputil.NewSingleHostReverseProxy(cfg.KubeRBACProxyInfo.UpstreamURL)
@@ -226,36 +220,12 @@ func Run(opts *completedProxyRunOptions) error {
 		}
 	}
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		ignorePathFound := false
-		for _, pathIgnored := range cfg.KubeRBACProxyInfo.IgnorePaths {
-			ignorePathFound, err = path.Match(pathIgnored, req.URL.Path)
-			if err != nil {
-				http.Error(
-					w,
-					http.StatusText(http.StatusInternalServerError),
-					http.StatusInternalServerError,
-				)
-				return
-			}
-			if ignorePathFound {
-				break
-			}
-		}
-
-		if !ignorePathFound {
-			handlerFunc := proxy.ServeHTTP
-			handlerFunc = filters.WithAuthHeaders(cfg.KubeRBACProxyInfo.Auth.Authentication.Header, handlerFunc)
-			handlerFunc = filters.WithAuthorization(authorizer, cfg.KubeRBACProxyInfo.Auth.Authorization, handlerFunc)
-			handlerFunc = filters.WithAuthentication(authenticator, cfg.KubeRBACProxyInfo.Auth.Authentication.Token.Audiences, handlerFunc)
-			handlerFunc(w, req)
-
-			return
-		}
-
-		proxy.ServeHTTP(w, req)
-	})
-	handler = filters.WithAllowPaths(cfg.KubeRBACProxyInfo.AllowPaths, handler)
+	handler := filters.WithAuthHeaders(proxy, cfg.KubeRBACProxyInfo.Auth.Authentication.Header)
+	handler = kubefilters.WithAuthorization(handler, krbproxy.NewKubeRBACProxyAuthorizer(authorizer, cfg.KubeRBACProxyInfo.Auth.Authorization), scheme.Codecs)
+	handler = kubefilters.WithAuthentication(handler, authenticator, http.HandlerFunc(filters.UnauthorizedHandler), cfg.DelegatingAuthentication.APIAudiences)
+	handler = kubefilters.WithRequestInfo(handler, &request.RequestInfoFactory{})
+	handler = krbproxy.WithKubeRBACProxyParamsHandler(handler, cfg.KubeRBACProxyInfo.Auth.Authorization)
+	handler = filters.WithAllowPaths(handler, cfg.KubeRBACProxyInfo.AllowPaths)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", handler)
@@ -263,18 +233,12 @@ func Run(opts *completedProxyRunOptions) error {
 	gr := &run.Group{}
 	{
 		if len(opts.LegacyOptions.SecureListenAddress) > 0 {
-			clientCAProvider, err := cfg.GetClientCAProvider()
-			if err != nil {
-				return err
-			}
-			cfg.SecureServing.ClientCA = clientCAProvider
 			gr.Add(secureServerRunner(ctx, cfg.SecureServing, mux))
 
 			if cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing != nil {
 				proxyEndpointsMux := http.NewServeMux()
 				proxyEndpointsMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
 
-				cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing.ClientCA = clientCAProvider
 				gr.Add(secureServerRunner(ctx, cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing, proxyEndpointsMux))
 			}
 		}
@@ -332,8 +296,19 @@ func createKubeRBACProxyConfig(opts *completedProxyRunOptions) (*server.KubeRBAC
 			return nil, err
 		}
 	}
+	if err := opts.DelegatingAuthentication.ApplyTo(
+		proxyConfig.DelegatingAuthentication,
+		proxyConfig.SecureServing,
+		nil,
+	); err != nil {
+		return nil, err
+	}
 
-	if err := opts.ProxyOptions.ApplyTo(proxyConfig.KubeRBACProxyInfo); err != nil {
+	if err := opts.DelegatingAuthorization.ApplyTo(proxyConfig.DelegatingAuthorization); err != nil {
+		return nil, err
+	}
+
+	if err := opts.ProxyOptions.ApplyTo(proxyConfig.KubeRBACProxyInfo, proxyConfig.DelegatingAuthentication); err != nil {
 		return nil, err
 	}
 

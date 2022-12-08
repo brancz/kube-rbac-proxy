@@ -18,16 +18,22 @@ package proxy
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"net/http"
 	"net/textproto"
 	"text/template"
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
-	"k8s.io/apiserver/pkg/authentication/user"
+
 	"k8s.io/apiserver/pkg/authorization/authorizer"
-	"k8s.io/klog/v2"
+	"k8s.io/apiserver/pkg/endpoints/request"
 )
+
+var _ authorizer.Authorizer = &krpAuthorizer{}
+
+const kubeRBACProxyParamsKey = iota
 
 // Config holds proxy authorization and authentication settings
 type Config struct {
@@ -35,103 +41,110 @@ type Config struct {
 	Authorization  *authz.Config
 }
 
-func NewKubeRBACProxyAuthorizerAttributesGetter(authzConfig *authz.Config) *krpAuthorizerAttributesGetter {
-	return &krpAuthorizerAttributesGetter{authzConfig}
+func NewKubeRBACProxyAuthorizer(delegate authorizer.Authorizer, authzConfig *authz.Config) *krpAuthorizer {
+	return &krpAuthorizer{
+		authzConfig: authzConfig,
+		delegate:    delegate,
+	}
 }
 
-type krpAuthorizerAttributesGetter struct {
+type krpAuthorizer struct {
 	authzConfig *authz.Config
+	delegate    authorizer.Authorizer
 }
 
 // GetRequestAttributes populates authorizer attributes for the requests to kube-rbac-proxy.
-func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http.Request) []authorizer.Attributes {
-	apiVerb := "*"
-	switch r.Method {
-	case "POST":
-		apiVerb = "create"
-	case "GET":
-		apiVerb = "get"
-	case "PUT":
-		apiVerb = "update"
-	case "PATCH":
-		apiVerb = "patch"
-	case "DELETE":
-		apiVerb = "delete"
+func (n *krpAuthorizer) Authorize(ctx context.Context, attrs authorizer.Attributes) (authorizer.Decision, string, error) {
+	proxyAttrs := n.getKubeRBACProxyAuthzAttributes(ctx, attrs)
+
+	if len(proxyAttrs) == 0 {
+		return authorizer.DecisionDeny,
+			"The request or configuration is malformed.",
+			fmt.Errorf("bad request. The request or configuration is malformed")
 	}
 
-	var allAttrs []authorizer.Attributes
-
-	defer func() {
-		for attrs := range allAttrs {
-			klog.V(5).Infof("kube-rbac-proxy request attributes: attrs=%#+v", attrs)
+	var (
+		authorized authorizer.Decision
+		reason     string
+		err        error
+	)
+	for _, at := range proxyAttrs {
+		authorized, reason, err = n.delegate.Authorize(ctx, at)
+		if err != nil {
+			return authorizer.DecisionDeny,
+				"AuthorizationError",
+				fmt.Errorf("authorization error (user=%s, verb=%s, resource=%s, subresource=%s): %w", at.GetName(), at.GetVerb(), at.GetResource(), at.GetSubresource(), err)
 		}
-	}()
+		if authorized != authorizer.DecisionAllow {
+			return authorizer.DecisionDeny,
+				fmt.Sprintf("Forbidden (user=%s, verb=%s, resource=%s, subresource=%s): %s", at.GetName(), at.GetVerb(), at.GetResource(), at.GetSubresource(), reason),
+				nil
+		}
+	}
 
+	if authorized == authorizer.DecisionAllow {
+		return authorized, "", nil
+	}
+
+	return authorizer.DecisionDeny,
+		"No attribute combination matched",
+		nil
+}
+
+func (n *krpAuthorizer) getKubeRBACProxyAuthzAttributes(ctx context.Context, origAttrs authorizer.Attributes) []authorizer.Attributes {
+	u := origAttrs.GetUser()
+	apiVerb := origAttrs.GetVerb()
+	path := origAttrs.GetPath()
+
+	attrs := []authorizer.Attributes{}
 	if n.authzConfig.ResourceAttributes == nil {
 		// Default attributes mirror the API attributes that would allow this access to kube-rbac-proxy
-		allAttrs := append(allAttrs, authorizer.AttributesRecord{
-			User:            u,
-			Verb:            apiVerb,
-			Namespace:       "",
-			APIGroup:        "",
-			APIVersion:      "",
-			Resource:        "",
-			Subresource:     "",
-			Name:            "",
-			ResourceRequest: false,
-			Path:            r.URL.Path,
-		})
-		return allAttrs
+		return append(attrs,
+			authorizer.AttributesRecord{
+				User:            u,
+				Verb:            apiVerb,
+				ResourceRequest: false,
+				Path:            path,
+			})
 	}
 
 	if n.authzConfig.Rewrites == nil {
-		allAttrs := append(allAttrs, authorizer.AttributesRecord{
-			User:            u,
-			Verb:            apiVerb,
-			Namespace:       n.authzConfig.ResourceAttributes.Namespace,
-			APIGroup:        n.authzConfig.ResourceAttributes.APIGroup,
-			APIVersion:      n.authzConfig.ResourceAttributes.APIVersion,
-			Resource:        n.authzConfig.ResourceAttributes.Resource,
-			Subresource:     n.authzConfig.ResourceAttributes.Subresource,
-			Name:            n.authzConfig.ResourceAttributes.Name,
-			ResourceRequest: true,
-		})
-		return allAttrs
+		return append(attrs,
+			authorizer.AttributesRecord{
+				User:            u,
+				Verb:            apiVerb,
+				Namespace:       n.authzConfig.ResourceAttributes.Namespace,
+				APIGroup:        n.authzConfig.ResourceAttributes.APIGroup,
+				APIVersion:      n.authzConfig.ResourceAttributes.APIVersion,
+				Resource:        n.authzConfig.ResourceAttributes.Resource,
+				Subresource:     n.authzConfig.ResourceAttributes.Subresource,
+				Name:            n.authzConfig.ResourceAttributes.Name,
+				ResourceRequest: true,
+			})
+
 	}
 
-	params := []string{}
-	if n.authzConfig.Rewrites.ByQueryParameter != nil && n.authzConfig.Rewrites.ByQueryParameter.Name != "" {
-		if ps, ok := r.URL.Query()[n.authzConfig.Rewrites.ByQueryParameter.Name]; ok {
-			params = append(params, ps...)
-		}
-	}
-	if n.authzConfig.Rewrites.ByHTTPHeader != nil && n.authzConfig.Rewrites.ByHTTPHeader.Name != "" {
-		mimeHeader := textproto.MIMEHeader(r.Header)
-		mimeKey := textproto.CanonicalMIMEHeaderKey(n.authzConfig.Rewrites.ByHTTPHeader.Name)
-		if ps, ok := mimeHeader[mimeKey]; ok {
-			params = append(params, ps...)
-		}
-	}
-
+	params := GetKubeRBACProxyParams(ctx)
 	if len(params) == 0 {
-		return allAttrs
+		return nil
 	}
 
 	for _, param := range params {
-		attrs := authorizer.AttributesRecord{
-			User:            u,
-			Verb:            apiVerb,
-			Namespace:       templateWithValue(n.authzConfig.ResourceAttributes.Namespace, param),
-			APIGroup:        templateWithValue(n.authzConfig.ResourceAttributes.APIGroup, param),
-			APIVersion:      templateWithValue(n.authzConfig.ResourceAttributes.APIVersion, param),
-			Resource:        templateWithValue(n.authzConfig.ResourceAttributes.Resource, param),
-			Subresource:     templateWithValue(n.authzConfig.ResourceAttributes.Subresource, param),
-			Name:            templateWithValue(n.authzConfig.ResourceAttributes.Name, param),
-			ResourceRequest: true,
-		}
-		allAttrs = append(allAttrs, attrs)
+		attrs = append(attrs,
+			authorizer.AttributesRecord{
+				User:            u,
+				Verb:            apiVerb,
+				Namespace:       templateWithValue(n.authzConfig.ResourceAttributes.Namespace, param),
+				APIGroup:        templateWithValue(n.authzConfig.ResourceAttributes.APIGroup, param),
+				APIVersion:      templateWithValue(n.authzConfig.ResourceAttributes.APIVersion, param),
+				Resource:        templateWithValue(n.authzConfig.ResourceAttributes.Resource, param),
+				Subresource:     templateWithValue(n.authzConfig.ResourceAttributes.Subresource, param),
+				Name:            templateWithValue(n.authzConfig.ResourceAttributes.Name, param),
+				ResourceRequest: true,
+			})
 	}
-	return allAttrs
+
+	return attrs
 }
 
 func templateWithValue(templateString, value string) string {
@@ -142,4 +155,44 @@ func templateWithValue(templateString, value string) string {
 		return ""
 	}
 	return out.String()
+}
+
+func WithKubeRBACProxyParamsHandler(handler http.Handler, authzConfig *authz.Config) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(WithKubeRBACProxyParams(r.Context(), requestToParams(authzConfig, r)))
+		handler.ServeHTTP(w, r)
+	})
+}
+
+func requestToParams(config *authz.Config, req *http.Request) []string {
+	params := []string{}
+	if config.Rewrites == nil {
+		return nil
+	}
+
+	if config.Rewrites.ByQueryParameter != nil && config.Rewrites.ByQueryParameter.Name != "" {
+		if ps, ok := req.URL.Query()[config.Rewrites.ByQueryParameter.Name]; ok {
+			params = append(params, ps...)
+		}
+	}
+	if config.Rewrites.ByHTTPHeader != nil && config.Rewrites.ByHTTPHeader.Name != "" {
+		mimeHeader := textproto.MIMEHeader(req.Header)
+		mimeKey := textproto.CanonicalMIMEHeaderKey(config.Rewrites.ByHTTPHeader.Name)
+		if ps, ok := mimeHeader[mimeKey]; ok {
+			params = append(params, ps...)
+		}
+	}
+	return params
+}
+
+func WithKubeRBACProxyParams(ctx context.Context, params []string) context.Context {
+	return request.WithValue(ctx, kubeRBACProxyParamsKey, params)
+}
+
+func GetKubeRBACProxyParams(ctx context.Context) []string {
+	params, ok := ctx.Value(kubeRBACProxyParamsKey).([]string)
+	if !ok {
+		return nil
+	}
+	return params
 }

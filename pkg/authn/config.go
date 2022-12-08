@@ -18,8 +18,6 @@ package authn
 
 // AuthnHeaderConfig contains authentication header settings which enable more information about the user identity to be sent to the upstream
 type AuthnHeaderConfig struct {
-	// When set to true, kube-rbac-proxy adds auth-related fields to the headers of http requests sent to the upstream
-	Enabled bool
 	// Corresponds to the name of the field inside a http(2) request header
 	// to tell the upstream server about the user's name
 	UserFieldName string
@@ -34,8 +32,6 @@ type AuthnHeaderConfig struct {
 type AuthnConfig struct {
 	X509   *X509Config
 	Header *AuthnHeaderConfig
-	OIDC   *OIDCConfig
-	Token  *TokenConfig
 }
 
 // X509Config holds public client certificate used for authentication requests if specified

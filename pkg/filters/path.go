@@ -20,12 +20,12 @@ import (
 	"path"
 )
 
-func WithAllowPaths(allowPaths []string, handler http.HandlerFunc) http.HandlerFunc {
+func WithAllowPaths(handler http.Handler, allowPaths []string) http.Handler {
 	if len(allowPaths) == 0 {
 		return handler
 	}
 
-	return func(w http.ResponseWriter, req *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		for _, pathAllowed := range allowPaths {
 			found, err := path.Match(pathAllowed, req.URL.Path)
 			if err != nil {
@@ -44,5 +44,5 @@ func WithAllowPaths(allowPaths []string, handler http.HandlerFunc) http.HandlerF
 		}
 
 		http.NotFound(w, req)
-	}
+	})
 }

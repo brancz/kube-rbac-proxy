@@ -29,23 +29,30 @@ type ProxyRunOptions struct {
 	// ProxySecureServing are options for the proxy endpoints, they will be copied
 	// from the above with a changed port
 	ProxySecureServing *genericoptions.SecureServingOptions
-	ProxyOptions       *ProxyOptions
-	LegacyOptions      *LegacyOptions
+
+	DelegatingAuthentication *genericoptions.DelegatingAuthenticationOptions
+	DelegatingAuthorization  *genericoptions.DelegatingAuthorizationOptions
+
+	ProxyOptions  *ProxyOptions
+	LegacyOptions *LegacyOptions
 }
 
 func NewProxyRunOptions() *ProxyRunOptions {
 	return &ProxyRunOptions{
-		SecureServing: genericoptions.NewSecureServingOptions(),
+		SecureServing:            genericoptions.NewSecureServingOptions(),
+		DelegatingAuthentication: genericoptions.NewDelegatingAuthenticationOptions(),
+		DelegatingAuthorization:  genericoptions.NewDelegatingAuthorizationOptions(),
+
 		ProxyOptions: &ProxyOptions{
+			UpstreamHeader: &authn.AuthnHeaderConfig{},
+			OIDC:           &authn.OIDCConfig{},
+		},
+		LegacyOptions: &LegacyOptions{
 			Authentication: &authn.AuthnConfig{
 				X509:   &authn.X509Config{},
 				Header: &authn.AuthnHeaderConfig{},
-				OIDC:   &authn.OIDCConfig{},
-				Token:  &authn.TokenConfig{},
 			},
 		},
-
-		LegacyOptions: &LegacyOptions{},
 	}
 }
 
@@ -53,6 +60,8 @@ func (o *ProxyRunOptions) Flags() kubeflags.NamedFlagSets {
 	namedFlagSets := kubeflags.NamedFlagSets{}
 
 	o.SecureServing.AddFlags(namedFlagSets.FlagSet("secure serving"))
+	o.DelegatingAuthentication.AddFlags(namedFlagSets.FlagSet("delegating authentication"))
+	o.DelegatingAuthorization.AddFlags(namedFlagSets.FlagSet("delegating authorization"))
 	o.ProxyOptions.AddFlags(namedFlagSets.FlagSet("proxy"))
 	o.LegacyOptions.AddFlags(namedFlagSets.FlagSet("legacy kube-rbac-proxy [DEPRECATED]"))
 

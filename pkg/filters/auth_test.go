@@ -17,9 +17,9 @@ package filters_test
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
 	"strings"
 	"testing"
 
@@ -32,178 +32,13 @@ import (
 	"k8s.io/apiserver/pkg/authentication/request/bearertoken"
 	"k8s.io/apiserver/pkg/authentication/user"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
+	kubefilters "k8s.io/apiserver/pkg/endpoints/filters"
 	"k8s.io/apiserver/pkg/endpoints/request"
+	"k8s.io/kubectl/pkg/scheme"
 )
 
-func TestWithAuthentication(t *testing.T) {
-	audience := []string{"apiserver"}
-
-	for _, tt := range []struct {
-		name          string
-		authenticator authenticator.Request
-		audiences     []string
-		status        int
-	}{
-		{
-			name: "should return 200 ok on successful authn",
-			authenticator: authenticatorFunc(func(req *http.Request) (*authenticator.Response, bool, error) {
-				return &authenticator.Response{
-					Audiences: []string{},
-					User: &user.DefaultInfo{
-						Name:   "Ben Utzer",
-						UID:    "1337",
-						Groups: []string{},
-						Extra:  map[string][]string{},
-					},
-				}, true, nil
-			}),
-			status: http.StatusOK,
-		},
-		{
-			name: "should put audiences into the ctx",
-			authenticator: authenticatorFunc(func(req *http.Request) (*authenticator.Response, bool, error) {
-				aud, ok := authenticator.AudiencesFrom(req.Context())
-				if !ok {
-					t.Errorf("want: %s\nhave: ok == false", audience)
-				}
-				if aud[0] != audience[0] {
-					t.Errorf("want: %s\nhave: %s", audience, aud)
-				}
-
-				return nil, false, nil
-			}),
-			audiences: audience,
-			status:    http.StatusUnauthorized,
-		},
-		{
-			name: "should return unauthorized on err",
-			authenticator: authenticatorFunc(func(req *http.Request) (*authenticator.Response, bool, error) {
-				return nil, false, errors.New("this is an error")
-			}),
-			status: http.StatusUnauthorized,
-		},
-		{
-			name: "should return unauthorized on authentication failure",
-			authenticator: authenticatorFunc(func(req *http.Request) (*authenticator.Response, bool, error) {
-				return nil, false, nil
-			}),
-			status: http.StatusUnauthorized,
-		},
-	} {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			req, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			rec := httptest.NewRecorder()
-			filters.WithAuthentication(
-				tt.authenticator,
-				tt.audiences,
-				func(w http.ResponseWriter, r *http.Request) {},
-			).ServeHTTP(rec, req)
-
-			res := rec.Result()
-			if res.StatusCode != tt.status {
-				t.Errorf("want: %d\nhave: %d\n", tt.status, res.StatusCode)
-			}
-		})
-	}
-}
-
-type authenticatorFunc func(*http.Request) (*authenticator.Response, bool, error)
-
-func (a authenticatorFunc) AuthenticateRequest(req *http.Request) (*authenticator.Response, bool, error) {
-	return a(req)
-}
-
-func TestWithAuthorization(t *testing.T) {
-	emptyRequest, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	userRequest := emptyRequest.WithContext(
-		request.WithUser(emptyRequest.Context(), &user.DefaultInfo{}),
-	)
-
-	for _, tt := range []struct {
-		name   string
-		req    *http.Request
-		authz  authorizer.Authorizer
-		cfg    *authz.Config
-		status int
-	}{
-		{
-			name:   "should fail without user in context",
-			req:    emptyRequest,
-			authz:  nil,
-			cfg:    &authz.Config{},
-			status: http.StatusBadRequest,
-		},
-		{
-			name:  "should fail without authorization attributes",
-			req:   userRequest,
-			authz: nil,
-			cfg: &authz.Config{
-				ResourceAttributes: &authz.ResourceAttributes{},
-				Rewrites:           &authz.SubjectAccessReviewRewrites{},
-			},
-			status: http.StatusBadRequest,
-		},
-		{
-			name: "should fail with error on authorization",
-			req:  userRequest,
-			authz: authorizerFunc(func(ctx context.Context, attr authorizer.Attributes) (authorizer.Decision, string, error) {
-				return authorizer.DecisionDeny, "there is an error", errors.New("this is an error")
-			}),
-			cfg:    &authz.Config{},
-			status: http.StatusInternalServerError,
-		},
-		{
-			name: "should fail with authorization failure",
-			req:  userRequest,
-			authz: authorizerFunc(func(ctx context.Context, attr authorizer.Attributes) (authorizer.Decision, string, error) {
-				return authorizer.DecisionDeny, "not authorized", nil
-			}),
-			cfg:    &authz.Config{},
-			status: http.StatusForbidden,
-		},
-		{
-			name: "should succeed with authorization",
-			req:  userRequest,
-			authz: authorizerFunc(func(ctx context.Context, attr authorizer.Attributes) (authorizer.Decision, string, error) {
-				return authorizer.DecisionAllow, "authorized!", nil
-			}),
-			cfg:    &authz.Config{},
-			status: http.StatusOK,
-		},
-	} {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			filters.WithAuthorization(
-				tt.authz,
-				tt.cfg,
-				func(w http.ResponseWriter, r *http.Request) {},
-			).ServeHTTP(rec, tt.req)
-
-			res := rec.Result()
-			if tt.status != res.StatusCode {
-				t.Errorf("want: %d\nhave: %d", tt.status, res.StatusCode)
-			}
-		})
-	}
-}
-
-type authorizerFunc func(context.Context, authorizer.Attributes) (authorizer.Decision, string, error)
-
-func (a authorizerFunc) Authorize(ctx context.Context, attr authorizer.Attributes) (authorizer.Decision, string, error) {
-	return a(ctx, attr)
-}
-
 func TestWithAuthHeaders(t *testing.T) {
-	okHandler := func(w http.ResponseWriter, r *http.Request) {}
+	okHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 	userKey := "User"
 	userValue := "ben"
 	groupKey := "Group"
@@ -217,13 +52,12 @@ func TestWithAuthHeaders(t *testing.T) {
 	}{
 		{
 			name:   "should pass through",
-			cfg:    &authn.AuthnHeaderConfig{Enabled: false},
+			cfg:    &authn.AuthnHeaderConfig{},
 			header: map[string][]string{},
 		},
 		{
 			name: "should set username in header",
 			cfg: &authn.AuthnHeaderConfig{
-				Enabled:         true,
 				UserFieldName:   userKey,
 				GroupsFieldName: groupKey,
 			},
@@ -250,7 +84,7 @@ func TestWithAuthHeaders(t *testing.T) {
 			)
 
 			rec := httptest.NewRecorder()
-			filters.WithAuthHeaders(tt.cfg, okHandler).ServeHTTP(rec, req)
+			filters.WithAuthHeaders(okHandler, tt.cfg).ServeHTTP(rec, req)
 
 			if len(req.Header) != len(tt.header) {
 				t.Errorf("want: %+v\nhave:%+v", tt.header, req.Header)
@@ -271,13 +105,10 @@ func TestWithAuthHeaders(t *testing.T) {
 func TestProxyWithOIDCSupport(t *testing.T) {
 	cfg := proxy.Config{
 		Authentication: &authn.AuthnConfig{
-			OIDC: &authn.OIDCConfig{},
 			Header: &authn.AuthnHeaderConfig{
-				Enabled:         true,
 				UserFieldName:   "user",
 				GroupsFieldName: "groups",
 			},
-			Token: &authn.TokenConfig{},
 		},
 		Authorization: &authz.Config{},
 	}
@@ -322,15 +153,18 @@ func TestProxyWithOIDCSupport(t *testing.T) {
 		t.Run(v.description, func(t *testing.T) {
 			w := httptest.NewRecorder()
 
-			handler := func(w http.ResponseWriter, r *http.Request) {}
-			handler = filters.WithAuthHeaders(cfg.Authentication.Header, handler)
-			handler = filters.WithAuthorization(v.authorizer, cfg.Authorization, handler)
-			handler = filters.WithAuthentication(authenticator, cfg.Authentication.Token.Audiences, handler)
+			handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+			handler = filters.WithAuthHeaders(handler, cfg.Authentication.Header)
+			handler = kubefilters.WithAuthorization(handler, v.authorizer, scheme.Codecs)
+			handler = kubefilters.WithAuthentication(handler, authenticator, http.HandlerFunc(filters.UnauthorizedHandler), []string{})
+			handler = kubefilters.WithRequestInfo(handler, &request.RequestInfoFactory{})
 
-			handler(w, v.req)
+			handler.ServeHTTP(w, v.req)
 			resp := w.Result()
 
 			if resp.StatusCode != v.status {
+				respBytes, _ := httputil.DumpResponse(resp, true)
+				t.Logf("received response:\n%s", respBytes)
 				t.Errorf("Expected response: %d received : %d", v.status, resp.StatusCode)
 			}
 

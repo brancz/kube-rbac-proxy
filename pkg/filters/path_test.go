@@ -62,7 +62,7 @@ func TestAllowPath(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			filters.WithAllowPaths(tt.paths, emptyHandler).ServeHTTP(rec, req)
+			filters.WithAllowPaths(http.HandlerFunc(emptyHandler), tt.paths).ServeHTTP(rec, req)
 			res := rec.Result()
 
 			if res.StatusCode != tt.status {

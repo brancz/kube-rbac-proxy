@@ -21,6 +21,7 @@ spec:
             - "--secure-listen-address=0.0.0.0:8443"
             - "--upstream=http://127.0.0.1:8081/"
             - "--ignore-paths=/metrics,/api/v1/*"
+            - "--authentication-skip-lookup"
             - "--logtostderr=true"
             - "--v=10"
           ports:

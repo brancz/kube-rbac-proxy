@@ -17,13 +17,16 @@ limitations under the License.
 package proxy
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
 	"github.com/google/go-cmp/cmp"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
+	"k8s.io/apiserver/pkg/authorization/authorizerfactory"
 )
 
 func TestGeneratingAuthorizerAttributes(t *testing.T) {
@@ -205,8 +208,14 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
 			t.Log(c.req.URL.Query())
-			n := krpAuthorizerAttributesGetter{authzConfig: c.authzCfg}
-			res := n.GetRequestAttributes(nil, c.req)
+			n := krpAuthorizer{delegate: authorizerfactory.NewAlwaysAllowAuthorizer(), authzConfig: c.authzCfg}
+			res := n.getKubeRBACProxyAuthzAttributes(
+				WithKubeRBACProxyParams(context.Background(), requestToParams(c.authzCfg, c.req)),
+				authorizer.AttributesRecord{
+					Verb:            "get",
+					Path:            "/accounts",
+					ResourceRequest: false,
+				})
 			if !cmp.Equal(res, c.expected) {
 				t.Errorf("Generated authorizer attributes are not correct. Expected %v, recieved %v", c.expected, res)
 			}
@@ -223,6 +232,7 @@ func createRequest(queryParams, headers map[string][]string) *http.Request {
 				q.Add(key, value)
 			}
 		}
+		r.URL, _ = url.Parse(r.URL.String())
 		r.URL.RawQuery = q.Encode()
 	}
 	for key, values := range headers {
