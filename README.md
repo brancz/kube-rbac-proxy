@@ -43,9 +43,8 @@ Kube-rbac-proxy flags:
       --auth-token-audiences strings                Comma-separated list of token audiences to accept. By default a token does not have to have any specific audience. It is recommended to set a specific audience.
       --client-ca-file string                       If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.
       --config-file string                          Configuration file to configure kube-rbac-proxy.
-      --healthz-path string                         The path to serve the liveness check endpoint. If empty, the healthz endpoint will not be exposed.
       --ignore-paths strings                        Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the requst matches, it will proxy the request without performing an authentication or authorization check. Cannot be used with --allow-paths.
-      --insecure-listen-address string              The address the kube-rbac-proxy HTTP server should listen on.
+      --insecure-listen-address string              [DEPRECATED] The address the kube-rbac-proxy HTTP server should listen on.
       --kubeconfig string                           Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used
       --oidc-ca-file string                         If set, the OpenID server's certificate will be verified by one of the authorities in the oidc-ca-file, otherwise the host's root CA set will be used.
       --oidc-clientID string                        The client ID for the OpenID Connect client, must be set if oidc-issuer-url is set.
@@ -54,6 +53,7 @@ Kube-rbac-proxy flags:
       --oidc-issuer string                          The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).
       --oidc-sign-alg stringArray                   Supported signing algorithms, default RS256 (default [RS256])
       --oidc-username-claim string                  Identifier of the user in JWT claim, by default set to 'email' (default "email")
+      --proxy-endpoints-port int                    The port to securely serve proxy-specific endpoints (such as '/healthz'). Uses the host from the '--secure-listen-address'.
       --secure-listen-address string                The address the kube-rbac-proxy HTTPs server should listen on.
       --tls-cert-file string                        File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)
       --tls-cipher-suites strings                   Comma-separated list of cipher suites for the server. Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants). If omitted, the default Go cipher suites will be used

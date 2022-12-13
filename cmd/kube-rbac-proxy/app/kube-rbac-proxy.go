@@ -29,6 +29,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -127,7 +128,7 @@ type configfile struct {
 type completedProxyRunOptions struct {
 	insecureListenAddress string // DEPRECATED
 	secureListenAddress   string
-	healthzPath           string
+	proxyEndpointsPort    int
 
 	upstreamURL      *url.URL
 	upstreamForceH2C bool
@@ -204,7 +205,7 @@ func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
 	completed := &completedProxyRunOptions{
 		insecureListenAddress: o.InsecureListenAddress,
 		secureListenAddress:   o.SecureListenAddress,
-		healthzPath:           o.HealthzPath,
+		proxyEndpointsPort:    o.ProxyEndpointsPort,
 		upstreamForceH2C:      o.UpstreamForceH2C,
 
 		allowPaths:  o.AllowPaths,
@@ -353,10 +354,6 @@ func Run(cfg *completedProxyRunOptions) error {
 	mux := http.NewServeMux()
 	mux.Handle("/", handler)
 
-	if cfg.healthzPath != "" {
-		mux.HandleFunc(cfg.healthzPath, func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
-	}
-
 	var gr run.Group
 	{
 		if cfg.secureListenAddress != "" {
@@ -413,13 +410,14 @@ func Run(cfg *completedProxyRunOptions) error {
 				return fmt.Errorf("failed to configure http2 server: %w", err)
 			}
 
-			klog.Infof("Starting TCP socket on %v", cfg.secureListenAddress)
-			l, err := net.Listen("tcp", cfg.secureListenAddress)
-			if err != nil {
-				return fmt.Errorf("failed to listen on secure address: %w", err)
-			}
-
 			gr.Add(func() error {
+				klog.Infof("Starting TCP socket on %v", cfg.secureListenAddress)
+				l, err := net.Listen("tcp", cfg.secureListenAddress)
+				if err != nil {
+					return fmt.Errorf("failed to listen on secure address: %w", err)
+				}
+				defer l.Close()
+
 				klog.Infof("Listening securely on %v", cfg.secureListenAddress)
 				tlsListener := tls.NewListener(l, srv.TLSConfig)
 				return srv.Serve(tlsListener)
@@ -427,10 +425,44 @@ func Run(cfg *completedProxyRunOptions) error {
 				if err := srv.Shutdown(context.Background()); err != nil {
 					klog.Errorf("failed to gracefully shutdown server: %w", err)
 				}
-				if err := l.Close(); err != nil {
-					klog.Errorf("failed to gracefully close secure listener: %w", err)
-				}
 			})
+
+			if cfg.proxyEndpointsPort != 0 {
+				proxyEndpointsMux := http.NewServeMux()
+				proxyEndpointsMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
+
+				proxyEndpointsSrv := &http.Server{
+					Handler:   proxyEndpointsMux,
+					TLSConfig: srv.TLSConfig.Clone(),
+				}
+
+				if err := http2.ConfigureServer(proxyEndpointsSrv, nil); err != nil {
+					return fmt.Errorf("failed to configure http2 server: %w", err)
+				}
+
+				gr.Add(func() error {
+					host, _, err := net.SplitHostPort(cfg.secureListenAddress)
+					if err != nil {
+						return fmt.Errorf("failed to split %q into host and port: %w", cfg.secureListenAddress, err)
+					}
+					endpointsAddr := net.JoinHostPort(host, strconv.Itoa(cfg.proxyEndpointsPort))
+
+					klog.Infof("Starting TCP socket on %v", endpointsAddr)
+					proxyListener, err := net.Listen("tcp", endpointsAddr)
+					if err != nil {
+						return fmt.Errorf("failed to listen on secure address: %w", err)
+					}
+					defer proxyListener.Close()
+
+					klog.Info("Listening securely on %v for proxy endpoints", endpointsAddr)
+					tlsListener := tls.NewListener(proxyListener, srv.TLSConfig)
+					return proxyEndpointsSrv.Serve(tlsListener)
+				}, func(err error) {
+					if err := proxyEndpointsSrv.Shutdown(context.Background()); err != nil {
+						klog.Errorf("failed to gracefully shutdown proxy endpoints server: %w", err)
+					}
+				})
+			}
 		}
 	}
 	{
