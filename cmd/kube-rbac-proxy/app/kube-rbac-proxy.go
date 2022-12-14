@@ -38,6 +38,7 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authorization/union"
+	serverconfig "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/rest"
 	k8sapiflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/cli/globalflag"
@@ -259,52 +260,22 @@ func Run(opts *completedProxyRunOptions) error {
 	mux := http.NewServeMux()
 	mux.Handle("/", handler)
 
-	var gr run.Group
+	gr := &run.Group{}
 	{
 		if len(opts.LegacyOptions.SecureListenAddress) > 0 {
-			cfg.SecureServing.ClientCA, err = cfg.GetClientCAProvider()
+			clientCAProvider, err := cfg.GetClientCAProvider()
 			if err != nil {
 				return err
 			}
-
-			serverStopCtx, serverCtxCancel := context.WithCancel(ctx)
-			gr.Add(func() error {
-				stoppedCh, listenerStoppedCh, err := cfg.SecureServing.Serve(mux, 10*time.Second, serverStopCtx.Done())
-				if err != nil {
-					serverCtxCancel()
-					return err
-				}
-
-				<-listenerStoppedCh
-				<-stoppedCh
-				return err
-			}, func(err error) {
-				serverCtxCancel()
-			})
+			cfg.SecureServing.ClientCA = clientCAProvider
+			gr.Add(secureServerRunner(ctx, cfg.SecureServing, mux))
 
 			if cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing != nil {
 				proxyEndpointsMux := http.NewServeMux()
 				proxyEndpointsMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
 
-				cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing.ClientCA, err = cfg.GetClientCAProvider()
-				if err != nil {
-					return err
-				}
-
-				proxyServerStopCtx, proxyServerCtxCancel := context.WithCancel(ctx)
-				gr.Add(func() error {
-					proxyStoppedCh, proxyListenerStoppedCh, err := cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing.Serve(
-						proxyEndpointsMux, 10*time.Second, proxyServerStopCtx.Done())
-					if err != nil {
-						proxyServerCtxCancel()
-						return err
-					}
-					<-proxyListenerStoppedCh
-					<-proxyStoppedCh
-					return err
-				}, func(err error) {
-					proxyServerCtxCancel()
-				})
+				cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing.ClientCA = clientCAProvider
+				gr.Add(secureServerRunner(ctx, cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing, proxyEndpointsMux))
 			}
 		}
 	}
@@ -371,4 +342,30 @@ func createKubeRBACProxyConfig(opts *completedProxyRunOptions) (*server.KubeRBAC
 	}
 
 	return proxyConfig, nil
+}
+
+func secureServerRunner(
+	ctx context.Context,
+	config *serverconfig.SecureServingInfo,
+	handler http.Handler,
+) (func() error, func(error)) {
+	serverStopCtx, serverCtxCancel := context.WithCancel(ctx)
+
+	runner := func() error {
+		stoppedCh, listenerStoppedCh, err := config.Serve(handler, 10*time.Second, serverStopCtx.Done())
+		if err != nil {
+			serverCtxCancel()
+			return err
+		}
+
+		<-listenerStoppedCh
+		<-stoppedCh
+		return err
+	}
+
+	interrupter := func(err error) {
+		serverCtxCancel()
+	}
+
+	return runner, interrupter
 }
