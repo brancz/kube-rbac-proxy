@@ -1,5 +1,6 @@
 ## 0.14.0 / 2022-12-15
 
+* [ENHANCEMENT] `README.md` now contains information about the future outlook of the project wrt to deprecations, features and K8s Sig-Auth acceptance
 * [ENHANCEMENT] bump dependencies
 * [FEATURE] health endpoint `/healthz` offered on `--proxy-endpoints-port`
 * [FEATURE] `--upstream-client-cert-file` enables the kube-rbac-proxy client connecting to upstream to use TLS
