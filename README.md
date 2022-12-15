@@ -8,6 +8,25 @@ The kube-rbac-proxy is a small HTTP proxy for a single upstream, that can perfor
 
 In Kubernetes clusters without NetworkPolicies any Pod can perform requests to every other Pod in the cluster. This proxy was developed in order to restrict requests to only those Pods, that present a valid and RBAC authorized token or client TLS certificate.
 
+## Current Future and Deprecation of Flags / Features
+
+The project is seeking to be accepted as a k8s project and therefore we need to align tighter with k8s.
+As a result, we use more of the k8s code and need to deprecate features, while introducing others.
+
+The reasons for deprecation are that k8s doesn't support them anymore and partially because it is not a best practice.
+An example of "not a best practice" is to offer insecure listening and an example of upstream deprecations are some of the logging flags.
+
+The project states above that it is alpha and "flags, configuration, and behavior" can change significantly.
+Nevertheless, the project was treated like a production-v1 project: no breaking changes were introduced.
+
+We will introduce a feature branch called sig-auth-acceptance that shows how kube-rbac-proxy will change.
+
+### Maintenance
+
+We try to keep the current release secure by making necessary updates when necessary, but this is best effort.
+
+An update of Kubernetes from v0.25.2 to v0.25.5 was rolled back as it removed the `--logtostderr` flag.
+
 ## Usage
 
 The kube-rbac-proxy has all [`glog`](https://github.com/golang/glog) flags for logging purposes. To use the kube-rbac-proxy there are a few flags you may want to set:
