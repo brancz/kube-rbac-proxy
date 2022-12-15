@@ -46,8 +46,6 @@ type KubeRBACProxyConfig struct {
 // KubeRBACProxyInfo stores the kube-rbac-proxy specific configuration and serving
 // configuration for the proxy endpoints server
 type KubeRBACProxyInfo struct {
-	InsecureListenAddress string // DEPRECATED
-
 	UpstreamURL       *url.URL
 	UpstreamForceH2C  bool
 	UpstreamTransport http.RoundTripper

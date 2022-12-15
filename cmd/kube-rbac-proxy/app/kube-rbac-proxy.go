@@ -31,7 +31,6 @@ import (
 	"github.com/oklog/run"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
@@ -138,7 +137,7 @@ func (o *completedProxyRunOptions) Validate() []error {
 	errs = append(errs, o.DelegatingAuthentication.Validate()...)
 	errs = append(errs, o.DelegatingAuthorization.Validate()...)
 	errs = append(errs, o.ProxyOptions.Validate()...)
-	errs = append(errs, o.LegacyOptions.Validate(o.SecureServing.ServerCert.CertKey.CertFile, o.SecureServing.ServerCert.CertKey.KeyFile)...)
+	errs = append(errs, o.LegacyOptions.Validate()...)
 
 	return errs
 }
@@ -241,29 +240,6 @@ func Run(opts *completedProxyRunOptions) error {
 
 				gr.Add(secureServerRunner(ctx, cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing, proxyEndpointsMux))
 			}
-		}
-	}
-	{
-		// FIXME: remove before first stable release
-		if insecureListenAddress := cfg.KubeRBACProxyInfo.InsecureListenAddress; insecureListenAddress != "" {
-			srv := &http.Server{Handler: h2c.NewHandler(mux, &http2.Server{})}
-
-			l, err := net.Listen("tcp", insecureListenAddress)
-			if err != nil {
-				return fmt.Errorf("failed to listen on insecure address: %w", err)
-			}
-
-			gr.Add(func() error {
-				klog.Infof("Listening insecurely on %v", insecureListenAddress)
-				return srv.Serve(l)
-			}, func(err error) {
-				if err := srv.Shutdown(context.Background()); err != nil {
-					klog.Errorf("failed to gracefully shutdown server: %w", err)
-				}
-				if err := l.Close(); err != nil {
-					klog.Errorf("failed to gracefully close listener: %w", err)
-				}
-			})
 		}
 	}
 	{

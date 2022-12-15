@@ -26,15 +26,13 @@ import (
 	"github.com/spf13/pflag"
 
 	genericoptions "k8s.io/apiserver/pkg/server/options"
-	"k8s.io/klog/v2"
 	netutils "k8s.io/utils/net"
 )
 
 // LegacyOptions are options that existed in the original KRP, these shall be
 // removed before we submit the repository for the next sig-auth acceptance review
 type LegacyOptions struct {
-	InsecureListenAddress string
-	SecureListenAddress   string
+	SecureListenAddress string
 
 	Authentication *authn.AuthnConfig
 
@@ -43,7 +41,6 @@ type LegacyOptions struct {
 
 func (o *LegacyOptions) AddFlags(flagset *pflag.FlagSet) {
 	// kube-rbac-proxy flags
-	flagset.StringVar(&o.InsecureListenAddress, "insecure-listen-address", "", "The address the kube-rbac-proxy HTTP server should listen on.")
 	flagset.StringVar(&o.SecureListenAddress, "secure-listen-address", "", "The address the kube-rbac-proxy HTTPs server should listen on.")
 
 	// Auth flags
@@ -53,28 +50,8 @@ func (o *LegacyOptions) AddFlags(flagset *pflag.FlagSet) {
 	flagset.StringVar(&o.KubeconfigLocation, "kubeconfig", "", "Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used")
 }
 
-func (o *LegacyOptions) Validate(certFile, keyFile string) []error {
+func (o *LegacyOptions) Validate() []error {
 	var errs []error
-
-	hasCerts := !(certFile == "") && !(keyFile == "")
-	hasInsecureListenAddress := o.InsecureListenAddress != ""
-	if !hasCerts || hasInsecureListenAddress {
-		klog.Warning(`
-==== Deprecation Warning ======================
-
-Insecure listen address will be removed.
-Using --insecure-listen-address won't be possible!
-
-The ability to run kube-rbac-proxy without TLS certificates will be removed.
-Not using --tls-cert-file and --tls-private-key-file won't be possible!
-
-For more information, please go to https://github.com/brancz/kube-rbac-proxy/issues/187
-
-===============================================
-
-		`)
-	}
-
 	return errs
 }
 
@@ -115,6 +92,5 @@ func (o *LegacyOptions) ConvertToNewOptions(
 }
 
 func (o *LegacyOptions) ApplyTo(c *server.KubeRBACProxyInfo) error {
-	c.InsecureListenAddress = o.InsecureListenAddress
 	return nil
 }
