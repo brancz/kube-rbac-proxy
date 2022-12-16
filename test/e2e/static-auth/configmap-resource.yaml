@@ -19,4 +19,4 @@ data:
           resource: namespaces
           subresource: metrics
           namespace: default
-          verbs: get
+          verb: get

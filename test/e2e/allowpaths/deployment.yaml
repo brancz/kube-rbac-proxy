@@ -19,6 +19,7 @@ spec:
           image: quay.io/brancz/kube-rbac-proxy:local
           args:
             - "--secure-listen-address=0.0.0.0:8443"
+            - "--proxy-endpoints-port=8643"
             - "--upstream=http://127.0.0.1:8081/"
             - "--allow-paths=/metrics,/api/v1/label/*/values"
             - "--logtostderr=true"
@@ -26,6 +27,13 @@ spec:
           ports:
             - containerPort: 8443
               name: https
+            - containerPort: 8643
+              name: proxy
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              port: 8643
+              path: healthz
         - name: prometheus-example-app
           image: quay.io/brancz/prometheus-example-app:v0.1.0
           args:

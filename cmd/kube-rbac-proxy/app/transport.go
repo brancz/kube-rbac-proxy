@@ -14,32 +14,29 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package app
 
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"time"
 )
 
-func initTransport(upstreamCAFile string) (http.RoundTripper, error) {
-	if upstreamCAFile == "" {
+func initTransport(upstreamCAPool *x509.CertPool, upstreamClientCertPath, upstreamClientKeyPath string) (http.RoundTripper, error) {
+	if upstreamCAPool == nil {
 		return http.DefaultTransport, nil
 	}
 
-	rootPEM, err := ioutil.ReadFile(upstreamCAFile)
-	if err != nil {
-		return nil, fmt.Errorf("error reading upstream CA file: %v", err)
-	}
-
-	roots := x509.NewCertPool()
-	if ok := roots.AppendCertsFromPEM([]byte(rootPEM)); !ok {
-		return nil, errors.New("error parsing upstream CA certificate")
+	var certKeyPair tls.Certificate
+	if len(upstreamClientCertPath) > 0 {
+		var err error
+		certKeyPair, err = tls.LoadX509KeyPair(upstreamClientCertPath, upstreamClientKeyPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read upstream client cert/key: %w", err)
+		}
 	}
 
 	// http.Transport sourced from go 1.10.7
@@ -54,7 +51,13 @@ func initTransport(upstreamCAFile string) (http.RoundTripper, error) {
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       &tls.Config{RootCAs: roots},
+		TLSClientConfig: &tls.Config{
+			RootCAs: upstreamCAPool,
+		},
+	}
+
+	if certKeyPair.Certificate != nil {
+		transport.TLSClientConfig.Certificates = []tls.Certificate{certKeyPair}
 	}
 
 	return transport, nil

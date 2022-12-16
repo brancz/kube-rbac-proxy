@@ -40,7 +40,9 @@ type AuthnConfig struct {
 
 // X509Config holds public client certificate used for authentication requests if specified
 type X509Config struct {
-	ClientCAFile string
+	ClientCAFile              string
+	UpstreamClientCertificate string
+	UpstreamClientKey         string
 }
 
 // TokenConfig holds configuration as to how token authentication is to be done
