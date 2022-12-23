@@ -154,6 +154,38 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 			},
 		},
 		{
+			"with http header rewrites config and separator",
+			&authz.Config{
+				Rewrites:           &authz.SubjectAccessReviewRewrites{ByHTTPHeader: &authz.HTTPHeaderRewriteConfig{Name: "namespace", Sep: "|"}},
+				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
+			},
+			createRequest(nil, map[string][]string{"namespace": {"tenant1|tenant2"}}),
+			[]authorizer.Attributes{
+				authorizer.AttributesRecord{
+					User:            nil,
+					Verb:            "get",
+					Namespace:       "tenant1",
+					APIGroup:        "",
+					APIVersion:      "v1",
+					Resource:        "namespace",
+					Subresource:     "metrics",
+					Name:            "",
+					ResourceRequest: true,
+				},
+				authorizer.AttributesRecord{
+					User:            nil,
+					Verb:            "get",
+					Namespace:       "tenant2",
+					APIGroup:        "",
+					APIVersion:      "v1",
+					Resource:        "namespace",
+					Subresource:     "metrics",
+					Name:            "",
+					ResourceRequest: true,
+				},
+			},
+		},
+		{
 			"with http header rewrites config but missing header",
 			&authz.Config{
 				Rewrites:           &authz.SubjectAccessReviewRewrites{ByQueryParameter: &authz.QueryParameterRewriteConfig{Name: "namespace"}},

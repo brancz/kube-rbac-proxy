@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"net/http"
 	"net/textproto"
+	"strings"
 	"text/template"
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
@@ -109,6 +110,10 @@ func (n krpAuthorizerAttributesGetter) GetRequestAttributes(u user.Info, r *http
 		mimeHeader := textproto.MIMEHeader(r.Header)
 		mimeKey := textproto.CanonicalMIMEHeaderKey(n.authzConfig.Rewrites.ByHTTPHeader.Name)
 		if ps, ok := mimeHeader[mimeKey]; ok {
+			if n.authzConfig.Rewrites.ByHTTPHeader.Sep != "" {
+				ps = splitHeader(ps, n.authzConfig.Rewrites.ByHTTPHeader.Sep)
+			}
+
 			params = append(params, ps...)
 		}
 	}
@@ -142,4 +147,15 @@ func templateWithValue(templateString, value string) string {
 		return ""
 	}
 	return out.String()
+}
+
+func splitHeader(headers []string, sep string) []string {
+	splitted := []string{}
+
+	for i := range headers {
+		temp := strings.Split(headers[i], sep)
+		splitted = append(splitted, temp...)
+	}
+
+	return splitted
 }
