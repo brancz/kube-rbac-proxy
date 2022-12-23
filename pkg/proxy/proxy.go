@@ -150,12 +150,12 @@ func templateWithValue(templateString, value string) string {
 }
 
 func splitHeader(headers []string, sep string) []string {
-	splitted := []string{}
+	split := []string{}
 
 	for i := range headers {
 		temp := strings.Split(headers[i], sep)
-		splitted = append(splitted, temp...)
+		split = append(split, temp...)
 	}
 
-	return splitted
+	return split
 }
