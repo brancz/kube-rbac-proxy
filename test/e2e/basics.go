@@ -321,7 +321,7 @@ func testAllowPathsRegexp(client kubernetes.Interface) kubetest.TestSuite {
 		command := `STATUS_CODE=$(curl --connect-timeout 5 -o /dev/null -v -s -k --write-out "%%{http_code}" -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443%s); if [[ "$STATUS_CODE" != %d ]]; then echo "expecting %d status code, got $STATUS_CODE instead" > /proc/self/fd/2; exit 1; fi`
 
 		kubetest.Scenario{
-			Name: "WithPathhNotAllowed",
+			Name: "WithPathNotAllowed",
 			Description: `
 				As a client with the correct RBAC rules,
 				I get a 403 response when requesting a path which isn't allowed by kube-rbac-proxy
@@ -353,12 +353,12 @@ func testAllowPathsRegexp(client kubernetes.Interface) kubetest.TestSuite {
 			Then: kubetest.Actions(
 				kubetest.ClientSucceeds(
 					client,
-					fmt.Sprintf(command, "/", 404, 404),
+					fmt.Sprintf(command, "/", 403, 403),
 					nil,
 				),
 				kubetest.ClientSucceeds(
 					client,
-					fmt.Sprintf(command, "/api/v1/label/name", 404, 404),
+					fmt.Sprintf(command, "/api/v1/label/name", 403, 403),
 					nil,
 				),
 			),

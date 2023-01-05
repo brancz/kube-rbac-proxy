@@ -34,6 +34,7 @@ import (
 
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
+	"k8s.io/apiserver/pkg/authorization/authorizer"
 	"k8s.io/apiserver/pkg/authorization/union"
 	kubefilters "k8s.io/apiserver/pkg/endpoints/filters"
 	"k8s.io/apiserver/pkg/endpoints/request"
@@ -86,9 +87,6 @@ that can perform RBAC authorization against the Kubernetes API using SubjectAcce
 
 			fs := cmd.Flags()
 			k8sapiflag.PrintFlags(fs)
-
-			// TODO: this should be done somewhere elsewhere?
-			o.DelegatingAuthorization.WithAlwaysAllowPaths(o.ProxyOptions.IgnorePaths...)
 
 			// set default options
 			completedOptions, err := Complete(o)
@@ -191,15 +189,10 @@ func Run(opts *completedProxyRunOptions) error {
 		authenticator = cfg.DelegatingAuthentication.Authenticator
 	}
 
-	staticAuthorizer, err := authz.NewStaticAuthorizer(cfg.KubeRBACProxyInfo.Auth.Authorization.Static)
+	authz, err := setupAuthorizer(cfg.KubeRBACProxyInfo, cfg.DelegatingAuthorization)
 	if err != nil {
-		return fmt.Errorf("failed to create static authorizer: %w", err)
+		return fmt.Errorf("failed to setup an authorizer: %v", err)
 	}
-
-	authorizer := union.New(
-		staticAuthorizer,
-		cfg.DelegatingAuthorization.Authorizer,
-	)
 
 	proxy := httputil.NewSingleHostReverseProxy(cfg.KubeRBACProxyInfo.UpstreamURL)
 	proxy.Transport = cfg.KubeRBACProxyInfo.UpstreamTransport
@@ -220,11 +213,10 @@ func Run(opts *completedProxyRunOptions) error {
 	}
 
 	handler := filters.WithAuthHeaders(proxy, cfg.KubeRBACProxyInfo.Auth.Authentication.Header)
-	handler = kubefilters.WithAuthorization(handler, krbproxy.NewKubeRBACProxyAuthorizer(authorizer, cfg.KubeRBACProxyInfo.Auth.Authorization), scheme.Codecs)
+	handler = kubefilters.WithAuthorization(handler, authz, scheme.Codecs)
 	handler = kubefilters.WithAuthentication(handler, authenticator, http.HandlerFunc(filters.UnauthorizedHandler), cfg.DelegatingAuthentication.APIAudiences)
 	handler = kubefilters.WithRequestInfo(handler, &request.RequestInfoFactory{})
 	handler = krbproxy.WithKubeRBACProxyParamsHandler(handler, cfg.KubeRBACProxyInfo.Auth.Authorization)
-	handler = filters.WithAllowPaths(handler, cfg.KubeRBACProxyInfo.AllowPaths)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", handler)
@@ -319,4 +311,29 @@ func secureServerRunner(
 	}
 
 	return runner, interrupter
+}
+
+func setupAuthorizer(krbInfo *server.KubeRBACProxyInfo, delegatedAuthz *serverconfig.AuthorizationInfo) (authorizer.Authorizer, error) {
+	staticAuthorizer, err := authz.NewStaticAuthorizer(krbInfo.Auth.Authorization.Static)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create static authorizer: %w", err)
+	}
+
+	var authz authorizer.Authorizer = krbproxy.NewKubeRBACProxyAuthorizer(
+		union.New(
+			staticAuthorizer,
+			delegatedAuthz.Authorizer,
+		),
+		krbInfo.Auth.Authorization,
+	)
+
+	if allowPaths := krbInfo.AllowPaths; len(allowPaths) > 0 {
+		authz = union.New(filters.NewAllowPathAuthorizer(allowPaths), authz)
+	}
+
+	if ignorePaths := krbInfo.IgnorePaths; len(ignorePaths) > 0 {
+		authz = union.New(filters.NewPathAuthorizer(ignorePaths), authz)
+	}
+
+	return authz, nil
 }

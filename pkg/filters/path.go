@@ -16,33 +16,73 @@ limitations under the License.
 package filters
 
 import (
-	"net/http"
+	"context"
 	"path"
+	"strings"
+
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apiserver/pkg/authorization/authorizer"
 )
 
-func WithAllowPaths(handler http.Handler, allowPaths []string) http.Handler {
+func NewAllowPathAuthorizer(allowPaths []string) authorizer.Authorizer {
 	if len(allowPaths) == 0 {
-		return handler
+		return authorizer.AuthorizerFunc(func(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
+			return authorizer.DecisionNoOpinion, "", nil
+		})
 	}
 
-	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		for _, pathAllowed := range allowPaths {
-			found, err := path.Match(pathAllowed, req.URL.Path)
-			if err != nil {
-				http.Error(
-					w,
-					http.StatusText(http.StatusInternalServerError),
-					http.StatusInternalServerError,
-				)
-				return
-			}
+	pathAuthorizer := NewPathAuthorizer(allowPaths)
 
-			if found {
-				handler.ServeHTTP(w, req)
-				return
+	return authorizer.AuthorizerFunc(func(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
+		decision, reason, err := pathAuthorizer.Authorize(ctx, a)
+		if err != nil {
+			return decision, reason, err
+		}
+
+		switch decision {
+		case authorizer.DecisionAllow:
+			return authorizer.DecisionNoOpinion, "", nil
+		case authorizer.DecisionNoOpinion:
+			return authorizer.DecisionDeny, "", nil
+		case authorizer.DecisionDeny:
+			return decision, reason, err
+		default:
+			return authorizer.DecisionDeny, "", err
+		}
+	})
+}
+
+func NewPathAuthorizer(alwaysAllowPaths []string) authorizer.Authorizer {
+	var patterns []string
+	paths := sets.NewString() // faster than trying to match every pattern every time
+	for _, p := range alwaysAllowPaths {
+		p = strings.TrimPrefix(p, "/")
+		if len(p) == 0 {
+			// matches "/"
+			paths.Insert(p)
+			continue
+		}
+		if strings.ContainsRune(p, '*') {
+			patterns = append(patterns, p)
+		} else {
+			paths.Insert(p)
+		}
+	}
+
+	return authorizer.AuthorizerFunc(func(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
+		pth := strings.TrimPrefix(a.GetPath(), "/")
+		if paths.Has(pth) {
+			return authorizer.DecisionAllow, "", nil
+		}
+
+		for _, pattern := range patterns {
+			if found, err := path.Match(pattern, pth); err != nil {
+				return authorizer.DecisionNoOpinion, "Error", err
+			} else if found {
+				return authorizer.DecisionAllow, "", nil
 			}
 		}
 
-		http.NotFound(w, req)
+		return authorizer.DecisionDeny, "", nil
 	})
 }

@@ -135,9 +135,8 @@ func (o *ProxyOptions) ApplyTo(c *server.KubeRBACProxyInfo, a *serverconfig.Auth
 	}
 
 	c.OIDC = o.OIDC
-	c.AllowPaths = o.AllowPaths
 	c.IgnorePaths = o.IgnorePaths
-
+	c.AllowPaths = o.AllowPaths
 	a.APIAudiences = o.TokenAudiences
 
 	return nil
