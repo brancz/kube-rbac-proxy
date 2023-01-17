@@ -1,3 +1,18 @@
+## 0.14.0 / 2022-12-15
+
+* [ENHANCEMENT] `README.md` now contains information about the future outlook of the project wrt to deprecations, features and K8s Sig-Auth acceptance
+* [ENHANCEMENT] bump dependencies
+* [FEATURE] health endpoint `/healthz` offered on `--proxy-endpoints-port`
+* [FEATURE] `--upstream-client-cert-file` enables the kube-rbac-proxy client connecting to upstream to use TLS
+* [CHANGE] use cobra and usptream command machinery, introduces deprecation to some flags
+
+## 0.13.1 / 2022-10-04
+
+* [ENHANCEMENT] bump k8s to 1.25.2 #200 (contains fixes for CVEs)
+* [ENHANCEMENT] bump Go to 1.19.1 #178 (contains fixes for CVEs)
+* [ENHANCEMENT] bump golang.org/x/crypto due to CVE-2022-27191 #188
+* [CHANGE] add warning messages for features that will be removed
+
 ## 0.13.0 / 2022-06-29
 
 * [ENHANCEMENT] bump k8s to 1.24.2 #178

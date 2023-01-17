@@ -41,7 +41,7 @@ $(OUT_DIR)/$(BIN)-%:
 	GOARCH=$(word 2,$(subst -, ,$(*:.exe=))) \
 	GOOS=$(word 1,$(subst -, ,$(*:.exe=))) \
 	CGO_ENABLED=0 \
-	go build --installsuffix cgo -o $(OUT_DIR)/$(BIN)-$* $(GITHUB_URL)
+	go build --installsuffix cgo -o $(OUT_DIR)/$(BIN)-$* $(GITHUB_URL)/cmd/kube-rbac-proxy
 
 clean:
 	-rm -r $(OUT_DIR)

@@ -91,9 +91,11 @@ func NewSarAuthorizer(client authorizationclient.AuthorizationV1Interface) (auth
 	}
 	authorizerConfig := authorizerfactory.DelegatingAuthorizerConfig{
 		SubjectAccessReviewClient: client,
-		AllowCacheTTL:             5 * time.Minute,
-		DenyCacheTTL:              30 * time.Second,
-		WebhookRetryBackoff:       options.DefaultAuthWebhookRetryBackoff(),
+		// Defaults are most probably taken from: kubernetes/pkg/kubelet/apis/config/v1beta1/defaults.go
+		// Defaults that are more reasonable: apiserver/pkg/server/options/authorization.go
+		AllowCacheTTL:       5 * time.Minute,
+		DenyCacheTTL:        30 * time.Second,
+		WebhookRetryBackoff: options.DefaultAuthWebhookRetryBackoff(),
 	}
 	return authorizerConfig.New()
 }
@@ -102,7 +104,7 @@ type staticAuthorizer struct {
 	config []StaticAuthorizationConfig
 }
 
-func (saConfig StaticAuthorizationConfig) Equal(a authorizer.Attributes) bool {
+func (saConfig StaticAuthorizationConfig) Matches(a authorizer.Attributes) bool {
 	isAllowed := func(staticConf string, requestVal string) bool {
 		if staticConf == "" {
 			return true
@@ -133,7 +135,7 @@ func (saConfig StaticAuthorizationConfig) Equal(a authorizer.Attributes) bool {
 func (sa staticAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
 	// compare a against the configured static auths
 	for _, saConfig := range sa.config {
-		if saConfig.Equal(a) {
+		if saConfig.Matches(a) {
 			return authorizer.DecisionAllow, "found corresponding static auth config", nil
 		}
 	}
