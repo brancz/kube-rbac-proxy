@@ -71,33 +71,31 @@ Delegating authorization flags:
 
 Proxy flags:
 
-      --allow-paths strings                Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the request doesn't match, kube-rbac-proxy responds with a 404 status code. If omitted, the incoming request path isn't checked. Cannot be used with --ignore-paths.
-      --auth-token-audiences strings       Comma-separated list of token audiences to accept. By default a token does not have to have any specific audience. It is recommended to set a specific audience.
-      --config-file string                 Configuration file to configure kube-rbac-proxy.
-      --ignore-paths strings               Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the requst matches, it will proxy the request without performing an authentication or authorization check. Cannot be used with --allow-paths.
-      --oidc-ca-file string                If set, the OpenID server's certificate will be verified by one of the authorities in the oidc-ca-file, otherwise the host's root CA set will be used.
-      --oidc-clientID string               The client ID for the OpenID Connect client, must be set if oidc-issuer-url is set.
-      --oidc-groups-claim string           Identifier of groups in JWT claim, by default set to 'groups' (default "groups")
-      --oidc-groups-prefix string          If provided, all groups will be prefixed with this value to prevent conflicts with other authentication strategies.
-      --oidc-issuer string                 The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).
-      --oidc-sign-alg stringArray          Supported signing algorithms, default RS256 (default [RS256])
-      --oidc-username-claim string         Identifier of the user in JWT claim, by default set to 'email' (default "email")
-      --proxy-endpoints-port int           The port to securely serve proxy-specific endpoints (such as '/healthz'). Uses the host from the '--secure-listen-address'.
-      --upstream string                    The upstream URL to proxy to once requests have successfully been authenticated and authorized.
-      --upstream-ca-file string            The CA the upstream uses for TLS connection. This is required when the upstream uses TLS and its own CA certificate
-      --upstream-client-cert-file string   If set, the client will be used to authenticate the proxy to upstream. Requires --upstream-client-key-file to be set, too.
-      --upstream-client-key-file string    The key matching the certificate from --upstream-client-cert-file. If set, requires --upstream-client-cert-file to be set, too.
-      --upstream-force-h2c                 Force h2c to communicate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only
-
-Legacy kube-rbac-proxy [DEPRECATED] flags:
-
-      --auth-header-fields-enabled                  When set to true, kube-rbac-proxy adds auth-related fields to the headers of http requests sent to the upstream
+      --allow-paths strings                         Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the request doesn't match, kube-rbac-proxy responds with a 404 status code. If omitted, the incoming request path isn't checked. Cannot be used with --ignore-paths.
       --auth-header-groups-field-name string        The name of the field inside a http(2) request header to tell the upstream server about the user's groups (default "x-remote-groups")
       --auth-header-groups-field-separator string   The separator string used for concatenating multiple group names in a groups header field's value (default "|")
       --auth-header-user-field-name string          The name of the field inside a http(2) request header to tell the upstream server about the user's name (default "x-remote-user")
-      --client-ca-file string                       If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.
-      --kubeconfig string                           Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used
-      --secure-listen-address string                The address the kube-rbac-proxy HTTPs server should listen on.
+      --auth-token-audiences strings                Comma-separated list of token audiences to accept. By default a token does not have to have any specific audience. It is recommended to set a specific audience.
+      --config-file string                          Configuration file to configure kube-rbac-proxy.
+      --ignore-paths strings                        Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the requst matches, it will proxy the request without performing an authentication or authorization check. Cannot be used with --allow-paths.
+      --oidc-ca-file string                         If set, the OpenID server's certificate will be verified by one of the authorities in the oidc-ca-file, otherwise the host's root CA set will be used.
+      --oidc-clientID string                        The client ID for the OpenID Connect client, must be set if oidc-issuer-url is set.
+      --oidc-groups-claim string                    Identifier of groups in JWT claim, by default set to 'groups' (default "groups")
+      --oidc-groups-prefix string                   If provided, all groups will be prefixed with this value to prevent conflicts with other authentication strategies.
+      --oidc-issuer string                          The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).
+      --oidc-sign-alg stringArray                   Supported signing algorithms, default RS256 (default [RS256])
+      --oidc-username-claim string                  Identifier of the user in JWT claim, by default set to 'email' (default "email")
+      --proxy-endpoints-port int                    The port to securely serve proxy-specific endpoints (such as '/healthz'). Uses the host from the '--secure-listen-address'.
+      --upstream string                             The upstream URL to proxy to once requests have successfully been authenticated and authorized.
+      --upstream-ca-file string                     The CA the upstream uses for TLS connection. This is required when the upstream uses TLS and its own CA certificate
+      --upstream-client-cert-file string            If set, the client will be used to authenticate the proxy to upstream. Requires --upstream-client-key-file to be set, too.
+      --upstream-client-key-file string             The key matching the certificate from --upstream-client-cert-file. If set, requires --upstream-client-cert-file to be set, too.
+      --upstream-force-h2c                          Force h2c to communicate with the upstream. This is required when the upstream speaks h2c(http/2 cleartext - insecure variant of http/2) only. For example, go-grpc server in the insecure mode, such as helm's tiller w/o TLS, speaks h2c only
+
+Legacy kube-rbac-proxy [DEPRECATED] flags:
+
+      --kubeconfig string              Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used
+      --secure-listen-address string   The address the kube-rbac-proxy HTTPs server should listen on.
 
 Global flags:
 
