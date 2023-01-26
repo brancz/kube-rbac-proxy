@@ -24,38 +24,17 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 )
 
-func NewAllowPathAuthorizer(allowPaths []string) authorizer.Authorizer {
-	if len(allowPaths) == 0 {
-		return authorizer.AuthorizerFunc(func(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
-			return authorizer.DecisionNoOpinion, "", nil
-		})
-	}
+type pathAuthorizer struct {
+	matchDecision, noMatchDecision authorizer.Decision
 
-	pathAuthorizer := NewPathAuthorizer(allowPaths)
-
-	return authorizer.AuthorizerFunc(func(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
-		decision, reason, err := pathAuthorizer.Authorize(ctx, a)
-		if err != nil {
-			return decision, reason, err
-		}
-
-		switch decision {
-		case authorizer.DecisionAllow:
-			return authorizer.DecisionNoOpinion, "", nil
-		case authorizer.DecisionNoOpinion:
-			return authorizer.DecisionDeny, "", nil
-		case authorizer.DecisionDeny:
-			return decision, reason, err
-		default:
-			return authorizer.DecisionDeny, "", err
-		}
-	})
+	paths        sets.String
+	pathPatterns []string
 }
 
-func NewPathAuthorizer(alwaysAllowPaths []string) authorizer.Authorizer {
+func newPathAuthorizer(onMatch, onNoMatch authorizer.Decision, inputPaths []string) *pathAuthorizer {
 	var patterns []string
 	paths := sets.NewString() // faster than trying to match every pattern every time
-	for _, p := range alwaysAllowPaths {
+	for _, p := range inputPaths {
 		p = strings.TrimPrefix(p, "/")
 		if len(p) == 0 {
 			// matches "/"
@@ -69,20 +48,40 @@ func NewPathAuthorizer(alwaysAllowPaths []string) authorizer.Authorizer {
 		}
 	}
 
-	return authorizer.AuthorizerFunc(func(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
-		pth := strings.TrimPrefix(a.GetPath(), "/")
-		if paths.Has(pth) {
-			return authorizer.DecisionAllow, "", nil
-		}
+	return &pathAuthorizer{
+		matchDecision:   onMatch,
+		noMatchDecision: onNoMatch,
+		paths:           paths,
+		pathPatterns:    patterns,
+	}
+}
 
-		for _, pattern := range patterns {
-			if found, err := path.Match(pattern, pth); err != nil {
-				return authorizer.DecisionNoOpinion, "Error", err
-			} else if found {
-				return authorizer.DecisionAllow, "", nil
-			}
-		}
+func (a *pathAuthorizer) Authorize(ctx context.Context, attr authorizer.Attributes) (authorizer.Decision, string, error) {
+	pth := strings.TrimPrefix(attr.GetPath(), "/")
+	if a.paths.Has(pth) {
+		return a.matchDecision, "", nil
+	}
 
-		return authorizer.DecisionDeny, "", nil
-	})
+	for _, pattern := range a.pathPatterns {
+		if found, err := path.Match(pattern, pth); err != nil {
+			return authorizer.DecisionNoOpinion, "Error", err
+		} else if found {
+			return a.matchDecision, "", nil
+		}
+	}
+
+	return a.noMatchDecision, "", nil
+}
+
+func NewAllowPathAuthorizer(allowPaths []string) authorizer.Authorizer {
+	if len(allowPaths) == 0 {
+		return authorizer.AuthorizerFunc(func(context.Context, authorizer.Attributes) (authorizer.Decision, string, error) {
+			return authorizer.DecisionNoOpinion, "", nil
+		})
+	}
+	return newPathAuthorizer(authorizer.DecisionNoOpinion, authorizer.DecisionDeny, allowPaths)
+}
+
+func NewAlwaysAllowPathAuthorizer(alwaysAllowPaths []string) authorizer.Authorizer {
+	return newPathAuthorizer(authorizer.DecisionAllow, authorizer.DecisionNoOpinion, alwaysAllowPaths)
 }
