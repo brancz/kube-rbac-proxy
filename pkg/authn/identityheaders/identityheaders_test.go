@@ -1,11 +1,11 @@
 /*
-Copyright 2022 the kube-rbac-proxy maintainers All rights reserved.
+Copyright 2023 the kube-rbac-proxy maintainers. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-	http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,7 +13,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package filters_test
+
+package identityheaders_test
 
 import (
 	"context"
@@ -23,11 +24,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brancz/kube-rbac-proxy/pkg/authn"
-	"github.com/brancz/kube-rbac-proxy/pkg/authz"
-	"github.com/brancz/kube-rbac-proxy/pkg/filters"
-	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
-
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/request/bearertoken"
 	"k8s.io/apiserver/pkg/authentication/user"
@@ -35,6 +31,9 @@ import (
 	kubefilters "k8s.io/apiserver/pkg/endpoints/filters"
 	"k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/kubectl/pkg/scheme"
+
+	"github.com/brancz/kube-rbac-proxy/pkg/authn/identityheaders"
+	"github.com/brancz/kube-rbac-proxy/pkg/filters"
 )
 
 func TestWithAuthHeaders(t *testing.T) {
@@ -46,18 +45,18 @@ func TestWithAuthHeaders(t *testing.T) {
 
 	for _, tt := range []struct {
 		name   string
-		cfg    *authn.AuthnHeaderConfig
+		cfg    *identityheaders.AuthnHeaderConfig
 		ctx    context.Context
 		header map[string][]string
 	}{
 		{
 			name:   "should pass through",
-			cfg:    &authn.AuthnHeaderConfig{},
+			cfg:    &identityheaders.AuthnHeaderConfig{},
 			header: map[string][]string{},
 		},
 		{
 			name: "should set username in header",
-			cfg: &authn.AuthnHeaderConfig{
+			cfg: &identityheaders.AuthnHeaderConfig{
 				UserFieldName:   userKey,
 				GroupsFieldName: groupKey,
 			},
@@ -84,7 +83,7 @@ func TestWithAuthHeaders(t *testing.T) {
 			)
 
 			rec := httptest.NewRecorder()
-			filters.WithAuthHeaders(okHandler, tt.cfg).ServeHTTP(rec, req)
+			identityheaders.WithAuthHeaders(okHandler, tt.cfg).ServeHTTP(rec, req)
 
 			if len(req.Header) != len(tt.header) {
 				t.Errorf("want: %+v\nhave:%+v", tt.header, req.Header)
@@ -103,14 +102,9 @@ func TestWithAuthHeaders(t *testing.T) {
 }
 
 func TestProxyWithOIDCSupport(t *testing.T) {
-	cfg := proxy.Config{
-		Authentication: &authn.AuthnConfig{
-			Header: &authn.AuthnHeaderConfig{
-				UserFieldName:   "user",
-				GroupsFieldName: "groups",
-			},
-		},
-		Authorization: &authz.Config{},
+	cfg := &identityheaders.AuthnHeaderConfig{
+		UserFieldName:   "user",
+		GroupsFieldName: "groups",
 	}
 
 	fakeUser := user.DefaultInfo{Name: "Foo Bar", Groups: []string{"foo-bars"}}
@@ -154,7 +148,7 @@ func TestProxyWithOIDCSupport(t *testing.T) {
 			w := httptest.NewRecorder()
 
 			handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-			handler = filters.WithAuthHeaders(handler, cfg.Authentication.Header)
+			handler = identityheaders.WithAuthHeaders(handler, cfg)
 			handler = kubefilters.WithAuthorization(handler, v.authorizer, scheme.Codecs)
 			handler = kubefilters.WithAuthentication(handler, authenticator, http.HandlerFunc(filters.UnauthorizedHandler), []string{})
 			handler = kubefilters.WithRequestInfo(handler, &request.RequestInfoFactory{})
@@ -169,12 +163,12 @@ func TestProxyWithOIDCSupport(t *testing.T) {
 			}
 
 			if v.verifyUser {
-				user := v.req.Header.Get(cfg.Authentication.Header.UserFieldName)
-				groups := v.req.Header.Get(cfg.Authentication.Header.GroupsFieldName)
+				user := v.req.Header.Get(cfg.UserFieldName)
+				groups := v.req.Header.Get(cfg.GroupsFieldName)
 				if user != fakeUser.GetName() {
 					t.Errorf("User in the response header does not match authenticated user. Expected : %s, received : %s ", fakeUser.GetName(), user)
 				}
-				if groups != strings.Join(fakeUser.GetGroups(), cfg.Authentication.Header.GroupSeparator) {
+				if groups != strings.Join(fakeUser.GetGroups(), cfg.GroupSeparator) {
 					t.Errorf("Groupsr in the response header does not match authenticated user groups. Expected : %s, received : %s ", fakeUser.GetName(), groups)
 				}
 			}

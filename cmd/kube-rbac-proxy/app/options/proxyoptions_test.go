@@ -22,8 +22,11 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/brancz/kube-rbac-proxy/pkg/authz"
 	"github.com/google/go-cmp/cmp"
+
+	authz "github.com/brancz/kube-rbac-proxy/pkg/authorization"
+	"github.com/brancz/kube-rbac-proxy/pkg/authorization/rewrite"
+	"github.com/brancz/kube-rbac-proxy/pkg/authorization/static"
 )
 
 func Test_parseAuthorizationConfigFile(t *testing.T) {
@@ -33,7 +36,7 @@ func Test_parseAuthorizationConfigFile(t *testing.T) {
 	tests := []struct {
 		name        string
 		fileContent string
-		want        *authz.Config
+		want        *authz.AuthzConfig
 		wantErr     bool
 	}{
 		{
@@ -54,20 +57,22 @@ func Test_parseAuthorizationConfigFile(t *testing.T) {
       subresource: metrics
       namespace: default
       verb: get`,
-			want: &authz.Config{
-				Rewrites: &authz.SubjectAccessReviewRewrites{
-					ByQueryParameter: &authz.QueryParameterRewriteConfig{
-						Name: "namespace",
+			want: &authz.AuthzConfig{
+				RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{
+					Rewrites: &rewrite.SubjectAccessReviewRewrites{
+						ByQueryParameter: &rewrite.QueryParameterRewriteConfig{
+							Name: "namespace",
+						},
+					},
+					ResourceAttributes: &rewrite.ResourceAttributes{
+						Resource:    "namespaces",
+						Subresource: "metrics",
+						Namespace:   "{{ .Value }}",
 					},
 				},
-				ResourceAttributes: &authz.ResourceAttributes{
-					Resource:    "namespaces",
-					Subresource: "metrics",
-					Namespace:   "{{ .Value }}",
-				},
-				Static: []authz.StaticAuthorizationConfig{
+				Static: []static.StaticAuthorizationConfig{
 					{
-						User: authz.UserConfig{
+						User: static.UserConfig{
 							Name: "system:serviceaccount:default:default",
 						},
 						ResourceRequest: true,
@@ -88,10 +93,10 @@ func Test_parseAuthorizationConfigFile(t *testing.T) {
       resourceRequest: false
       verb: get
       path: /metrics`,
-			want: &authz.Config{
-				Static: []authz.StaticAuthorizationConfig{
+			want: &authz.AuthzConfig{
+				Static: []static.StaticAuthorizationConfig{
 					{
-						User: authz.UserConfig{
+						User: static.UserConfig{
 							Name: "system:serviceaccount:default:default",
 						},
 						ResourceRequest: false,

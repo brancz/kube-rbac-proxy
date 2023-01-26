@@ -18,6 +18,7 @@ package options
 
 import (
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
+	"github.com/brancz/kube-rbac-proxy/pkg/authn/identityheaders"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
 	kubeflags "k8s.io/component-base/cli/flag"
 )
@@ -44,14 +45,11 @@ func NewProxyRunOptions() *ProxyRunOptions {
 		DelegatingAuthorization:  genericoptions.NewDelegatingAuthorizationOptions(),
 
 		ProxyOptions: &ProxyOptions{
-			UpstreamHeader: &authn.AuthnHeaderConfig{},
+			UpstreamHeader: &identityheaders.AuthnHeaderConfig{},
 			OIDC:           &authn.OIDCConfig{},
 		},
 		LegacyOptions: &LegacyOptions{
-			Authentication: &authn.AuthnConfig{
-				X509:   &authn.X509Config{},
-				Header: &authn.AuthnHeaderConfig{},
-			},
+			x509Auth: &authn.X509Config{},
 		},
 	}
 }

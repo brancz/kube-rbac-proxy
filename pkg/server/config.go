@@ -26,11 +26,11 @@ import (
 	"os"
 
 	serverconfig "k8s.io/apiserver/pkg/server"
-	"k8s.io/apiserver/pkg/server/dynamiccertificates"
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
-	"github.com/brancz/kube-rbac-proxy/pkg/authz"
-	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
+	"github.com/brancz/kube-rbac-proxy/pkg/authn/identityheaders"
+	authz "github.com/brancz/kube-rbac-proxy/pkg/authorization"
+	"github.com/brancz/kube-rbac-proxy/pkg/authorization/rewrite"
 )
 
 // KubeRBACProxyConfig stores the configuration for running the proxy server and
@@ -49,10 +49,11 @@ type KubeRBACProxyInfo struct {
 	UpstreamURL       *url.URL
 	UpstreamForceH2C  bool
 	UpstreamTransport http.RoundTripper
+	UpstreamHeaders   *identityheaders.AuthnHeaderConfig
 
 	ProxyEndpointsSecureServing *serverconfig.SecureServingInfo
 
-	Auth *proxy.Config
+	Authorization *authz.AuthzConfig
 
 	OIDC *authn.OIDCConfig
 
@@ -66,13 +67,10 @@ func NewConfig() *KubeRBACProxyConfig {
 		DelegatingAuthentication: &serverconfig.AuthenticationInfo{},
 		DelegatingAuthorization:  &serverconfig.AuthorizationInfo{},
 		KubeRBACProxyInfo: &KubeRBACProxyInfo{
-			Auth: &proxy.Config{
-				Authentication: &authn.AuthnConfig{
-					X509:   &authn.X509Config{},
-					Header: &authn.AuthnHeaderConfig{},
-				},
-				Authorization: &authz.Config{},
+			Authorization: &authz.AuthzConfig{
+				RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{},
 			},
+			UpstreamHeaders: &identityheaders.AuthnHeaderConfig{},
 		},
 	}
 }
@@ -115,16 +113,4 @@ func (i *KubeRBACProxyInfo) SetUpstreamTransport(upstreamCAPath, upstreamClientC
 
 	i.UpstreamTransport = transport
 	return nil
-}
-
-// GetClientCAProvider returns the provider which dynamically loads and reloads
-// the client CA certificate
-func (i *KubeRBACProxyConfig) GetClientCAProvider() (dynamiccertificates.CAContentProvider, error) {
-	clientCAFile := i.KubeRBACProxyInfo.Auth.Authentication.X509.ClientCAFile
-
-	if len(clientCAFile) == 0 {
-		return nil, nil
-	}
-
-	return dynamiccertificates.NewDynamicCAContentFromFile("client-ca-bundle", clientCAFile)
 }

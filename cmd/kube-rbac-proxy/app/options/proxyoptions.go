@@ -29,7 +29,8 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
-	"github.com/brancz/kube-rbac-proxy/pkg/authz"
+	"github.com/brancz/kube-rbac-proxy/pkg/authn/identityheaders"
+	authz "github.com/brancz/kube-rbac-proxy/pkg/authorization"
 	"github.com/brancz/kube-rbac-proxy/pkg/server"
 )
 
@@ -42,7 +43,7 @@ type ProxyOptions struct {
 	UpstreamClientCertFile string
 	UpstreamClientKeyFile  string
 
-	UpstreamHeader *authn.AuthnHeaderConfig
+	UpstreamHeader *identityheaders.AuthnHeaderConfig
 
 	ConfigFileName string
 	AllowPaths     []string
@@ -128,7 +129,7 @@ func (o *ProxyOptions) ApplyTo(c *server.KubeRBACProxyInfo, a *serverconfig.Auth
 	}
 
 	if configFileName := o.ConfigFileName; len(configFileName) > 0 {
-		c.Auth.Authorization, err = parseAuthorizationConfigFile(configFileName)
+		c.Authorization, err = parseAuthorizationConfigFile(configFileName)
 		if err != nil {
 			return fmt.Errorf("failed to read the config file: %w", err)
 		}
@@ -143,10 +144,10 @@ func (o *ProxyOptions) ApplyTo(c *server.KubeRBACProxyInfo, a *serverconfig.Auth
 }
 
 type configfile struct {
-	AuthorizationConfig *authz.Config `json:"authorization,omitempty"`
+	AuthorizationConfig *authz.AuthzConfig `json:"authorization,omitempty"`
 }
 
-func parseAuthorizationConfigFile(filePath string) (*authz.Config, error) {
+func parseAuthorizationConfigFile(filePath string) (*authz.AuthzConfig, error) {
 	klog.Infof("Reading config file: %s", filePath)
 	b, err := os.ReadFile(filePath)
 	if err != nil {

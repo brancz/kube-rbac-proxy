@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package proxy
+package rewrite
 
 import (
 	"context"
@@ -23,8 +23,8 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/brancz/kube-rbac-proxy/pkg/authz"
 	"github.com/google/go-cmp/cmp"
+
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	"k8s.io/apiserver/pkg/authorization/authorizerfactory"
 )
@@ -32,13 +32,13 @@ import (
 func TestGeneratingAuthorizerAttributes(t *testing.T) {
 	cases := []struct {
 		desc     string
-		authzCfg *authz.Config
+		config   *RewriteAttributesConfig
 		req      *http.Request
 		expected []authorizer.Attributes
 	}{
 		{
 			"without resource attributes and rewrites",
-			&authz.Config{},
+			&RewriteAttributesConfig{},
 			createRequest(nil, nil),
 			[]authorizer.Attributes{
 				authorizer.AttributesRecord{
@@ -57,7 +57,7 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 		},
 		{
 			"without rewrites config",
-			&authz.Config{ResourceAttributes: &authz.ResourceAttributes{Namespace: "tenant1", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"}},
+			&RewriteAttributesConfig{ResourceAttributes: &ResourceAttributes{Namespace: "tenant1", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"}},
 			createRequest(nil, nil),
 			[]authorizer.Attributes{
 				authorizer.AttributesRecord{
@@ -75,9 +75,9 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 		},
 		{
 			"with query param rewrites config",
-			&authz.Config{
-				Rewrites:           &authz.SubjectAccessReviewRewrites{ByQueryParameter: &authz.QueryParameterRewriteConfig{Name: "namespace"}},
-				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
+			&RewriteAttributesConfig{
+				Rewrites:           &SubjectAccessReviewRewrites{ByQueryParameter: &QueryParameterRewriteConfig{Name: "namespace"}},
+				ResourceAttributes: &ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
 			},
 			createRequest(map[string][]string{"namespace": {"tenant1"}}, nil),
 			[]authorizer.Attributes{
@@ -96,18 +96,18 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 		},
 		{
 			"with query param rewrites config but missing URL query",
-			&authz.Config{
-				Rewrites:           &authz.SubjectAccessReviewRewrites{ByQueryParameter: &authz.QueryParameterRewriteConfig{Name: "namespace"}},
-				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
+			&RewriteAttributesConfig{
+				Rewrites:           &SubjectAccessReviewRewrites{ByQueryParameter: &QueryParameterRewriteConfig{Name: "namespace"}},
+				ResourceAttributes: &ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
 			},
 			createRequest(nil, nil),
 			nil,
 		},
 		{
 			"with http header rewrites config",
-			&authz.Config{
-				Rewrites:           &authz.SubjectAccessReviewRewrites{ByHTTPHeader: &authz.HTTPHeaderRewriteConfig{Name: "namespace"}},
-				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
+			&RewriteAttributesConfig{
+				Rewrites:           &SubjectAccessReviewRewrites{ByHTTPHeader: &HTTPHeaderRewriteConfig{Name: "namespace"}},
+				ResourceAttributes: &ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
 			},
 			createRequest(nil, map[string][]string{"namespace": {"tenant1"}}),
 			[]authorizer.Attributes{
@@ -126,9 +126,9 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 		},
 		{
 			"with http header rewrites config and additional header",
-			&authz.Config{
-				Rewrites:           &authz.SubjectAccessReviewRewrites{ByHTTPHeader: &authz.HTTPHeaderRewriteConfig{Name: "namespace"}},
-				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
+			&RewriteAttributesConfig{
+				Rewrites:           &SubjectAccessReviewRewrites{ByHTTPHeader: &HTTPHeaderRewriteConfig{Name: "namespace"}},
+				ResourceAttributes: &ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
 			},
 			createRequest(nil, map[string][]string{"namespace": {"tenant1", "tenant2"}}),
 			[]authorizer.Attributes{
@@ -158,21 +158,21 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 		},
 		{
 			"with http header rewrites config but missing header",
-			&authz.Config{
-				Rewrites:           &authz.SubjectAccessReviewRewrites{ByQueryParameter: &authz.QueryParameterRewriteConfig{Name: "namespace"}},
-				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
+			&RewriteAttributesConfig{
+				Rewrites:           &SubjectAccessReviewRewrites{ByQueryParameter: &QueryParameterRewriteConfig{Name: "namespace"}},
+				ResourceAttributes: &ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
 			},
 			createRequest(nil, nil),
 			nil,
 		},
 		{
 			"with http header and query param rewrites config",
-			&authz.Config{
-				Rewrites: &authz.SubjectAccessReviewRewrites{
-					ByHTTPHeader:     &authz.HTTPHeaderRewriteConfig{Name: "namespace"},
-					ByQueryParameter: &authz.QueryParameterRewriteConfig{Name: "namespace"},
+			&RewriteAttributesConfig{
+				Rewrites: &SubjectAccessReviewRewrites{
+					ByHTTPHeader:     &HTTPHeaderRewriteConfig{Name: "namespace"},
+					ByQueryParameter: &QueryParameterRewriteConfig{Name: "namespace"},
 				},
-				ResourceAttributes: &authz.ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
+				ResourceAttributes: &ResourceAttributes{Namespace: "{{ .Value }}", APIVersion: "v1", Resource: "namespace", Subresource: "metrics"},
 			},
 			createRequest(
 				map[string][]string{"namespace": {"tenant1"}},
@@ -208,9 +208,9 @@ func TestGeneratingAuthorizerAttributes(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
 			t.Log(c.req.URL.Query())
-			n := krpAuthorizer{delegate: authorizerfactory.NewAlwaysAllowAuthorizer(), authzConfig: c.authzCfg}
+			n := rewritingAuthorizer{delegate: authorizerfactory.NewAlwaysAllowAuthorizer(), config: c.config}
 			res := n.getKubeRBACProxyAuthzAttributes(
-				WithKubeRBACProxyParams(context.Background(), requestToParams(c.authzCfg, c.req)),
+				WithKubeRBACProxyParams(context.Background(), requestToParams(c.config, c.req)),
 				authorizer.AttributesRecord{
 					Verb:            "get",
 					Path:            "/accounts",

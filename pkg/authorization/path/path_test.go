@@ -13,15 +13,14 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package filters_test
+package path_test
 
 import (
 	"context"
 	"testing"
 
+	"github.com/brancz/kube-rbac-proxy/pkg/authorization/path"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
-
-	"github.com/brancz/kube-rbac-proxy/pkg/filters"
 )
 
 func TestAllowPath(t *testing.T) {
@@ -62,7 +61,7 @@ func TestAllowPath(t *testing.T) {
 	} {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			authz := filters.NewAllowPathAuthorizer(tt.paths)
+			authz := path.NewAllowPathAuthorizer(tt.paths)
 			decision, _, err := authz.Authorize(context.Background(), authorizer.AttributesRecord{
 				Path: validPath,
 			})

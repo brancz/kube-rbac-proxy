@@ -1,5 +1,5 @@
 /*
-Copyright 2017 Frederic Branczyk All rights reserved.
+Copyright 2023 the kube-rbac-proxy maintainers. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package proxy
+package rewrite
 
 import (
 	"bytes"
@@ -24,37 +24,68 @@ import (
 	"net/textproto"
 	"text/template"
 
-	"github.com/brancz/kube-rbac-proxy/pkg/authn"
-	"github.com/brancz/kube-rbac-proxy/pkg/authz"
-
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	"k8s.io/apiserver/pkg/endpoints/request"
 )
 
-var _ authorizer.Authorizer = &krpAuthorizer{}
+var _ authorizer.Authorizer = &rewritingAuthorizer{}
 
-const kubeRBACProxyParamsKey = iota
+const rewriterParams = iota
 
-// Config holds proxy authorization and authentication settings
-type Config struct {
-	Authentication *authn.AuthnConfig
-	Authorization  *authz.Config
+type RewriteAttributesConfig struct {
+	Rewrites               *SubjectAccessReviewRewrites `json:"rewrites,omitempty"`
+	ResourceAttributes     *ResourceAttributes          `json:"resourceAttributes,omitempty"`
+	ResourceAttributesFile string                       `json:"-"`
 }
 
-func NewKubeRBACProxyAuthorizer(delegate authorizer.Authorizer, authzConfig *authz.Config) *krpAuthorizer {
-	return &krpAuthorizer{
-		authzConfig: authzConfig,
-		delegate:    delegate,
+// SubjectAccessReviewRewrites describes how SubjectAccessReview may be
+// rewritten on a given request.
+type SubjectAccessReviewRewrites struct {
+	ByQueryParameter *QueryParameterRewriteConfig `json:"byQueryParameter,omitempty"`
+	ByHTTPHeader     *HTTPHeaderRewriteConfig     `json:"byHttpHeader,omitempty"`
+}
+
+// QueryParameterRewriteConfig describes which HTTP URL query parameter is to
+// be used to rewrite a SubjectAccessReview on a given request.
+type QueryParameterRewriteConfig struct {
+	Name string `json:"name,omitempty"`
+}
+
+// HTTPHeaderRewriteConfig describes which HTTP header is to
+// be used to rewrite a SubjectAccessReview on a given request.
+type HTTPHeaderRewriteConfig struct {
+	Name string `json:"name,omitempty"`
+}
+
+// ResourceAttributes describes attributes available for resource request authorization
+type ResourceAttributes struct {
+	Namespace   string `json:"namespace,omitempty"`
+	APIGroup    string `json:"apiGroup,omitempty"`
+	APIVersion  string `json:"apiVersion,omitempty"`
+	Resource    string `json:"resource,omitempty"`
+	Subresource string `json:"subresource,omitempty"`
+	Name        string `json:"name,omitempty"`
+}
+
+func NewRewritingAuthorizer(delegate authorizer.Authorizer, config *RewriteAttributesConfig) *rewritingAuthorizer {
+	rewriteConfig := config
+	if rewriteConfig == nil {
+		rewriteConfig = &RewriteAttributesConfig{}
+	}
+
+	return &rewritingAuthorizer{
+		config:   rewriteConfig,
+		delegate: delegate,
 	}
 }
 
-type krpAuthorizer struct {
-	authzConfig *authz.Config
-	delegate    authorizer.Authorizer
+type rewritingAuthorizer struct {
+	config   *RewriteAttributesConfig
+	delegate authorizer.Authorizer
 }
 
 // GetRequestAttributes populates authorizer attributes for the requests to kube-rbac-proxy.
-func (n *krpAuthorizer) Authorize(ctx context.Context, attrs authorizer.Attributes) (authorizer.Decision, string, error) {
+func (n *rewritingAuthorizer) Authorize(ctx context.Context, attrs authorizer.Attributes) (authorizer.Decision, string, error) {
 	proxyAttrs := n.getKubeRBACProxyAuthzAttributes(ctx, attrs)
 
 	if len(proxyAttrs) == 0 {
@@ -91,13 +122,13 @@ func (n *krpAuthorizer) Authorize(ctx context.Context, attrs authorizer.Attribut
 		nil
 }
 
-func (n *krpAuthorizer) getKubeRBACProxyAuthzAttributes(ctx context.Context, origAttrs authorizer.Attributes) []authorizer.Attributes {
+func (n *rewritingAuthorizer) getKubeRBACProxyAuthzAttributes(ctx context.Context, origAttrs authorizer.Attributes) []authorizer.Attributes {
 	u := origAttrs.GetUser()
 	apiVerb := origAttrs.GetVerb()
 	path := origAttrs.GetPath()
 
 	attrs := []authorizer.Attributes{}
-	if n.authzConfig.ResourceAttributes == nil {
+	if n.config.ResourceAttributes == nil {
 		// Default attributes mirror the API attributes that would allow this access to kube-rbac-proxy
 		return append(attrs,
 			authorizer.AttributesRecord{
@@ -108,17 +139,17 @@ func (n *krpAuthorizer) getKubeRBACProxyAuthzAttributes(ctx context.Context, ori
 			})
 	}
 
-	if n.authzConfig.Rewrites == nil {
+	if n.config.Rewrites == nil {
 		return append(attrs,
 			authorizer.AttributesRecord{
 				User:            u,
 				Verb:            apiVerb,
-				Namespace:       n.authzConfig.ResourceAttributes.Namespace,
-				APIGroup:        n.authzConfig.ResourceAttributes.APIGroup,
-				APIVersion:      n.authzConfig.ResourceAttributes.APIVersion,
-				Resource:        n.authzConfig.ResourceAttributes.Resource,
-				Subresource:     n.authzConfig.ResourceAttributes.Subresource,
-				Name:            n.authzConfig.ResourceAttributes.Name,
+				Namespace:       n.config.ResourceAttributes.Namespace,
+				APIGroup:        n.config.ResourceAttributes.APIGroup,
+				APIVersion:      n.config.ResourceAttributes.APIVersion,
+				Resource:        n.config.ResourceAttributes.Resource,
+				Subresource:     n.config.ResourceAttributes.Subresource,
+				Name:            n.config.ResourceAttributes.Name,
 				ResourceRequest: true,
 			})
 
@@ -134,12 +165,12 @@ func (n *krpAuthorizer) getKubeRBACProxyAuthzAttributes(ctx context.Context, ori
 			authorizer.AttributesRecord{
 				User:            u,
 				Verb:            apiVerb,
-				Namespace:       templateWithValue(n.authzConfig.ResourceAttributes.Namespace, param),
-				APIGroup:        templateWithValue(n.authzConfig.ResourceAttributes.APIGroup, param),
-				APIVersion:      templateWithValue(n.authzConfig.ResourceAttributes.APIVersion, param),
-				Resource:        templateWithValue(n.authzConfig.ResourceAttributes.Resource, param),
-				Subresource:     templateWithValue(n.authzConfig.ResourceAttributes.Subresource, param),
-				Name:            templateWithValue(n.authzConfig.ResourceAttributes.Name, param),
+				Namespace:       templateWithValue(n.config.ResourceAttributes.Namespace, param),
+				APIGroup:        templateWithValue(n.config.ResourceAttributes.APIGroup, param),
+				APIVersion:      templateWithValue(n.config.ResourceAttributes.APIVersion, param),
+				Resource:        templateWithValue(n.config.ResourceAttributes.Resource, param),
+				Subresource:     templateWithValue(n.config.ResourceAttributes.Subresource, param),
+				Name:            templateWithValue(n.config.ResourceAttributes.Name, param),
 				ResourceRequest: true,
 			})
 	}
@@ -157,16 +188,16 @@ func templateWithValue(templateString, value string) string {
 	return out.String()
 }
 
-func WithKubeRBACProxyParamsHandler(handler http.Handler, authzConfig *authz.Config) http.Handler {
+func WithKubeRBACProxyParamsHandler(handler http.Handler, config *RewriteAttributesConfig) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r = r.WithContext(WithKubeRBACProxyParams(r.Context(), requestToParams(authzConfig, r)))
+		r = r.WithContext(WithKubeRBACProxyParams(r.Context(), requestToParams(config, r)))
 		handler.ServeHTTP(w, r)
 	})
 }
 
-func requestToParams(config *authz.Config, req *http.Request) []string {
+func requestToParams(config *RewriteAttributesConfig, req *http.Request) []string {
 	params := []string{}
-	if config.Rewrites == nil {
+	if config == nil || config.Rewrites == nil {
 		return nil
 	}
 
@@ -186,11 +217,11 @@ func requestToParams(config *authz.Config, req *http.Request) []string {
 }
 
 func WithKubeRBACProxyParams(ctx context.Context, params []string) context.Context {
-	return request.WithValue(ctx, kubeRBACProxyParamsKey, params)
+	return request.WithValue(ctx, rewriterParams, params)
 }
 
 func GetKubeRBACProxyParams(ctx context.Context) []string {
-	params, ok := ctx.Value(kubeRBACProxyParamsKey).([]string)
+	params, ok := ctx.Value(rewriterParams).([]string)
 	if !ok {
 		return nil
 	}
