@@ -26,18 +26,19 @@ import (
 	"os"
 
 	serverconfig "k8s.io/apiserver/pkg/server"
-	"k8s.io/apiserver/pkg/server/dynamiccertificates"
-	"k8s.io/client-go/kubernetes"
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
-	"github.com/brancz/kube-rbac-proxy/pkg/authz"
-	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
+	"github.com/brancz/kube-rbac-proxy/pkg/authn/identityheaders"
+	authz "github.com/brancz/kube-rbac-proxy/pkg/authorization"
+	"github.com/brancz/kube-rbac-proxy/pkg/authorization/rewrite"
 )
 
 // KubeRBACProxyConfig stores the configuration for running the proxy server and
 // kube-rbac-proxy specific configuration
 type KubeRBACProxyConfig struct {
-	SecureServing *serverconfig.SecureServingInfo
+	SecureServing            *serverconfig.SecureServingInfo
+	DelegatingAuthentication *serverconfig.AuthenticationInfo
+	DelegatingAuthorization  *serverconfig.AuthorizationInfo
 
 	KubeRBACProxyInfo *KubeRBACProxyInfo
 }
@@ -45,17 +46,16 @@ type KubeRBACProxyConfig struct {
 // KubeRBACProxyInfo stores the kube-rbac-proxy specific configuration and serving
 // configuration for the proxy endpoints server
 type KubeRBACProxyInfo struct {
-	InsecureListenAddress string // DEPRECATED
-
 	UpstreamURL       *url.URL
 	UpstreamForceH2C  bool
 	UpstreamTransport http.RoundTripper
+	UpstreamHeaders   *identityheaders.AuthnHeaderConfig
 
 	ProxyEndpointsSecureServing *serverconfig.SecureServingInfo
 
-	Auth *proxy.Config
+	Authorization *authz.AuthzConfig
 
-	KubeClient *kubernetes.Clientset
+	OIDC *authn.OIDCConfig
 
 	AllowPaths  []string
 	IgnorePaths []string
@@ -63,17 +63,14 @@ type KubeRBACProxyInfo struct {
 
 func NewConfig() *KubeRBACProxyConfig {
 	return &KubeRBACProxyConfig{
-		SecureServing: &serverconfig.SecureServingInfo{},
+		SecureServing:            &serverconfig.SecureServingInfo{},
+		DelegatingAuthentication: &serverconfig.AuthenticationInfo{},
+		DelegatingAuthorization:  &serverconfig.AuthorizationInfo{},
 		KubeRBACProxyInfo: &KubeRBACProxyInfo{
-			Auth: &proxy.Config{
-				Authentication: &authn.AuthnConfig{
-					X509:   &authn.X509Config{},
-					Header: &authn.AuthnHeaderConfig{},
-					OIDC:   &authn.OIDCConfig{},
-					Token:  &authn.TokenConfig{},
-				},
-				Authorization: &authz.Config{},
+			Authorization: &authz.AuthzConfig{
+				RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{},
 			},
+			UpstreamHeaders: &identityheaders.AuthnHeaderConfig{},
 		},
 	}
 }
@@ -116,16 +113,4 @@ func (i *KubeRBACProxyInfo) SetUpstreamTransport(upstreamCAPath, upstreamClientC
 
 	i.UpstreamTransport = transport
 	return nil
-}
-
-// GetClientCAProvider returns the provider which dynamically loads and reloads
-// the client CA certificate
-func (i *KubeRBACProxyConfig) GetClientCAProvider() (dynamiccertificates.CAContentProvider, error) {
-	clientCAFile := i.KubeRBACProxyInfo.Auth.Authentication.X509.ClientCAFile
-
-	if len(clientCAFile) == 0 {
-		return nil, nil
-	}
-
-	return dynamiccertificates.NewDynamicCAContentFromFile("client-ca-bundle", clientCAFile)
 }

@@ -21,54 +21,42 @@ import (
 	"net"
 	"strconv"
 
+	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/server"
 	"github.com/spf13/pflag"
 
 	genericoptions "k8s.io/apiserver/pkg/server/options"
-	"k8s.io/klog/v2"
 	netutils "k8s.io/utils/net"
 )
 
 // LegacyOptions are options that existed in the original KRP, these shall be
 // removed before we submit the repository for the next sig-auth acceptance review
 type LegacyOptions struct {
-	InsecureListenAddress string
-	SecureListenAddress   string
+	SecureListenAddress string
+
+	x509Auth *authn.X509Config
+
+	KubeconfigLocation string
 }
 
 func (o *LegacyOptions) AddFlags(flagset *pflag.FlagSet) {
 	// kube-rbac-proxy flags
-	flagset.StringVar(&o.InsecureListenAddress, "insecure-listen-address", "", "The address the kube-rbac-proxy HTTP server should listen on.")
 	flagset.StringVar(&o.SecureListenAddress, "secure-listen-address", "", "The address the kube-rbac-proxy HTTPs server should listen on.")
+
+	//Kubeconfig flag
+	flagset.StringVar(&o.KubeconfigLocation, "kubeconfig", "", "Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used")
 }
 
-func (o *LegacyOptions) Validate(certFile, keyFile string) []error {
+func (o *LegacyOptions) Validate() []error {
 	var errs []error
-
-	hasCerts := !(certFile == "") && !(keyFile == "")
-	hasInsecureListenAddress := o.InsecureListenAddress != ""
-	if !hasCerts || hasInsecureListenAddress {
-		klog.Warning(`
-==== Deprecation Warning ======================
-
-Insecure listen address will be removed.
-Using --insecure-listen-address won't be possible!
-
-The ability to run kube-rbac-proxy without TLS certificates will be removed.
-Not using --tls-cert-file and --tls-private-key-file won't be possible!
-
-For more information, please go to https://github.com/brancz/kube-rbac-proxy/issues/187
-
-===============================================
-
-		`)
-	}
-
 	return errs
 }
 
-func (o *LegacyOptions) ConvertIntoSecureServingOptions(so *genericoptions.SecureServingOptions) error {
-
+func (o *LegacyOptions) ConvertToNewOptions(
+	so *genericoptions.SecureServingOptions,
+	authn *genericoptions.DelegatingAuthenticationOptions,
+	authz *genericoptions.DelegatingAuthorizationOptions,
+) error {
 	if so.BindAddress.Equal(netutils.ParseIPSloppy("0.0.0.0")) && len(o.SecureListenAddress) > 0 {
 		secureHost, securePort, err := net.SplitHostPort(o.SecureListenAddress)
 		if err != nil {
@@ -82,10 +70,17 @@ func (o *LegacyOptions) ConvertIntoSecureServingOptions(so *genericoptions.Secur
 		}
 	}
 
+	if len(authn.RemoteKubeConfigFile) == 0 && len(o.KubeconfigLocation) > 0 {
+		authn.RemoteKubeConfigFile = o.KubeconfigLocation
+	}
+
+	if len(authz.RemoteKubeConfigFile) == 0 && len(o.KubeconfigLocation) > 0 {
+		authz.RemoteKubeConfigFile = o.KubeconfigLocation
+	}
+
 	return nil
 }
 
 func (o *LegacyOptions) ApplyTo(c *server.KubeRBACProxyInfo) error {
-	c.InsecureListenAddress = o.InsecureListenAddress
 	return nil
 }

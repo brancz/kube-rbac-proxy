@@ -10,12 +10,14 @@ require (
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/net v0.2.0
 	gopkg.in/yaml.v2 v2.4.0
-	k8s.io/api v0.25.2
-	k8s.io/apimachinery v0.25.2
+	k8s.io/api v0.25.4
+	k8s.io/apimachinery v0.25.4
 	k8s.io/apiserver v0.25.2
-	k8s.io/client-go v0.25.2
-	k8s.io/component-base v0.25.2
+	k8s.io/client-go v0.25.4
+	k8s.io/component-base v0.25.4
 	k8s.io/klog/v2 v2.80.1
+	k8s.io/kubectl v0.25.4
+	k8s.io/utils v0.0.0-20220728103510-ee6ede2d64ed
 )
 
 replace golang.org/x/crypto => golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa
@@ -97,7 +99,6 @@ require (
 	gopkg.in/square/go-jose.v2 v2.2.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20220803162953-67bda5d908f1 // indirect
-	k8s.io/utils v0.0.0-20220728103510-ee6ede2d64ed // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.0.32 // indirect
 	sigs.k8s.io/json v0.0.0-20220713155537-f223a00ba0e2 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
