@@ -43,9 +43,6 @@ func (o *LegacyOptions) AddFlags(flagset *pflag.FlagSet) {
 	// kube-rbac-proxy flags
 	flagset.StringVar(&o.SecureListenAddress, "secure-listen-address", "", "The address the kube-rbac-proxy HTTPs server should listen on.")
 
-	// Auth flags
-	flagset.StringVar(&o.x509Auth.ClientCAFile, "client-ca-file", "", "If set, any request presenting a client certificate signed by one of the authorities in the client-ca-file is authenticated with an identity corresponding to the CommonName of the client certificate.")
-
 	//Kubeconfig flag
 	flagset.StringVar(&o.KubeconfigLocation, "kubeconfig", "", "Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used")
 }
@@ -71,13 +68,6 @@ func (o *LegacyOptions) ConvertToNewOptions(
 		if err != nil {
 			return fmt.Errorf("failed to convert port to an integer: %w", err)
 		}
-	}
-
-	if len(authn.ClientCert.ClientCA) == 0 && len(o.x509Auth.ClientCAFile) > 0 {
-		authn.ClientCert.ClientCA = o.x509Auth.ClientCAFile
-	}
-	if len(authn.RequestHeader.ClientCAFile) == 0 && len(o.x509Auth.ClientCAFile) > 0 {
-		authn.RequestHeader.ClientCAFile = o.x509Auth.ClientCAFile
 	}
 
 	if len(authn.RemoteKubeConfigFile) == 0 && len(o.KubeconfigLocation) > 0 {

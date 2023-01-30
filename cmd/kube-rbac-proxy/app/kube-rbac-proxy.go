@@ -77,8 +77,6 @@ that can perform RBAC authorization against the Kubernetes API using SubjectAcce
 			verflag.PrintAndExitIfRequested()
 
 			// convert previous version of options
-			// FIXME: this may rewrite some of the above secure serving defaults, prevent that
-			// in case legacy options were unset
 			if err := o.LegacyOptions.ConvertToNewOptions(
 				o.SecureServing,
 				o.DelegatingAuthentication,
