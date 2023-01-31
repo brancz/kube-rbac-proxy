@@ -10,6 +10,23 @@ In Kubernetes clusters without NetworkPolicies any Pod can perform requests to e
 
 ## Usage
 
+### Migration guide from previous kube-rbac-proxy versions
+
+To get kube-rbac-proxy accepted as an official Kubernetes SIG Auth repository, we had to rewrite much of the original code. While this was hugely benefitial to the project itself, it brought breaking changes in terms of availability of some options. The changes in options were as follows:
+
+#### No longer available:
+- `--insecure-listen-addres` - the proxy is handling authentication information and will no longer run in an unsafe mode
+- `--auth-header-fields-enabled` - its value is derived from at least one of `--auth-header-groups-field-name` or `--auth-header-user-field-name` being set
+- `--tls-reload-interval` - upstream Kubernetes TLS material is now being reloaded by Kubernetes upstream code which chooses its own reasonable defaults
+
+#### Replaced:
+- `--kubeconfig` - use `--authentication-kubeconfig` and `--authorization-kubeconfig` instead
+- `--secure-listen-address` - use a combination of `--bind-address` and `--secure-port`
+
+#### Changes in behavior:
+The proxy will now attempt to read the `kube-system/extension-apiserver-authentication` ConfigMap in order to be able to handle client certificate authentication (mTLS) via the cluster-wide trust. To prevent this, set `--authentication-skip-lookup`. If, on the other hand, this is a desirable behavior, you'll want to assign the `extension-apiserver-authentication-reader` role to the ServiceAccount running the proxy.
+
+### Options
 The kube-rbac-proxy has all [`glog`](https://github.com/golang/glog) flags for logging purposes. To use the kube-rbac-proxy there are a few flags you may want to set:
 
 * `--upstream`: This is the upstream you want to proxy to.
@@ -64,7 +81,6 @@ Delegating authentication flags:
 
 Delegating authorization flags:
 
-      --authorization-always-allow-paths strings                A list of HTTP paths to skip during authorization, i.e. these are authorized without contacting the 'core' kubernetes server. (default [/healthz,/readyz,/livez])
       --authorization-kubeconfig string                         kubeconfig file pointing at the 'core' kubernetes server with enough rights to create subjectaccessreviews.authorization.k8s.io.
       --authorization-webhook-cache-authorized-ttl duration     The duration to cache 'authorized' responses from the webhook authorizer. (default 10s)
       --authorization-webhook-cache-unauthorized-ttl duration   The duration to cache 'unauthorized' responses from the webhook authorizer. (default 10s)
@@ -94,11 +110,6 @@ OIDC flags:
       --oidc-issuer string           The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).
       --oidc-sign-alg stringArray    Supported signing algorithms, default RS256 (default [RS256])
       --oidc-username-claim string   Identifier of the user in JWT claim, by default set to 'email' (default "email")
-
-Legacy kube-rbac-proxy [DEPRECATED] flags:
-
-      --kubeconfig string              Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used
-      --secure-listen-address string   The address the kube-rbac-proxy HTTPs server should listen on.
 
 Global flags:
 
