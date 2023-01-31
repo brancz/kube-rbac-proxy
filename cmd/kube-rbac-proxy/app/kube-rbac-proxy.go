@@ -135,6 +135,7 @@ func (o *completedProxyRunOptions) Validate() []error {
 	errs = append(errs, o.DelegatingAuthentication.Validate()...)
 	errs = append(errs, o.DelegatingAuthorization.Validate()...)
 	errs = append(errs, o.ProxyOptions.Validate()...)
+	errs = append(errs, o.OIDCOptions.Validate()...)
 	errs = append(errs, o.LegacyOptions.Validate()...)
 
 	return errs
@@ -277,6 +278,10 @@ func createKubeRBACProxyConfig(opts *completedProxyRunOptions) (*server.KubeRBAC
 	}
 
 	if err := opts.ProxyOptions.ApplyTo(proxyConfig.KubeRBACProxyInfo, proxyConfig.DelegatingAuthentication); err != nil {
+		return nil, err
+	}
+
+	if err := opts.OIDCOptions.ApplyTo(proxyConfig.KubeRBACProxyInfo); err != nil {
 		return nil, err
 	}
 
