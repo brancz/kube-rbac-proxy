@@ -34,9 +34,8 @@ type ProxyRunOptions struct {
 	DelegatingAuthentication *genericoptions.DelegatingAuthenticationOptions
 	DelegatingAuthorization  *genericoptions.DelegatingAuthorizationOptions
 
-	ProxyOptions  *ProxyOptions
-	OIDCOptions   *OIDCOptions
-	LegacyOptions *LegacyOptions
+	ProxyOptions *ProxyOptions
+	OIDCOptions  *OIDCOptions
 }
 
 func NewProxyRunOptions() *ProxyRunOptions {
@@ -51,9 +50,6 @@ func NewProxyRunOptions() *ProxyRunOptions {
 		OIDCOptions: &OIDCOptions{
 			OIDCConfig: &authn.OIDCConfig{},
 		},
-		LegacyOptions: &LegacyOptions{
-			x509Auth: &authn.X509Config{},
-		},
 	}
 }
 
@@ -65,7 +61,6 @@ func (o *ProxyRunOptions) Flags() kubeflags.NamedFlagSets {
 	o.DelegatingAuthorization.AddFlags(namedFlagSets.FlagSet("delegating authorization"))
 	o.ProxyOptions.AddFlags(namedFlagSets.FlagSet("proxy"))
 	o.OIDCOptions.AddFlags(namedFlagSets.FlagSet("OIDC"))
-	o.LegacyOptions.AddFlags(namedFlagSets.FlagSet("legacy kube-rbac-proxy [DEPRECATED]"))
 
 	return namedFlagSets
 }
