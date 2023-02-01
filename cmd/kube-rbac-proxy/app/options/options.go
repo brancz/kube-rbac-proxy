@@ -17,6 +17,8 @@ limitations under the License.
 package options
 
 import (
+	"fmt"
+
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authn/identityheaders"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
@@ -39,10 +41,14 @@ type ProxyRunOptions struct {
 }
 
 func NewProxyRunOptions() *ProxyRunOptions {
+	// unset the always allow paths, the proxy has its own authorizer for these
+	delegatingAuthz := genericoptions.NewDelegatingAuthorizationOptions()
+	delegatingAuthz.AlwaysAllowPaths = nil
+
 	return &ProxyRunOptions{
 		SecureServing:            genericoptions.NewSecureServingOptions(),
 		DelegatingAuthentication: genericoptions.NewDelegatingAuthenticationOptions(),
-		DelegatingAuthorization:  genericoptions.NewDelegatingAuthorizationOptions(),
+		DelegatingAuthorization:  delegatingAuthz,
 
 		ProxyOptions: &ProxyOptions{
 			UpstreamHeader: &identityheaders.AuthnHeaderConfig{},
@@ -62,5 +68,18 @@ func (o *ProxyRunOptions) Flags() kubeflags.NamedFlagSets {
 	o.ProxyOptions.AddFlags(namedFlagSets.FlagSet("proxy"))
 	o.OIDCOptions.AddFlags(namedFlagSets.FlagSet("OIDC"))
 
+	// we have our own handling of always allow paths
+	_ = namedFlagSets.FlagSets["delegating authorization"].MarkHidden("authorization-always-allow-paths")
+
 	return namedFlagSets
+}
+
+func (o *ProxyRunOptions) ExtraValidate() []error {
+	var errs []error
+
+	if len(o.DelegatingAuthorization.AlwaysAllowPaths) > 0 {
+		errs = append(errs, fmt.Errorf("--authorization-always-allow-paths cannot be set, see --allow-paths instead"))
+	}
+
+	return errs
 }
