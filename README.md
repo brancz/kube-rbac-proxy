@@ -76,7 +76,7 @@ Proxy flags:
       --auth-header-groups-field-separator string   The separator string used for concatenating multiple group names in a groups header field's value (default "|")
       --auth-header-user-field-name string          The name of the field inside a http(2) request header to tell the upstream server about the user's name (default "x-remote-user")
       --auth-token-audiences strings                Comma-separated list of token audiences to accept. By default a token does not have to have any specific audience. It is recommended to set a specific audience.
-      --config-file string                          Configuration file to configure kube-rbac-proxy.
+      --config-file string                          Configuration file to configure static and rewrites authorization of the kube-rbac-proxy.
       --ignore-paths strings                        Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the requst matches, it will proxy the request without performing an authentication or authorization check. Cannot be used with --allow-paths.
       --oidc-ca-file string                         If set, the OpenID server's certificate will be verified by one of the authorities in the oidc-ca-file, otherwise the host's root CA set will be used.
       --oidc-clientID string                        The client ID for the OpenID Connect client, must be set if oidc-issuer-url is set.
@@ -113,6 +113,43 @@ Global flags:
       --stderrthreshold severity         logs at or above this threshold go to stderr when writing to files and stderr (no effect when -logtostderr=true or -alsologtostderr=false) (default 2) (DEPRECATED: will be removed in a future release, see https://github.com/kubernetes/enhancements/tree/master/keps/sig-instrumentation/2845-deprecate-klog-specific-flags-in-k8s-components)
       --version version[=true]           Print version information and quit
 ```
+
+### Authorization configuration
+
+The format of the file accepted by the `--config-file` reads as follows:
+```yaml
+authorization:
+  static:
+  - user:
+      name: <string>
+      groups: [ <string> ]
+    verb: <string>
+    namespace: <string>
+    apiGroup: <string>
+    resource: <string>
+    subresource: <string>
+    name: <string>
+    resourceRequest: <bool>
+    path: <string>
+  resourceAttributes:
+    namespace: <string>
+    apiGroup: <string>
+    apiVersion: <string>
+    resource: <string>
+    subresource: <string>
+    name: <string>
+  rewrites:
+    byQueryParameter:
+      name: <string>
+    byHttpHeader:
+      name: <string>
+```
+
+The `authorization.static` is a YAML list, each element contains a set of attributes. kube-rbac-proxy translates incoming requests into kube-like authorization attributes that are checked against the list. If the request matches against any of the elements of the list, access is allowed.
+
+The `authorization.resourceAttributes` and `authorization.rewrites` set how authorization attributes retrieved from HTTP requests to the proxy should be presented in a `SubjectAccessReview` to the kube-apiserver:
+ - `resourceAttributes` will set the given fields while sending the SAR to the kube-apiserver, while the keeping the `verb` and `user` based on the HTTP request
+ - `rewrites` allows retrieving certain parameters from the incoming HTTP request and use them in the fields of `resourceAttributes` if these take the form of `{{ .Value }}`, thus allowing parametrization of the SAR sent to the kube-apiserver
 
 
 ### How to update Go dependencies
