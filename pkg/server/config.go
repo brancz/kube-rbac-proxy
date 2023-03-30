@@ -92,7 +92,7 @@ func (i *KubeRBACProxyInfo) SetUpstreamTransport(upstreamCAPath, upstreamClientC
 			return errors.New("error parsing upstream CA certificate")
 		}
 
-		transport.ForceAttemptHTTP2 = false
+		transport.ForceAttemptHTTP2 = false // TODO(enj): is this meant to be left true when both if statements are skipped?
 		transport.TLSClientConfig = &tls.Config{RootCAs: upstreamCACertPool}
 	}
 

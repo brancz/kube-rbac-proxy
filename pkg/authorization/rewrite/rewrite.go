@@ -66,7 +66,7 @@ type ResourceAttributes struct {
 	Name        string `json:"name,omitempty"`
 }
 
-func NewRewritingAuthorizer(delegate authorizer.Authorizer, config *RewriteAttributesConfig) *rewritingAuthorizer {
+func NewRewritingAuthorizer(delegate authorizer.Authorizer, config *RewriteAttributesConfig) authorizer.Authorizer {
 	rewriteConfig := config
 	if rewriteConfig == nil {
 		rewriteConfig = &RewriteAttributesConfig{}
@@ -189,6 +189,7 @@ func templateWithValue(templateString, value string) string {
 
 func WithKubeRBACProxyParamsHandler(handler http.Handler, config *RewriteAttributesConfig) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// TODO(enj): this needs to describe why we are taking untrusted input and doing magic re-writes with it
 		r = r.WithContext(WithKubeRBACProxyParams(r.Context(), requestToParams(config, r)))
 		handler.ServeHTTP(w, r)
 	})

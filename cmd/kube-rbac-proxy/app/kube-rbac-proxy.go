@@ -77,6 +77,7 @@ that can perform RBAC authorization against the Kubernetes API using SubjectAcce
 			verflag.PrintAndExitIfRequested()
 
 			// convert previous version of options
+			// TODO(enj): rename to ApplyTo so that this is consistent with other methods that mutate inputs
 			if err := o.LegacyOptions.ConvertToNewOptions(
 				o.SecureServing,
 				o.DelegatingAuthentication,
@@ -168,11 +169,12 @@ func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
 }
 
 func Run(opts *completedProxyRunOptions) error {
+	// TODO(enj): Run should not mutate the input config, Complete should handle that
 	cfg, err := createKubeRBACProxyConfig(opts)
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background()) // TODO(enj): signal context instead of background context?
 	defer cancel()
 
 	var authenticator authenticator.Request
@@ -194,9 +196,12 @@ func Run(opts *completedProxyRunOptions) error {
 		return fmt.Errorf("failed to setup an authorizer: %v", err)
 	}
 
+	// TODO(enj): this uses the deprecated Director func, we should instead use the Rewrite func
+	//  also confirm that custom Connection headers cannot be used to drop headers
 	proxy := httputil.NewSingleHostReverseProxy(cfg.KubeRBACProxyInfo.UpstreamURL)
 	proxy.Transport = cfg.KubeRBACProxyInfo.UpstreamTransport
 
+	// TODO(enj): so plaintext to the backend is fine but only if the backend is on 127.0.0.1 or ::1 or unix domain socket
 	if cfg.KubeRBACProxyInfo.UpstreamForceH2C {
 		// Force http/2 for connections to the upstream i.e. do not start with HTTP1.1 UPGRADE req to
 		// initialize http/2 session.
@@ -221,22 +226,27 @@ func Run(opts *completedProxyRunOptions) error {
 	mux := http.NewServeMux()
 	mux.Handle("/", handler)
 
-	gr := &run.Group{}
-	{
-		if len(opts.LegacyOptions.SecureListenAddress) > 0 {
-			gr.Add(secureServerRunner(ctx, cfg.SecureServing, mux))
-
-			if cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing != nil {
-				proxyEndpointsMux := http.NewServeMux()
-				proxyEndpointsMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
-
-				gr.Add(secureServerRunner(ctx, cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing, proxyEndpointsMux))
-			}
+	gr := &run.Group{} // TODO(enj): can we use the safe wait group from the k/k code?
+	func() {
+		if len(opts.LegacyOptions.SecureListenAddress) == 0 {
+			return
 		}
-	}
+
+		gr.Add(secureServerRunner(ctx, cfg.SecureServing, mux))
+
+		if cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing != nil {
+			// TODO(enj): describe the need for two listeners and consider if any checks need to be made to assert healthyness
+			proxyEndpointsMux := http.NewServeMux()
+			proxyEndpointsMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
+
+			gr.Add(secureServerRunner(ctx, cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing, proxyEndpointsMux))
+		}
+	}()
 	{
 		sig := make(chan os.Signal, 1)
 		gr.Add(func() error {
+			// TODO(enj): I would expect this to be part of the context
+			_ = serverconfig.SetupSignalContext
 			signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 			<-sig
 			klog.Info("received interrupt, shutting down")
@@ -319,7 +329,7 @@ func setupAuthorizer(krbInfo *server.KubeRBACProxyInfo, delegatedAuthz *serverco
 		return nil, fmt.Errorf("failed to create static authorizer: %w", err)
 	}
 
-	var authz authorizer.Authorizer = rewrite.NewRewritingAuthorizer(
+	authz := rewrite.NewRewritingAuthorizer(
 		union.New(
 			staticAuthorizer,
 			delegatedAuthz.Authorizer,
@@ -331,6 +341,7 @@ func setupAuthorizer(krbInfo *server.KubeRBACProxyInfo, delegatedAuthz *serverco
 		authz = union.New(path.NewAllowPathAuthorizer(allowPaths), authz)
 	}
 
+	// TODO(enj): add comment as to why you cannot use the regular path authorizer for the k/k code
 	if ignorePaths := krbInfo.IgnorePaths; len(ignorePaths) > 0 {
 		authz = union.New(path.NewAlwaysAllowPathAuthorizer(ignorePaths), authz)
 	}
