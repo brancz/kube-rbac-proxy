@@ -23,6 +23,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
+	authorizationpath "k8s.io/apiserver/pkg/authorization/path"
 )
 
 type pathAuthorizer struct {
@@ -74,6 +75,7 @@ func (a *pathAuthorizer) Authorize(ctx context.Context, attr authorizer.Attribut
 	return a.noMatchDecision, "", nil
 }
 
+// NewDenyPathAuthorizerUnlessAllowed ??
 func NewAllowPathAuthorizer(allowPaths []string) authorizer.Authorizer {
 	if len(allowPaths) == 0 {
 		return authorizer.AuthorizerFunc(func(context.Context, authorizer.Attributes) (authorizer.Decision, string, error) {
@@ -84,5 +86,7 @@ func NewAllowPathAuthorizer(allowPaths []string) authorizer.Authorizer {
 }
 
 func NewAlwaysAllowPathAuthorizer(alwaysAllowPaths []string) authorizer.Authorizer {
+	_ = authorizationpath.NewAuthorizer // <-- just use this one  ??
+
 	return newPathAuthorizer(authorizer.DecisionAllow, authorizer.DecisionNoOpinion, alwaysAllowPaths)
 }

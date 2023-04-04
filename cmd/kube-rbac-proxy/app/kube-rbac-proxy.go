@@ -220,7 +220,7 @@ func Run(opts *completedProxyRunOptions) error {
 	handler := identityheaders.WithAuthHeaders(proxy, cfg.KubeRBACProxyInfo.UpstreamHeaders)
 	handler = kubefilters.WithAuthorization(handler, authz, scheme.Codecs)
 	handler = kubefilters.WithAuthentication(handler, authenticator, http.HandlerFunc(filters.UnauthorizedHandler), cfg.DelegatingAuthentication.APIAudiences)
-	handler = kubefilters.WithRequestInfo(handler, &request.RequestInfoFactory{})
+	handler = kubefilters.WithRequestInfo(handler, &request.RequestInfoFactory{}) // TODO(enj): describe what empty request info factory means
 	handler = rewrite.WithKubeRBACProxyParamsHandler(handler, cfg.KubeRBACProxyInfo.Authorization.RewriteAttributesConfig)
 
 	mux := http.NewServeMux()
@@ -324,18 +324,21 @@ func secureServerRunner(
 }
 
 func setupAuthorizer(krbInfo *server.KubeRBACProxyInfo, delegatedAuthz *serverconfig.AuthorizationInfo) (authorizer.Authorizer, error) {
-	staticAuthorizer, err := static.NewStaticAuthorizer(krbInfo.Authorization.Static)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create static authorizer: %w", err)
+	authz := delegatedAuthz.Authorizer
+
+	if len(krbInfo.Authorization.Static) > 0 {
+		staticAuthorizer, err := static.NewStaticAuthorizer(krbInfo.Authorization.Static)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create static authorizer: %w", err)
+		}
+		authz = union.New(staticAuthorizer, authz)
 	}
 
-	authz := rewrite.NewRewritingAuthorizer(
-		union.New(
-			staticAuthorizer,
-			delegatedAuthz.Authorizer,
-		),
-		krbInfo.Authorization.RewriteAttributesConfig,
-	)
+	// TODO(enj): test that this indeed makes it so that the re-writing authz does not get invoked unless configured
+	if krbInfo.Authorization.RewriteAttributesConfig != nil {
+		// TODO(enj): does this actually belong in this project?
+		authz = rewrite.NewRewritingAuthorizer(authz, krbInfo.Authorization.RewriteAttributesConfig)
+	}
 
 	if allowPaths := krbInfo.AllowPaths; len(allowPaths) > 0 {
 		authz = union.New(path.NewAllowPathAuthorizer(allowPaths), authz)
@@ -345,6 +348,8 @@ func setupAuthorizer(krbInfo *server.KubeRBACProxyInfo, delegatedAuthz *serverco
 	if ignorePaths := krbInfo.IgnorePaths; len(ignorePaths) > 0 {
 		authz = union.New(path.NewAlwaysAllowPathAuthorizer(ignorePaths), authz)
 	}
+
+	// TODO(enj): what should the union logic do if an authorizer returns an error?  currently it keeps going
 
 	return authz, nil
 }

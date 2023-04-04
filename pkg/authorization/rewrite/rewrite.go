@@ -30,6 +30,7 @@ import (
 
 var _ authorizer.Authorizer = &rewritingAuthorizer{}
 
+// TODO(enj): use a dedicated type
 const rewriterParams = iota
 
 type RewriteAttributesConfig struct {
@@ -67,13 +68,8 @@ type ResourceAttributes struct {
 }
 
 func NewRewritingAuthorizer(delegate authorizer.Authorizer, config *RewriteAttributesConfig) authorizer.Authorizer {
-	rewriteConfig := config
-	if rewriteConfig == nil {
-		rewriteConfig = &RewriteAttributesConfig{}
-	}
-
 	return &rewritingAuthorizer{
-		config:   rewriteConfig,
+		config:   config,
 		delegate: delegate,
 	}
 }
@@ -98,8 +94,10 @@ func (n *rewritingAuthorizer) Authorize(ctx context.Context, attrs authorizer.At
 		reason     string
 		err        error
 	)
+	// TODO(enj): describe that this is saying that all proxy attrs must be allowed for this overall statement to be allowed
 	for _, at := range proxyAttrs {
 		authorized, reason, err = n.delegate.Authorize(ctx, at)
+		// TODO(enj): this fails on error unlike the regular union, so maybe we always want it to fail on error?
 		if err != nil {
 			return authorizer.DecisionDeny,
 				"AuthorizationError",
@@ -113,7 +111,7 @@ func (n *rewritingAuthorizer) Authorize(ctx context.Context, attrs authorizer.At
 	}
 
 	if authorized == authorizer.DecisionAllow {
-		return authorized, "", nil
+		return authorizer.DecisionAllow, "", nil
 	}
 
 	return authorizer.DecisionDeny,
@@ -124,20 +122,24 @@ func (n *rewritingAuthorizer) Authorize(ctx context.Context, attrs authorizer.At
 func (n *rewritingAuthorizer) getKubeRBACProxyAuthzAttributes(ctx context.Context, origAttrs authorizer.Attributes) []authorizer.Attributes {
 	u := origAttrs.GetUser()
 	apiVerb := origAttrs.GetVerb()
-	path := origAttrs.GetPath()
+	// path := origAttrs.GetPath()
 
 	attrs := []authorizer.Attributes{}
 	if n.config.ResourceAttributes == nil {
 		// Default attributes mirror the API attributes that would allow this access to kube-rbac-proxy
-		return append(attrs,
-			authorizer.AttributesRecord{
-				User:            u,
-				Verb:            apiVerb,
-				ResourceRequest: false,
-				Path:            path,
-			})
+		// TODO(enj): this seems to drop a bunch of data from origAttrs, is this on purpose?
+		//  /apis/namespace/name would get changed from a resource request to a non-resource request?
+		// return append(attrs,
+		// 	authorizer.AttributesRecord{
+		// 		User:            u,
+		// 		Verb:            apiVerb,
+		// 		ResourceRequest: false,
+		// 		Path:            path,
+		// 	})
+		return []authorizer.Attributes{origAttrs}
 	}
 
+	// TODO(enj): describe that this turns a dynamic path based authz check into a static resource authz check
 	if n.config.Rewrites == nil {
 		return append(attrs,
 			authorizer.AttributesRecord{
@@ -151,7 +153,6 @@ func (n *rewritingAuthorizer) getKubeRBACProxyAuthzAttributes(ctx context.Contex
 				Name:            n.config.ResourceAttributes.Name,
 				ResourceRequest: true,
 			})
-
 	}
 
 	params := GetKubeRBACProxyParams(ctx)
@@ -178,8 +179,10 @@ func (n *rewritingAuthorizer) getKubeRBACProxyAuthzAttributes(ctx context.Contex
 }
 
 func templateWithValue(templateString, value string) string {
+	// TODO(enj): make sure on process startup when rewrites are specified that these all valid templates
+	//  and also pre-parse and have them ready for re-use instead of doing it on every request
 	tmpl, _ := template.New("valueTemplate").Parse(templateString)
-	out := bytes.NewBuffer(nil)
+	out := bytes.NewBuffer(nil) // TODO(enj): consider using a sync.Pool with buffers that are reset
 	err := tmpl.Execute(out, struct{ Value string }{Value: value})
 	if err != nil {
 		return ""
@@ -188,6 +191,10 @@ func templateWithValue(templateString, value string) string {
 }
 
 func WithKubeRBACProxyParamsHandler(handler http.Handler, config *RewriteAttributesConfig) http.Handler {
+	if config == nil {
+		return handler
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// TODO(enj): this needs to describe why we are taking untrusted input and doing magic re-writes with it
 		r = r.WithContext(WithKubeRBACProxyParams(r.Context(), requestToParams(config, r)))
@@ -197,15 +204,20 @@ func WithKubeRBACProxyParamsHandler(handler http.Handler, config *RewriteAttribu
 
 func requestToParams(config *RewriteAttributesConfig, req *http.Request) []string {
 	params := []string{}
-	if config == nil || config.Rewrites == nil {
+	if config.Rewrites == nil {
 		return nil
 	}
+
+	// TODO(enj): if this can be collapsed into either by query OR by header, this entire logic can be
+	//  moved into a custom request info parser.  that would imply that there can only be a single
+	//  query param as well.
 
 	if config.Rewrites.ByQueryParameter != nil && config.Rewrites.ByQueryParameter.Name != "" {
 		if ps, ok := req.URL.Query()[config.Rewrites.ByQueryParameter.Name]; ok {
 			params = append(params, ps...)
 		}
 	}
+	// TODO(enj): if you only support using a single header, make sure to fail if there is more than one
 	if config.Rewrites.ByHTTPHeader != nil && config.Rewrites.ByHTTPHeader.Name != "" {
 		mimeHeader := textproto.MIMEHeader(req.Header)
 		mimeKey := textproto.CanonicalMIMEHeaderKey(config.Rewrites.ByHTTPHeader.Name)
@@ -217,13 +229,13 @@ func requestToParams(config *RewriteAttributesConfig, req *http.Request) []strin
 }
 
 func WithKubeRBACProxyParams(ctx context.Context, params []string) context.Context {
+	if params == nil {
+		return ctx
+	}
 	return request.WithValue(ctx, rewriterParams, params)
 }
 
 func GetKubeRBACProxyParams(ctx context.Context) []string {
-	params, ok := ctx.Value(rewriterParams).([]string)
-	if !ok {
-		return nil
-	}
+	params, _ := ctx.Value(rewriterParams).([]string)
 	return params
 }
