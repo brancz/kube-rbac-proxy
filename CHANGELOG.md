@@ -1,3 +1,7 @@
+## 0.14.1 / 2023-04-06
+
+- [ENHANCEMENT] bump dependencies
+
 ## 0.14.0 / 2022-12-15
 
 * [ENHANCEMENT] `README.md` now contains information about the future outlook of the project wrt to deprecations, features and K8s Sig-Auth acceptance
