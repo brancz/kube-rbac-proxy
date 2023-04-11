@@ -70,6 +70,7 @@ that can perform RBAC authorization against the Kubernetes API using SubjectAcce
 		PersistentPreRunE: func(*cobra.Command, []string) error {
 			// silence client-go warnings.
 			// kube-apiserver loopback clients should not log self-issued warnings.
+			// TODO(enj): we should log warnings if we try to use deprecated kube APIs
 			rest.SetDefaultWarningHandler(rest.NoWarnings{})
 			return nil
 		},
@@ -77,6 +78,7 @@ that can perform RBAC authorization against the Kubernetes API using SubjectAcce
 			verflag.PrintAndExitIfRequested()
 
 			// convert previous version of options
+			// TODO(enj): rename to ApplyTo so that this is consistent with other methods that mutate inputs
 			if err := o.LegacyOptions.ConvertToNewOptions(
 				o.SecureServing,
 				o.DelegatingAuthentication,
@@ -101,14 +103,7 @@ that can perform RBAC authorization against the Kubernetes API using SubjectAcce
 
 			return Run(completedOptions)
 		},
-		Args: func(cmd *cobra.Command, args []string) error {
-			for _, arg := range args {
-				if len(arg) > 0 {
-					return fmt.Errorf("%q does not take any arguments, got %q", cmd.CommandPath(), args)
-				}
-			}
-			return nil
-		},
+		Args: cobra.NoArgs,
 	}
 
 	fs := cmd.Flags()
@@ -168,11 +163,12 @@ func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
 }
 
 func Run(opts *completedProxyRunOptions) error {
+	// TODO(enj): Run should not mutate the input config, Complete should handle that
 	cfg, err := createKubeRBACProxyConfig(opts)
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background()) // TODO(enj): signal context instead of background context?
 	defer cancel()
 
 	var authenticator authenticator.Request
@@ -184,7 +180,7 @@ func Run(opts *completedProxyRunOptions) error {
 		}
 
 		go oidcAuthenticator.Run(ctx)
-		authenticator = oidcAuthenticator
+		authenticator = oidcAuthenticator // TODO(enj): wrap as audience agnostic
 	} else {
 		authenticator = cfg.DelegatingAuthentication.Authenticator
 	}
@@ -194,9 +190,12 @@ func Run(opts *completedProxyRunOptions) error {
 		return fmt.Errorf("failed to setup an authorizer: %v", err)
 	}
 
+	// TODO(enj): this uses the deprecated Director func, we should instead use the Rewrite func
+	//  also confirm that custom Connection headers cannot be used to drop headers
 	proxy := httputil.NewSingleHostReverseProxy(cfg.KubeRBACProxyInfo.UpstreamURL)
 	proxy.Transport = cfg.KubeRBACProxyInfo.UpstreamTransport
 
+	// TODO(enj): so plaintext to the backend is fine but only if the backend is on 127.0.0.1 or ::1 or unix domain socket
 	if cfg.KubeRBACProxyInfo.UpstreamForceH2C {
 		// Force http/2 for connections to the upstream i.e. do not start with HTTP1.1 UPGRADE req to
 		// initialize http/2 session.
@@ -215,28 +214,33 @@ func Run(opts *completedProxyRunOptions) error {
 	handler := identityheaders.WithAuthHeaders(proxy, cfg.KubeRBACProxyInfo.UpstreamHeaders)
 	handler = kubefilters.WithAuthorization(handler, authz, scheme.Codecs)
 	handler = kubefilters.WithAuthentication(handler, authenticator, http.HandlerFunc(filters.UnauthorizedHandler), cfg.DelegatingAuthentication.APIAudiences)
-	handler = kubefilters.WithRequestInfo(handler, &request.RequestInfoFactory{})
+	handler = kubefilters.WithRequestInfo(handler, &request.RequestInfoFactory{}) // TODO(enj): describe what empty request info factory means
 	handler = rewrite.WithKubeRBACProxyParamsHandler(handler, cfg.KubeRBACProxyInfo.Authorization.RewriteAttributesConfig)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", handler)
 
-	gr := &run.Group{}
-	{
-		if len(opts.LegacyOptions.SecureListenAddress) > 0 {
-			gr.Add(secureServerRunner(ctx, cfg.SecureServing, mux))
-
-			if cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing != nil {
-				proxyEndpointsMux := http.NewServeMux()
-				proxyEndpointsMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
-
-				gr.Add(secureServerRunner(ctx, cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing, proxyEndpointsMux))
-			}
+	gr := &run.Group{} // TODO(enj): can we use the safe wait group from the k/k code?
+	func() {
+		if len(opts.LegacyOptions.SecureListenAddress) == 0 {
+			return
 		}
-	}
+
+		gr.Add(secureServerRunner(ctx, cfg.SecureServing, mux))
+
+		if cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing != nil {
+			// TODO(enj): describe the need for two listeners and consider if any checks need to be made to assert healthyness
+			proxyEndpointsMux := http.NewServeMux()
+			proxyEndpointsMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
+
+			gr.Add(secureServerRunner(ctx, cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing, proxyEndpointsMux))
+		}
+	}()
 	{
 		sig := make(chan os.Signal, 1)
 		gr.Add(func() error {
+			// TODO(enj): I would expect this to be part of the context
+			_ = serverconfig.SetupSignalContext
 			signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 			<-sig
 			klog.Info("received interrupt, shutting down")
@@ -307,6 +311,7 @@ func secureServerRunner(
 	}
 
 	interrupter := func(err error) {
+		// TODO(enj): log the error?
 		serverCtxCancel()
 	}
 
@@ -314,26 +319,32 @@ func secureServerRunner(
 }
 
 func setupAuthorizer(krbInfo *server.KubeRBACProxyInfo, delegatedAuthz *serverconfig.AuthorizationInfo) (authorizer.Authorizer, error) {
-	staticAuthorizer, err := static.NewStaticAuthorizer(krbInfo.Authorization.Static)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create static authorizer: %w", err)
+	authz := delegatedAuthz.Authorizer
+
+	if len(krbInfo.Authorization.Static) > 0 {
+		staticAuthorizer, err := static.NewStaticAuthorizer(krbInfo.Authorization.Static)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create static authorizer: %w", err)
+		}
+		authz = union.New(staticAuthorizer, authz)
 	}
 
-	var authz authorizer.Authorizer = rewrite.NewRewritingAuthorizer(
-		union.New(
-			staticAuthorizer,
-			delegatedAuthz.Authorizer,
-		),
-		krbInfo.Authorization.RewriteAttributesConfig,
-	)
+	// TODO(enj): test that this indeed makes it so that the re-writing authz does not get invoked unless configured
+	if krbInfo.Authorization.RewriteAttributesConfig != nil {
+		// TODO(enj): does this actually belong in this project?
+		authz = rewrite.NewRewritingAuthorizer(authz, krbInfo.Authorization.RewriteAttributesConfig)
+	}
 
 	if allowPaths := krbInfo.AllowPaths; len(allowPaths) > 0 {
 		authz = union.New(path.NewAllowPathAuthorizer(allowPaths), authz)
 	}
 
+	// TODO(enj): add comment as to why you cannot use the regular path authorizer for the k/k code
 	if ignorePaths := krbInfo.IgnorePaths; len(ignorePaths) > 0 {
 		authz = union.New(path.NewAlwaysAllowPathAuthorizer(ignorePaths), authz)
 	}
+
+	// TODO(enj): what should the union logic do if an authorizer returns an error?  currently it keeps going
 
 	return authz, nil
 }

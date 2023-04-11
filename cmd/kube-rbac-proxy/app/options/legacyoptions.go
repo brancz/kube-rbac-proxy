@@ -43,15 +43,16 @@ func (o *LegacyOptions) AddFlags(flagset *pflag.FlagSet) {
 	// kube-rbac-proxy flags
 	flagset.StringVar(&o.SecureListenAddress, "secure-listen-address", "", "The address the kube-rbac-proxy HTTPs server should listen on.")
 
-	//Kubeconfig flag
+	// Kubeconfig flag
 	flagset.StringVar(&o.KubeconfigLocation, "kubeconfig", "", "Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used")
 }
 
 func (o *LegacyOptions) Validate() []error {
-	var errs []error
+	var errs []error // TODO(enj): validate??
 	return errs
 }
 
+// TODO(enj): rename to ApplyTo
 func (o *LegacyOptions) ConvertToNewOptions(
 	so *genericoptions.SecureServingOptions,
 	authn *genericoptions.DelegatingAuthenticationOptions,
@@ -82,5 +83,5 @@ func (o *LegacyOptions) ConvertToNewOptions(
 }
 
 func (o *LegacyOptions) ApplyTo(c *server.KubeRBACProxyInfo) error {
-	return nil
+	return nil // TODO(enj): why an empty function?
 }

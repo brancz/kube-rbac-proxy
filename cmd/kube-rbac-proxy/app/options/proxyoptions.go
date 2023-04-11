@@ -45,9 +45,9 @@ type ProxyOptions struct {
 
 	UpstreamHeader *identityheaders.AuthnHeaderConfig
 
-	ConfigFileName string
-	AllowPaths     []string
-	IgnorePaths    []string
+	AuthzConfigFileName string
+	AllowPaths          []string
+	IgnorePaths         []string
 
 	ProxyEndpointsPort int
 
@@ -64,7 +64,7 @@ func (o *ProxyOptions) AddFlags(flagset *pflag.FlagSet) {
 	flagset.StringVar(&o.UpstreamClientCertFile, "upstream-client-cert-file", "", "If set, the client will be used to authenticate the proxy to upstream. Requires --upstream-client-key-file to be set, too.")
 	flagset.StringVar(&o.UpstreamClientKeyFile, "upstream-client-key-file", "", "The key matching the certificate from --upstream-client-cert-file. If set, requires --upstream-client-cert-file to be set, too.")
 
-	flagset.StringVar(&o.ConfigFileName, "config-file", "", "Configuration file to configure static and rewrites authorization of the kube-rbac-proxy.")
+	flagset.StringVar(&o.AuthzConfigFileName, "config-file", "", "Configuration file to configure static and rewrites authorization of the kube-rbac-proxy.")
 	flagset.StringSliceVar(&o.AllowPaths, "allow-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the request doesn't match, kube-rbac-proxy responds with a 404 status code. If omitted, the incoming request path isn't checked. Cannot be used with --ignore-paths.")
 	flagset.StringSliceVar(&o.IgnorePaths, "ignore-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the requst matches, it will proxy the request without performing an authentication or authorization check. Cannot be used with --allow-paths.")
 
@@ -73,7 +73,7 @@ func (o *ProxyOptions) AddFlags(flagset *pflag.FlagSet) {
 	flagset.StringVar(&o.UpstreamHeader.GroupsFieldName, "auth-header-groups-field-name", "x-remote-groups", "The name of the field inside a http(2) request header to tell the upstream server about the user's groups")
 	flagset.StringVar(&o.UpstreamHeader.GroupSeparator, "auth-header-groups-field-separator", "|", "The separator string used for concatenating multiple group names in a groups header field's value")
 
-	//Authn OIDC flags
+	// Authn OIDC flags
 	flagset.StringVar(&o.OIDC.IssuerURL, "oidc-issuer", "", "The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).")
 	flagset.StringVar(&o.OIDC.ClientID, "oidc-clientID", "", "The client ID for the OpenID Connect client, must be set if oidc-issuer-url is set.")
 	flagset.StringVar(&o.OIDC.GroupsClaim, "oidc-groups-claim", "groups", "Identifier of groups in JWT claim, by default set to 'groups'")
@@ -128,7 +128,7 @@ func (o *ProxyOptions) ApplyTo(c *server.KubeRBACProxyInfo, a *serverconfig.Auth
 		return fmt.Errorf("failed to setup transport for upstream: %w", err)
 	}
 
-	if configFileName := o.ConfigFileName; len(configFileName) > 0 {
+	if configFileName := o.AuthzConfigFileName; len(configFileName) > 0 {
 		c.Authorization, err = parseAuthorizationConfigFile(configFileName)
 		if err != nil {
 			return fmt.Errorf("failed to read the config file: %w", err)
@@ -138,7 +138,9 @@ func (o *ProxyOptions) ApplyTo(c *server.KubeRBACProxyInfo, a *serverconfig.Auth
 	c.OIDC = o.OIDC
 	c.IgnorePaths = o.IgnorePaths
 	c.AllowPaths = o.AllowPaths
-	a.APIAudiences = o.TokenAudiences
+	// TODO(enj): at a min, we should require SA tokens created by the token request API to have an aud that is not the API server's
+	//  maybe require opt-in to support legacy SA tokens which lack aud protection?
+	a.APIAudiences = o.TokenAudiences // TODO(enj): this cannot be set when OIDC is in use (because it doesn't make sense)
 
 	return nil
 }

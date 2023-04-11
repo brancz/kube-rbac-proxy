@@ -39,7 +39,7 @@ type StaticAuthorizationConfig struct {
 
 type UserConfig struct {
 	Name   string   `json:"name,omitempty"`
-	Groups []string `json:"groups,omitempty"`
+	Groups []string `json:"groups,omitempty"` // TODO(enj): this field is unused, is that on purpose?
 }
 
 type staticAuthorizer struct {
@@ -47,7 +47,7 @@ type staticAuthorizer struct {
 }
 
 // NewStaticAuthorizer creates an authorizer for static SubjectAccessReviews
-func NewStaticAuthorizer(config []StaticAuthorizationConfig) (*staticAuthorizer, error) {
+func NewStaticAuthorizer(config []StaticAuthorizationConfig) (authorizer.Authorizer, error) {
 	for _, c := range config {
 		if c.ResourceRequest != (c.Path == "") {
 			return nil, fmt.Errorf("invalid configuration: resource requests must not include a path: %v", config)
@@ -60,9 +60,8 @@ func (saConfig StaticAuthorizationConfig) Matches(a authorizer.Attributes) bool 
 	isAllowed := func(staticConf string, requestVal string) bool {
 		if staticConf == "" {
 			return true
-		} else {
-			return staticConf == requestVal
 		}
+		return staticConf == requestVal
 	}
 
 	userName := ""
