@@ -37,5 +37,5 @@ type OIDCConfig struct {
 	UsernamePrefix       string
 	GroupsClaim          string
 	GroupsPrefix         string
-	SupportedSigningAlgs []string
+	SupportedSigningAlgs []string // TODO(enj): what does this actually mean
 }

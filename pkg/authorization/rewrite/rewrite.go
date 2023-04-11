@@ -41,6 +41,9 @@ type RewriteAttributesConfig struct {
 // SubjectAccessReviewRewrites describes how SubjectAccessReview may be
 // rewritten on a given request.
 type SubjectAccessReviewRewrites struct {
+	// TODO(enj): ideally, we can drop this config, and have something very specific to the prometheus use case
+	//  if we cant do that for some reason, I would like to support only header based config
+	//  and if we cant do that, this needs to be documented as a rather scary config
 	ByQueryParameter *QueryParameterRewriteConfig `json:"byQueryParameter,omitempty"`
 	ByHTTPHeader     *HTTPHeaderRewriteConfig     `json:"byHttpHeader,omitempty"`
 }

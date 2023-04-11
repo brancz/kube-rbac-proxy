@@ -70,6 +70,7 @@ that can perform RBAC authorization against the Kubernetes API using SubjectAcce
 		PersistentPreRunE: func(*cobra.Command, []string) error {
 			// silence client-go warnings.
 			// kube-apiserver loopback clients should not log self-issued warnings.
+			// TODO(enj): we should log warnings if we try to use deprecated kube APIs
 			rest.SetDefaultWarningHandler(rest.NoWarnings{})
 			return nil
 		},
@@ -102,14 +103,7 @@ that can perform RBAC authorization against the Kubernetes API using SubjectAcce
 
 			return Run(completedOptions)
 		},
-		Args: func(cmd *cobra.Command, args []string) error {
-			for _, arg := range args {
-				if len(arg) > 0 {
-					return fmt.Errorf("%q does not take any arguments, got %q", cmd.CommandPath(), args)
-				}
-			}
-			return nil
-		},
+		Args: cobra.NoArgs,
 	}
 
 	fs := cmd.Flags()
@@ -186,7 +180,7 @@ func Run(opts *completedProxyRunOptions) error {
 		}
 
 		go oidcAuthenticator.Run(ctx)
-		authenticator = oidcAuthenticator
+		authenticator = oidcAuthenticator // TODO(enj): wrap as audience agnostic
 	} else {
 		authenticator = cfg.DelegatingAuthentication.Authenticator
 	}
@@ -317,6 +311,7 @@ func secureServerRunner(
 	}
 
 	interrupter := func(err error) {
+		// TODO(enj): log the error?
 		serverCtxCancel()
 	}
 
