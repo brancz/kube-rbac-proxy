@@ -94,15 +94,18 @@ test-unit:
 test-e2e:
 	go test -timeout 55m -v ./test/e2e/ $(TEST_RUN_ARGS) --kubeconfig=$(KUBECONFIG)
 
-test-local:
-	@echo 'run: VERSION=local make clean container kind-create-cluster test'
+test-local-setup: clean $(OUT_DIR)/$(BIN)-$(GOOS)-$(GOARCH) Dockerfile
+	docker build --build-arg BINARY=$(BIN)-$(GOOS)-$(GOARCH) --build-arg GOARCH=$(GOARCH) -t $(CONTAINER_NAME)-$(GOARCH) .
+	docker tag $(DOCKER_REPO):$(VERSION)-$(GOARCH) $(DOCKER_REPO):local
+
+test-local: test-local-setup kind-create-cluster test
 
 kind-delete-cluster:
 	kind delete cluster
 
 kind-create-cluster: kind-delete-cluster
 	kind create cluster --config ./test/e2e/kind-config/kind-config.yaml
-	kind load docker-image $(CONTAINER_NAME)
+	kind load docker-image $(DOCKER_REPO):local
 
 generate: build $(EMBEDMD_BINARY)
 	@echo ">> generating examples"

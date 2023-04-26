@@ -149,9 +149,10 @@ Additionally, to my knowledge Envoy neither has nor plans Kubernetes specific RB
 
 ## Testing
 
-To run tests locally, you need to have [kind](https://kind.sigs.k8s.io/) installed. By default it uses the default cluster, so be aware that it might override your default cluster.
+To run tests locally, you need to have [kind](https://kind.sigs.k8s.io/) installed.
+By default it uses the default cluster, so be aware that **it overrides your default kind cluster**.
 
-The command to execute the tests is: `VERSION=local make clean container kind-create-cluster test`.
+The command to execute the tests is: `make test-local`.
 
 ## Roadmap
 
