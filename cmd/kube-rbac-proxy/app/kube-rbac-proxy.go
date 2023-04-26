@@ -459,7 +459,7 @@ func Run(cfg *completedProxyRunOptions) error {
 					}
 					defer proxyListener.Close()
 
-					klog.Info("Listening securely on %v for proxy endpoints", endpointsAddr)
+					klog.Infof("Listening securely on %v for proxy endpoints", endpointsAddr)
 					tlsListener := tls.NewListener(proxyListener, srv.TLSConfig)
 					return proxyEndpointsSrv.Serve(tlsListener)
 				}, func(err error) {
