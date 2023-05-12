@@ -95,7 +95,9 @@ test-e2e:
 	go test -timeout 55m -v ./test/e2e/ $(TEST_RUN_ARGS) --kubeconfig=$(KUBECONFIG)
 
 test-local-setup: clean $(OUT_DIR)/$(BIN)-$(GOOS)-$(GOARCH) Dockerfile
-	docker build --build-arg BINARY=$(BIN)-$(GOOS)-$(GOARCH) --build-arg GOARCH=$(GOARCH) -t $(CONTAINER_NAME)-$(GOARCH) .
+	docker build --build-arg BINARY=$(BIN)-$(GOOS)-$(GOARCH) \
+	  --build-arg GOOS=$(GOOS) --build-arg GOARCH=$(GOARCH) \
+	  -t $(CONTAINER_NAME)-$(GOARCH) .
 	docker tag $(DOCKER_REPO):$(VERSION)-$(GOARCH) $(DOCKER_REPO):local
 
 test-local: test-local-setup kind-create-cluster test
