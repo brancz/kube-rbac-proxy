@@ -90,7 +90,13 @@ that can perform RBAC authorization against the Kubernetes API using SubjectAcce
 				return utilerrors.NewAggregate(errs)
 			}
 
-			return Run(completedOptions)
+			// create the KubeRBACProxyConfig based on the completed options
+			proxyCfg, err := completedOptions.ProxyConfig()
+			if err != nil {
+				return err
+			}
+
+			return Run(proxyCfg)
 		},
 		Args: cobra.NoArgs,
 	}
@@ -125,6 +131,40 @@ func (o *completedProxyRunOptions) Validate() []error {
 	return errs
 }
 
+func (opts *completedProxyRunOptions) ProxyConfig() (*server.KubeRBACProxyConfig, error) {
+	proxyConfig := server.NewConfig()
+	if err := opts.SecureServing.ApplyTo(&proxyConfig.SecureServing); err != nil {
+		return nil, err
+	}
+
+	if opts.ProxySecureServing != nil {
+		if err := opts.ProxySecureServing.ApplyTo(&proxyConfig.KubeRBACProxyInfo.ProxyEndpointsSecureServing); err != nil {
+			return nil, err
+		}
+	}
+	if err := opts.DelegatingAuthentication.ApplyTo(
+		proxyConfig.DelegatingAuthentication,
+		proxyConfig.SecureServing,
+		nil,
+	); err != nil {
+		return nil, err
+	}
+
+	if err := opts.DelegatingAuthorization.ApplyTo(proxyConfig.DelegatingAuthorization); err != nil {
+		return nil, err
+	}
+
+	if err := opts.ProxyOptions.ApplyTo(proxyConfig.KubeRBACProxyInfo, proxyConfig.DelegatingAuthentication); err != nil {
+		return nil, err
+	}
+
+	if err := opts.OIDCOptions.ApplyTo(proxyConfig.KubeRBACProxyInfo); err != nil {
+		return nil, err
+	}
+
+	return proxyConfig, nil
+}
+
 // Complete sets defaults for the ProxyRunOptions.
 // Should be called after the flags are parsed.
 func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
@@ -152,11 +192,7 @@ func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
 	return completed, nil
 }
 
-func Run(opts *completedProxyRunOptions) error {
-	cfg, err := createKubeRBACProxyConfig(opts)
-	if err != nil {
-		return err
-	}
+func Run(cfg *server.KubeRBACProxyConfig) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -234,40 +270,6 @@ func Run(opts *completedProxyRunOptions) error {
 	}
 
 	return nil
-}
-
-func createKubeRBACProxyConfig(opts *completedProxyRunOptions) (*server.KubeRBACProxyConfig, error) {
-	proxyConfig := server.NewConfig()
-	if err := opts.SecureServing.ApplyTo(&proxyConfig.SecureServing); err != nil {
-		return nil, err
-	}
-
-	if opts.ProxySecureServing != nil {
-		if err := opts.ProxySecureServing.ApplyTo(&proxyConfig.KubeRBACProxyInfo.ProxyEndpointsSecureServing); err != nil {
-			return nil, err
-		}
-	}
-	if err := opts.DelegatingAuthentication.ApplyTo(
-		proxyConfig.DelegatingAuthentication,
-		proxyConfig.SecureServing,
-		nil,
-	); err != nil {
-		return nil, err
-	}
-
-	if err := opts.DelegatingAuthorization.ApplyTo(proxyConfig.DelegatingAuthorization); err != nil {
-		return nil, err
-	}
-
-	if err := opts.ProxyOptions.ApplyTo(proxyConfig.KubeRBACProxyInfo, proxyConfig.DelegatingAuthentication); err != nil {
-		return nil, err
-	}
-
-	if err := opts.OIDCOptions.ApplyTo(proxyConfig.KubeRBACProxyInfo); err != nil {
-		return nil, err
-	}
-
-	return proxyConfig, nil
 }
 
 func secureServerRunner(
