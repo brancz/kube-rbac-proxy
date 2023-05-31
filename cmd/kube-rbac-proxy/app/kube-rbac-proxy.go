@@ -92,14 +92,7 @@ that can perform RBAC authorization against the Kubernetes API using SubjectAcce
 
 			return Run(completedOptions)
 		},
-		Args: func(cmd *cobra.Command, args []string) error {
-			for _, arg := range args {
-				if len(arg) > 0 {
-					return fmt.Errorf("%q does not take any arguments, got %q", cmd.CommandPath(), args)
-				}
-			}
-			return nil
-		},
+		Args: cobra.NoArgs,
 	}
 
 	fs := cmd.Flags()
