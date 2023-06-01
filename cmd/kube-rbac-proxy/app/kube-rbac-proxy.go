@@ -24,8 +24,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/oklog/run"
@@ -46,7 +44,6 @@ import (
 	"k8s.io/component-base/logs"
 	"k8s.io/component-base/term"
 	"k8s.io/component-base/version/verflag"
-	"k8s.io/klog/v2"
 
 	"github.com/brancz/kube-rbac-proxy/cmd/kube-rbac-proxy/app/options"
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
@@ -193,8 +190,7 @@ func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
 }
 
 func Run(cfg *server.KubeRBACProxyConfig) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := serverconfig.SetupSignalContext()
 
 	var authenticator authenticator.Request
 	// If OIDC configuration provided, use oidc authenticator
@@ -256,17 +252,6 @@ func Run(cfg *server.KubeRBACProxyConfig) error {
 
 			gr.Add(secureServerRunner(ctx, cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing, proxyEndpointsMux))
 		}
-	}
-	{
-		sig := make(chan os.Signal, 1)
-		gr.Add(func() error {
-			signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-			<-sig
-			klog.Info("received interrupt, shutting down")
-			return nil
-		}, func(err error) {
-			close(sig)
-		})
 	}
 
 	if err := gr.Run(); err != nil {
