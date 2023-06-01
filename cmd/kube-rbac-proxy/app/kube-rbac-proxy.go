@@ -236,6 +236,7 @@ func Run(cfg *server.KubeRBACProxyConfig) error {
 	handler := identityheaders.WithAuthHeaders(proxy, cfg.KubeRBACProxyInfo.UpstreamHeaders)
 	handler = kubefilters.WithAuthorization(handler, authz, scheme.Codecs)
 	handler = kubefilters.WithAuthentication(handler, authenticator, http.HandlerFunc(filters.UnauthorizedHandler), cfg.DelegatingAuthentication.APIAudiences)
+	// passing an empty RequestInfoFactory results in attaching a non-resource RequestInfo to the context
 	handler = kubefilters.WithRequestInfo(handler, &request.RequestInfoFactory{})
 	handler = rewrite.WithKubeRBACProxyParamsHandler(handler, cfg.KubeRBACProxyInfo.Authorization.RewriteAttributesConfig)
 
@@ -244,9 +245,12 @@ func Run(cfg *server.KubeRBACProxyConfig) error {
 
 	gr := &run.Group{}
 	{
+		// listener for proxying HTTPS with authentication and authorization (on port --secure-port)
 		gr.Add(secureServerRunner(ctx, cfg.SecureServing, mux))
 
 		if cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing != nil {
+			// we need a second listener in order to serve proxy-specific endpoints
+			// on a different port (--proxy-endpoints-port)
 			proxyEndpointsMux := http.NewServeMux()
 			proxyEndpointsMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
 
