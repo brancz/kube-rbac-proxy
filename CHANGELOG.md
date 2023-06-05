@@ -1,3 +1,7 @@
+## 0.14.2 / 2023-06-05
+
+- [ENHANCEMENT] bump dependencies
+
 ## 0.14.1 / 2023-04-06
 
 - [ENHANCEMENT] bump dependencies
