@@ -26,11 +26,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/oklog/run"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/http2"
 
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	waitgroup "k8s.io/apimachinery/pkg/util/waitgroup"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	"k8s.io/apiserver/pkg/authorization/union"
@@ -44,6 +44,7 @@ import (
 	"k8s.io/component-base/logs"
 	"k8s.io/component-base/term"
 	"k8s.io/component-base/version/verflag"
+	"k8s.io/klog/v2"
 
 	"github.com/brancz/kube-rbac-proxy/cmd/kube-rbac-proxy/app/options"
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
@@ -236,55 +237,60 @@ func Run(cfg *server.KubeRBACProxyConfig) error {
 	handler = kubefilters.WithRequestInfo(handler, &request.RequestInfoFactory{})
 	handler = rewrite.WithKubeRBACProxyParamsHandler(handler, cfg.KubeRBACProxyInfo.Authorization.RewriteAttributesConfig)
 
+	var wg waitgroup.SafeWaitGroup
+	serverCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// listener for proxying HTTPS with authentication and authorization (on port --secure-port)
 	mux := http.NewServeMux()
 	mux.Handle("/", handler)
 
-	gr := &run.Group{}
-	{
-		// listener for proxying HTTPS with authentication and authorization (on port --secure-port)
-		gr.Add(secureServerRunner(ctx, cfg.SecureServing, mux))
-
-		if cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing != nil {
-			// we need a second listener in order to serve proxy-specific endpoints
-			// on a different port (--proxy-endpoints-port)
-			proxyEndpointsMux := http.NewServeMux()
-			proxyEndpointsMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
-
-			gr.Add(secureServerRunner(ctx, cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing, proxyEndpointsMux))
-		}
+	if err := wg.Add(1); err != nil {
+		return err
 	}
 
-	if err := gr.Run(); err != nil {
-		return fmt.Errorf("failed to run groups: %w", err)
-	}
+	go func() {
+		defer wg.Done()
+		defer cancel()
 
-	return nil
-}
-
-func secureServerRunner(
-	ctx context.Context,
-	config *serverconfig.SecureServingInfo,
-	handler http.Handler,
-) (func() error, func(error)) {
-	serverStopCtx, serverCtxCancel := context.WithCancel(ctx)
-
-	runner := func() error {
-		stoppedCh, listenerStoppedCh, err := config.Serve(handler, 10*time.Second, serverStopCtx.Done())
+		stoppedCh, listenerStoppedCh, err := cfg.SecureServing.Serve(mux, 10*time.Second, serverCtx.Done())
 		if err != nil {
-			serverCtxCancel()
-			return err
+			klog.Errorf("%v", err)
+			return
 		}
 
 		<-listenerStoppedCh
 		<-stoppedCh
-		return err
+	}()
+
+	if cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing != nil {
+		// we need a second listener in order to serve proxy-specific endpoints
+		// on a different port (--proxy-endpoints-port)
+		proxyEndpointsMux := http.NewServeMux()
+		proxyEndpointsMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
+
+		if err := wg.Add(1); err != nil {
+			return err
+		}
+
+		go func() {
+			defer wg.Done()
+			defer cancel()
+
+			stoppedCh, listenerStoppedCh, err := cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing.Serve(proxyEndpointsMux, 10*time.Second, serverCtx.Done())
+			if err != nil {
+				klog.Errorf("%v", err)
+				return
+			}
+
+			<-listenerStoppedCh
+			<-stoppedCh
+		}()
 	}
 
-	interrupter := func(err error) {
-		serverCtxCancel()
-	}
+	wg.Wait()
 
-	return runner, interrupter
+	return nil
 }
 
 func setupAuthorizer(krbInfo *server.KubeRBACProxyInfo, delegatedAuthz *serverconfig.AuthorizationInfo) (authorizer.Authorizer, error) {
