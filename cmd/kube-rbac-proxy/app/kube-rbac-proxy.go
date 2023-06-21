@@ -293,27 +293,58 @@ func Run(cfg *server.KubeRBACProxyConfig) error {
 	return nil
 }
 
+// setupAuthorizer runs different authorization checks based on the configuration.
 func setupAuthorizer(krbInfo *server.KubeRBACProxyInfo, delegatedAuthz *serverconfig.AuthorizationInfo) (authorizer.Authorizer, error) {
-	staticAuthorizer, err := static.NewStaticAuthorizer(krbInfo.Authorization.Static)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create static authorizer: %w", err)
+	// pathAuthorizer is running before any other authorizer.
+	// It works outside of the default authorizers.
+	var pathAuthorizer authorizer.Authorizer
+
+	// AllowPaths denies access to paths that are not listed.
+	// IgnorePaths doesn't auth(n/z) paths that are listed.
+	switch {
+	case len(krbInfo.AllowPaths) > 0:
+		pathAuthorizer = path.NewAllowPathAuthorizer(krbInfo.AllowPaths)
+	case len(krbInfo.IgnorePaths) > 0:
+		pathAuthorizer = path.NewAlwaysAllowPathAuthorizer(krbInfo.IgnorePaths)
 	}
 
-	var authz authorizer.Authorizer = rewrite.NewRewritingAuthorizer(
-		union.New(
-			staticAuthorizer,
-			delegatedAuthz.Authorizer,
-		),
-		krbInfo.Authorization.RewriteAttributesConfig,
+	// Delegated authorizers are running after the pathAuthorizer
+	// and after the attributes have been rewritten.
+	var delegated []authorizer.Authorizer
+	// Static authorization authorizes against a static file is ran before the SubjectAccessReview.
+	if krbInfo.Authorization.Static != nil {
+		staticAuthorizer, err := static.NewStaticAuthorizer(krbInfo.Authorization.Static)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create static authorizer: %w", err)
+		}
+
+		delegated = append(delegated, staticAuthorizer)
+	}
+	delegated = append(delegated, delegatedAuthz.Authorizer)
+
+	// Rewriting attributes such that they fit the given use-case.
+	var attrsGenerator rewrite.AttributesGenerator
+	switch {
+	case krbInfo.Authorization.ResourceAttributes != nil && krbInfo.Authorization.Rewrites == nil:
+		attrsGenerator = rewrite.NewResourceAttributesGenerator(
+			krbInfo.Authorization.ResourceAttributes,
+		)
+	case krbInfo.Authorization.ResourceAttributes != nil && krbInfo.Authorization.Rewrites != nil:
+		attrsGenerator = rewrite.NewTemplatedResourceAttributesGenerator(
+			krbInfo.Authorization.ResourceAttributes,
+		)
+	default:
+		attrsGenerator = &rewrite.NonResourceAttributesGenerator{}
+	}
+
+	rewritingAuthorizer := rewrite.NewRewritingAuthorizer(
+		union.New(delegated...),
+		attrsGenerator,
 	)
 
-	if allowPaths := krbInfo.AllowPaths; len(allowPaths) > 0 {
-		authz = union.New(path.NewAllowPathAuthorizer(allowPaths), authz)
+	if pathAuthorizer != nil {
+		return union.New(pathAuthorizer, rewritingAuthorizer), nil
 	}
 
-	if ignorePaths := krbInfo.IgnorePaths; len(ignorePaths) > 0 {
-		authz = union.New(path.NewAlwaysAllowPathAuthorizer(ignorePaths), authz)
-	}
-
-	return authz, nil
+	return rewritingAuthorizer, nil
 }

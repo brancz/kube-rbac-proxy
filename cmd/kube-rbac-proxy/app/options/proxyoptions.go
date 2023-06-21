@@ -30,6 +30,7 @@ import (
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn/identityheaders"
 	authz "github.com/brancz/kube-rbac-proxy/pkg/authorization"
+	"github.com/brancz/kube-rbac-proxy/pkg/authorization/rewrite"
 	"github.com/brancz/kube-rbac-proxy/pkg/server"
 )
 
@@ -146,6 +147,12 @@ func parseAuthorizationConfigFile(filePath string) (*authz.AuthzConfig, error) {
 
 	if err := yaml.Unmarshal(b, &configFile); err != nil {
 		return nil, fmt.Errorf("failed to parse config file content: %w", err)
+	}
+
+	// If RewriteAttributesConfig is not set, set it to an empty config.
+	// This is to avoid nil plenty of pointer dereference checks further down.
+	if configFile.AuthorizationConfig.RewriteAttributesConfig == nil {
+		configFile.AuthorizationConfig.RewriteAttributesConfig = &rewrite.RewriteAttributesConfig{}
 	}
 
 	return configFile.AuthorizationConfig, nil
