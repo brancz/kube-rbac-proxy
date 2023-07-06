@@ -39,7 +39,7 @@ $(OUT_DIR)/$(BIN)-%:
 	@echo ">> building for $(GOOS)/$(GOARCH) to $(OUT_DIR)/$(BIN)-$*"
 	GOARCH=$(word 2,$(subst -, ,$(*:.exe=))) \
 	GOOS=$(word 1,$(subst -, ,$(*:.exe=))) \
-	CGO_ENABLED=0 \
+	CGO_ENABLED=1 \
 	go build --installsuffix cgo -o $(OUT_DIR)/$(BIN)-$* $(GITHUB_URL)
 
 build: $(OUT_DIR)/$(BIN)
