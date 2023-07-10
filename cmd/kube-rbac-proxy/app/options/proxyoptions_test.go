@@ -104,6 +104,7 @@ func Test_parseAuthorizationConfigFile(t *testing.T) {
 						Path:            "/metrics",
 					},
 				},
+				RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{},
 			},
 		},
 	}
