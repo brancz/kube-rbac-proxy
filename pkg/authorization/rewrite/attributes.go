@@ -47,25 +47,25 @@ func (d *NonResourceAttributesGenerator) Generate(ctx context.Context, attr auth
 	}
 }
 
-// BoundAttributesGenerator uses the given attributes' user and http verb and
-// verifies its authorization against a predefined kubernetes resource. The
+// ResourceAttributesGenerator uses the given attributes' user, http verb and
+// verifies its authorization against a static kubernetes resource. The
 // authorization is bound to that given kubernetes resource.
-type BoundAttributesGenerator struct {
+type ResourceAttributesGenerator struct {
 	attributes *ResourceAttributes
 }
 
-var _ AttributesGenerator = &BoundAttributesGenerator{}
+var _ AttributesGenerator = &ResourceAttributesGenerator{}
 
 // NewResourceAttributesGenerator creates a BoundAttributesGenerator.
-func NewResourceAttributesGenerator(attributes *ResourceAttributes) *BoundAttributesGenerator {
-	return &BoundAttributesGenerator{
+func NewResourceAttributesGenerator(attributes *ResourceAttributes) *ResourceAttributesGenerator {
+	return &ResourceAttributesGenerator{
 		attributes: attributes,
 	}
 }
 
-// Generate maps the given attributes user and verb to a predefined kubernetes
+// Generate maps the given attributes user and verb to a static kubernetes
 // resource.
-func (b *BoundAttributesGenerator) Generate(ctx context.Context, attr authorizer.Attributes) []authorizer.Attributes {
+func (b *ResourceAttributesGenerator) Generate(ctx context.Context, attr authorizer.Attributes) []authorizer.Attributes {
 	return []authorizer.Attributes{
 		authorizer.AttributesRecord{
 			User:            attr.GetUser(),
@@ -81,12 +81,12 @@ func (b *BoundAttributesGenerator) Generate(ctx context.Context, attr authorizer
 	}
 }
 
-// RewritingAttributesGenerator uses the given attributes' user and http verb
+// TemplatedResourceAttributesGenerator uses the given attributes' user and http verb
 // and verifies its authorization against a predefined kubernetes resource
 // template. The template is rewritting using client input data, which is VERY
 // DANGEROUS. It should only be used in a narrow use-case, where the upstream
 // is interpreting the input data as well.
-type RewritingAttributesGenerator struct {
+type TemplatedResourceAttributesGenerator struct {
 	attributes *ResourceAttributes
 
 	namespace   *template.Template
@@ -97,11 +97,11 @@ type RewritingAttributesGenerator struct {
 	name        *template.Template
 }
 
-var _ AttributesGenerator = &RewritingAttributesGenerator{}
+var _ AttributesGenerator = &TemplatedResourceAttributesGenerator{}
 
 // NewTemplatedResourceAttributesGenerator returns a RewritingAttributesGenerator.
-func NewTemplatedResourceAttributesGenerator(attributes *ResourceAttributes) *RewritingAttributesGenerator {
-	return &RewritingAttributesGenerator{
+func NewTemplatedResourceAttributesGenerator(attributes *ResourceAttributes) *TemplatedResourceAttributesGenerator {
+	return &TemplatedResourceAttributesGenerator{
 		attributes: attributes,
 
 		namespace:   template.Must(template.New("namespace").Parse(attributes.Namespace)),
@@ -117,7 +117,7 @@ func NewTemplatedResourceAttributesGenerator(attributes *ResourceAttributes) *Re
 // resource template. The template is rewritting using client input data, which
 // is VERY DANGEROUS. It should only be used in a narrow use-case, where the
 // upstream is interpreting the input data as well.
-func (r *RewritingAttributesGenerator) Generate(ctx context.Context, attr authorizer.Attributes) []authorizer.Attributes {
+func (r *TemplatedResourceAttributesGenerator) Generate(ctx context.Context, attr authorizer.Attributes) []authorizer.Attributes {
 	params := getKubeRBACProxyParams(ctx)
 	if len(params) == 0 {
 		return nil
