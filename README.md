@@ -18,6 +18,10 @@ To get kube-rbac-proxy accepted as an official Kubernetes SIG Auth repository, w
 - `--insecure-listen-addres` - the proxy is handling authentication information and will no longer run in an unsafe mode
 - `--auth-header-fields-enabled` - its value is derived from at least one of `--auth-header-groups-field-name` or `--auth-header-user-field-name` being set
 - `--tls-reload-interval` - upstream Kubernetes TLS material is now being reloaded by Kubernetes upstream code which chooses its own reasonable defaults
+- **infix regex** for `--allow-paths` and `--ignore-paths` - the proxy now uses postfix matching with `*` as its sole wildcard operator, instead of infix matching with different wildcard operators:
+  - `/api/v1/*` matches now `/api/v1`, `/api/v1/foo` and `/api/v1/foo/bar`, **previously** it didn't match `/api/v1/foo/bar`.
+  - `/api/v1/*/values` creates an error on server startup, **previously** it matched `/api/v1/foo/values` and `/api/v1/bar/values`.
+  - details: [Allow Path and Ignore Path changes](docs/path.md)
 
 #### Replaced:
 - `--kubeconfig` - use `--authentication-kubeconfig` and `--authorization-kubeconfig` instead
