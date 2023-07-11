@@ -32,6 +32,8 @@ func WithKubeRBACProxyParamsHandler(handler http.Handler, config *RewriteAttribu
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// If config.Rewrites is defined, the client input is used to rewrite the
+		// attributes, according to the templates defined in configuration.
 		r = r.WithContext(WithKubeRBACProxyParams(
 			r.Context(),
 			requestToParams(config, r),
