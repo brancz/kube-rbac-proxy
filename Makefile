@@ -42,7 +42,7 @@ $(OUT_DIR)/$(PROGRAM_NAME)-%:
 	GOARCH=$(word 2,$(subst -, ,$(*:.exe=))) \
 	GOOS=$(word 1,$(subst -, ,$(*:.exe=))) \
 	CGO_ENABLED=0 \
-	go build --installsuffix cgo -o $(OUT_DIR)/$(PROGRAM_NAME)-$* $(GITHUB_URL)/cmd/kube-rbac-proxy
+	go build --installsuffix cgo -ldflags="-X k8s.io/component-base/version.gitVersion=$(VERSION) -X k8s.io/component-base/version.gitCommit=$(shell git rev-parse HEAD) -X k8s.io/component-base/version/verflag.programName=$(PROGRAM_NAME)" -o $(OUT_DIR)/$(PROGRAM_NAME)-$* $(GITHUB_URL)/cmd/kube-rbac-proxy
 
 clean:
 	-rm -r $(OUT_DIR)
