@@ -1,3 +1,8 @@
+## 0.14.3 / 2023-09-07
+
+- [BUGFIX] `--version` returns now the proper kube-rbac-proxy version
+- [ENHANCEMENT] bump dependencies
+
 ## 0.14.2 / 2023-06-05
 
 - [ENHANCEMENT] bump dependencies
