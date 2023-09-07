@@ -71,7 +71,7 @@ jobs:
         go-version: ${{ env.go-version }}
     - name: Create container & run tests
       run: |
-        VERSION=local make container
+        DOCKER_TAG=local make container
         kind load docker-image ${QUAY_PATH}:local
         until docker exec $(kind get nodes) crictl images | grep "${QUAY_PATH}"; do
           echo "no kube-rbac-proxy image"

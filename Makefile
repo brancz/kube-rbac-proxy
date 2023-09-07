@@ -3,20 +3,21 @@ all: check-license build generate test
 GO111MODULE=on
 export GO111MODULE
 
+PROGRAM_NAME?=kube-rbac-proxy
 GITHUB_URL=github.com/brancz/kube-rbac-proxy
 GOOS?=$(shell uname -s | tr A-Z a-z)
 GOARCH?=$(shell go env GOARCH)
 OUT_DIR=_output
-BIN?=kube-rbac-proxy
-VERSION?=$(shell cat VERSION)-$(shell git rev-parse --short HEAD)
+VERSION=$(shell cat VERSION)
+DOCKER_TAG?=$(VERSION)-$(shell git rev-parse --short HEAD)
 PKGS=$(shell go list ./... | grep -v /test/e2e)
 DOCKER_REPO?=quay.io/brancz/kube-rbac-proxy
 KUBECONFIG?=$(HOME)/.kube/config
-CONTAINER_NAME?=$(DOCKER_REPO):$(VERSION)
+CONTAINER_NAME?=$(DOCKER_REPO):$(DOCKER_TAG)
 
 ALL_ARCH=amd64 arm arm64 ppc64le s390x
 ALL_PLATFORMS=$(addprefix linux/,$(ALL_ARCH))
-ALL_BINARIES ?= $(addprefix $(OUT_DIR)/$(BIN)-, \
+ALL_BINARIES ?= $(addprefix $(OUT_DIR)/$(PROGRAM_NAME)-, \
 				$(addprefix linux-,$(ALL_ARCH)) \
 				darwin-amd64 \
 				windows-amd64.exe)
@@ -33,20 +34,20 @@ check-license:
 
 crossbuild: $(ALL_BINARIES)
 
-$(OUT_DIR)/$(BIN): $(OUT_DIR)/$(BIN)-$(GOOS)-$(GOARCH)
-	cp $(OUT_DIR)/$(BIN)-$(GOOS)-$(GOARCH) $(OUT_DIR)/$(BIN)
+$(OUT_DIR)/$(PROGRAM_NAME): $(OUT_DIR)/$(PROGRAM_NAME)-$(GOOS)-$(GOARCH)
+	cp $(OUT_DIR)/$(PROGRAM_NAME)-$(GOOS)-$(GOARCH) $(OUT_DIR)/$(PROGRAM_NAME)
 
-$(OUT_DIR)/$(BIN)-%:
-	@echo ">> building for $(GOOS)/$(GOARCH) to $(OUT_DIR)/$(BIN)-$*"
+$(OUT_DIR)/$(PROGRAM_NAME)-%:
+	@echo ">> building for $(GOOS)/$(GOARCH) to $(OUT_DIR)/$(PROGRAM_NAME)-$*"
 	GOARCH=$(word 2,$(subst -, ,$(*:.exe=))) \
 	GOOS=$(word 1,$(subst -, ,$(*:.exe=))) \
 	CGO_ENABLED=0 \
-	go build --installsuffix cgo -o $(OUT_DIR)/$(BIN)-$* $(GITHUB_URL)/cmd/kube-rbac-proxy
+	go build --installsuffix cgo -ldflags="-X k8s.io/component-base/version.gitVersion=$(VERSION) -X k8s.io/component-base/version.gitCommit=$(shell git rev-parse HEAD) -X k8s.io/component-base/version/verflag.programName=$(PROGRAM_NAME)" -o $(OUT_DIR)/$(PROGRAM_NAME)-$* $(GITHUB_URL)/cmd/kube-rbac-proxy
 
 clean:
 	-rm -r $(OUT_DIR)
 
-build: clean $(OUT_DIR)/$(BIN)
+build: clean $(OUT_DIR)/$(PROGRAM_NAME)
 
 update-go-deps:
 	@for m in $$(go list -mod=readonly -m -f '{{ if and (not .Indirect) (not .Main)}}{{.Path}}{{end}}' all); do \
@@ -54,10 +55,10 @@ update-go-deps:
 	done
 	go mod tidy
 
-container: $(OUT_DIR)/$(BIN)-$(GOOS)-$(GOARCH) Dockerfile
-	docker build --build-arg BINARY=$(BIN)-$(GOOS)-$(GOARCH) --build-arg GOARCH=$(GOARCH) -t $(CONTAINER_NAME)-$(GOARCH) .
+container: $(OUT_DIR)/$(PROGRAM_NAME)-$(GOOS)-$(GOARCH) Dockerfile
+	docker build --build-arg BINARY=$(PROGRAM_NAME)-$(GOOS)-$(GOARCH) --build-arg GOARCH=$(GOARCH) -t $(CONTAINER_NAME)-$(GOARCH) .
 ifeq ($(GOARCH), amd64)
-	docker tag $(DOCKER_REPO):$(VERSION)-$(GOARCH) $(CONTAINER_NAME)
+	docker tag $(DOCKER_REPO):$(DOCKER_TAG)-$(GOARCH) $(CONTAINER_NAME)
 endif
 
 manifest-tool:
@@ -66,13 +67,13 @@ manifest-tool:
 
 push-%:
 	$(MAKE) GOARCH=$* container
-	docker push $(DOCKER_REPO):$(VERSION)-$*
+	docker push $(DOCKER_REPO):$(DOCKER_TAG)-$*
 
 comma:= ,
 empty:=
 space:= $(empty) $(empty)
 manifest-push: manifest-tool
-	./manifest-tool push from-args --platforms $(subst $(space),$(comma),$(ALL_PLATFORMS)) --template $(DOCKER_REPO):$(VERSION)-ARCH --target $(DOCKER_REPO):$(VERSION)
+	./manifest-tool push from-args --platforms $(subst $(space),$(comma),$(ALL_PLATFORMS)) --template $(DOCKER_REPO):$(DOCKER_TAG)-ARCH --target $(DOCKER_REPO):$(DOCKER_TAG)
 
 push: crossbuild manifest-tool $(addprefix push-,$(ALL_ARCH)) manifest-push
 
@@ -94,20 +95,16 @@ test-unit:
 test-e2e:
 	go test -timeout 55m -v ./test/e2e/ $(TEST_RUN_ARGS) --kubeconfig=$(KUBECONFIG)
 
-test-local-setup: clean $(OUT_DIR)/$(BIN)-$(GOOS)-$(GOARCH) Dockerfile
-	docker build --build-arg BINARY=$(BIN)-$(GOOS)-$(GOARCH) \
-	  --build-arg GOOS=$(GOOS) --build-arg GOARCH=$(GOARCH) \
-	  -t $(CONTAINER_NAME)-$(GOARCH) .
-	docker tag $(DOCKER_REPO):$(VERSION)-$(GOARCH) $(DOCKER_REPO):local
-
-test-local: test-local-setup kind-create-cluster test
+test-local-setup: DOCKER_TAG = local
+test-local-setup: clean container kind-create-cluster
+test-local: test-local-setup test
 
 kind-delete-cluster:
 	kind delete cluster
 
 kind-create-cluster: kind-delete-cluster
 	kind create cluster --config ./test/e2e/kind-config/kind-config.yaml
-	kind load docker-image $(DOCKER_REPO):local
+	kind load docker-image $(CONTAINER_NAME)
 
 generate: build $(EMBEDMD_BINARY)
 	@echo ">> generating examples"
