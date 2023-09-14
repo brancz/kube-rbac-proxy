@@ -67,7 +67,11 @@ manifest-tool:
 
 push-%:
 	$(MAKE) GOARCH=$* container
+ifeq ($(GOARCH), amd64)
+	docker push $(DOCKER_REPO):$(DOCKER_TAG)
+else
 	docker push $(DOCKER_REPO):$(DOCKER_TAG)-$*
+endif
 
 comma:= ,
 empty:=
