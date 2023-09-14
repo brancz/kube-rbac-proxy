@@ -10,7 +10,7 @@ set -x
 
 # github actions, by default, fetches using `--no-tags`.
 # we need tags though to create a release version string.
-git fetch --tags
+git fetch --tags --force
 
 QUAY_PATH="${QUAY_PATH:-quay.io/brancz/kube-rbac-proxy}"
 CPU_ARCHS="amd64 arm64 arm ppc64le s390x"
