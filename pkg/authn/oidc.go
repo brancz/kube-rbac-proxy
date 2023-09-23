@@ -31,12 +31,20 @@ type OIDCAuthenticator struct {
 	requestAuthenticator authenticator.Request
 }
 
+const (
+	trustedHostCABundle = "/etc/ssl/certs/ca-certificates.crt"
+)
+
 var (
 	_ (authenticator.Request) = (*OIDCAuthenticator)(nil)
 )
 
 // NewOIDCAuthenticator returns OIDC authenticator
 func NewOIDCAuthenticator(config *OIDCConfig) (*OIDCAuthenticator, error) {
+	if config.CAFile == "" {
+		//If the CA file is empty, it shall default to the host system trusted ca bundle
+		config.CAFile = trustedHostCABundle
+	}
 	dyCA, err := dynamiccertificates.NewDynamicCAContentFromFile("oidc-ca", config.CAFile)
 	if err != nil {
 		return nil, err
