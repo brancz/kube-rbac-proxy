@@ -1,4 +1,4 @@
-FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.20-openshift-4.14 AS builder
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.20-openshift-4.15 AS builder
 WORKDIR /go/src/github.com/brancz/kube-rbac-proxy
 COPY . .
 ENV GO111MODULE=on
@@ -7,7 +7,7 @@ ENV GOFLAGS="-mod=vendor"
 RUN make build && \
     cp _output/kube-rbac-proxy-$(go env GOOS)-$(go env GOARCH) _output/kube-rbac-proxy
 
-FROM registry.ci.openshift.org/ocp/4.14:base
+FROM registry.ci.openshift.org/ocp/4.15:base
 LABEL io.k8s.display-name="kube-rbac-proxy" \
       io.k8s.description="This is a proxy, that can perform Kubernetes RBAC authorization." \
       io.openshift.tags="openshift,kubernetes" \
