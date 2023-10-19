@@ -105,4 +105,5 @@ require (
 replace (
 	github.com/emicklei/go-restful/v3 => github.com/emicklei/go-restful/v3 v3.11.0
 	go.etcd.io/etcd/client/v3 => go.etcd.io/etcd/client/v3 v3.5.9 // indirect
+	go.opentelemetry.io/contrib/instrumentation => go.opentelemetry.io/contrib/instrumentation v0.44.0
 )
