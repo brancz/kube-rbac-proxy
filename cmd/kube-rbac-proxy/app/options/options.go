@@ -41,6 +41,10 @@ type ProxyRunOptions struct {
 	KubeconfigLocation string
 	AllowPaths         []string
 	IgnorePaths        []string
+
+	HTTP2Disable              bool
+	HTTP2MaxConcurrentStreams uint32
+	HTTP2MaxSize              uint32
 }
 
 type TLSConfig struct {
@@ -112,6 +116,11 @@ func (o *ProxyRunOptions) Flags() k8sapiflag.NamedFlagSets {
 
 	//Kubeconfig flag
 	flagset.StringVar(&o.KubeconfigLocation, "kubeconfig", "", "Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used")
+
+	// HTTP2 flags
+	flagset.BoolVar(&o.HTTP2Disable, "http2-disable", false, "Disable HTTP/2 support")
+	flagset.Uint32Var(&o.HTTP2MaxConcurrentStreams, "http2-max-concurrent-streams", 100, "The maximum number of concurrent streams per HTTP/2 connection.")
+	flagset.Uint32Var(&o.HTTP2MaxSize, "http2-max-size", 256*1024, "The maximum number of bytes that the server will accept for frame size and buffer per stream in a HTTP/2 request.")
 
 	return namedFlagSets
 }
