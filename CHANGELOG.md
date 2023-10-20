@@ -1,3 +1,11 @@
+## 0.15.0 / 2023-10-20
+
+- [ENHANCEMENT] bump opentelemetry to fix CVE
+- [ENHANCEMENT] add option to disable HTTP/2: `--http2-disable` (default: `false`)
+- [ENHANCEMENT] add option to fine-tune HTTP/2:
+    - `--http2-max-size` (default: 256kb)
+    - `--http2-max-concurrent-streams` (default: 100)
+
 ## 0.14.4 / 2023-10-16
 
 - [ENHANCEMENT] bump golang and x/net
