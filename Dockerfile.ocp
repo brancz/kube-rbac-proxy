@@ -4,7 +4,7 @@ COPY . .
 ENV GO111MODULE=on
 # GOFLAGS is needed to build image without accessing external sources, mostly to comply with ART policies
 ENV GOFLAGS="-mod=vendor"
-RUN make build && \
+RUN GITHUB_URL=github.com/openshift/kube-rbac-proxy VERSION=$(cat VERSION) make build && \
     cp _output/kube-rbac-proxy-$(go env GOOS)-$(go env GOARCH) _output/kube-rbac-proxy
 
 FROM registry.ci.openshift.org/ocp/4.15:base
