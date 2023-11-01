@@ -63,7 +63,7 @@ spec:
       serviceAccountName: kube-rbac-proxy
       containers:
       - name: kube-rbac-proxy
-        image: docker.io/tetrate//kube-rbac-proxy:KUBE_RBAC_PROXY_VERSION
+        image: docker.io/tetrate/kube-rbac-proxy:KUBE_RBAC_PROXY_VERSION
         args:
         - "--secure-listen-address=0.0.0.0:8443"
         - "--upstream=http://127.0.0.1:8081/"
