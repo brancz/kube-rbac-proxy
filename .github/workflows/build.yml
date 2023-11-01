@@ -115,7 +115,6 @@ jobs:
       - generate
       - build
       - unit-tests
-      - e2e-tests
     steps:
       - name: Checkout
         uses: actions/checkout@v2
