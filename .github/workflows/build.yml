@@ -9,13 +9,21 @@ env:
 
 jobs:
   check-license:
-    runs-on: ubuntu-latest
+    runs-on:
+      - linux
+      - arc
+      - x64
+      - self-hosted
     name: Check license
     steps:
     - uses: actions/checkout@v2
     - run: make check-license
   generate:
-    runs-on: ubuntu-latest
+    runs-on:
+      - linux
+      - arc
+      - x64
+      - self-hosted
     name: Generate
     steps:
     - uses: actions/checkout@v2
@@ -24,7 +32,11 @@ jobs:
         go-version: ${{ env.go-version }}
     - run: make generate && git diff --exit-code
   lint:
-    runs-on: ubuntu-latest
+    runs-on:
+      - linux
+      - arc
+      - x64
+      - self-hosted
     name: Lint
     steps:
     - uses: actions/checkout@v2
@@ -34,7 +46,11 @@ jobs:
         version: latest
         args: --timeout=5m
   build:
-    runs-on: ubuntu-latest
+    runs-on:
+      - linux
+      - arc
+      - x64
+      - self-hosted
     name: Build
     steps:
     - uses: actions/checkout@v2
@@ -43,7 +59,11 @@ jobs:
         go-version: ${{ env.go-version }}
     - run: make build
   unit-tests:
-    runs-on: ubuntu-latest
+    runs-on:
+      - linux
+      - arc
+      - x64
+      - self-hosted
     name: Unit tests
     steps:
     - uses: actions/checkout@v2
@@ -52,7 +72,11 @@ jobs:
         go-version: ${{ env.go-version }}
     - run: make test-unit
   e2e-tests:
-    runs-on: ubuntu-latest
+    runs-on:
+      - linux
+      - arc
+      - x64
+      - self-hosted
     name: E2E tests
     steps:
     - name: Checkout repository
@@ -79,7 +103,11 @@ jobs:
         done
         make test-e2e
   publish:
-    runs-on: ubuntu-latest
+    runs-on:
+      - linux
+      - arc
+      - x64
+      - self-hosted
     name: Publish container image to Quay
     if: github.event_name == 'push'
     needs:
