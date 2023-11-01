@@ -9,21 +9,13 @@ env:
 
 jobs:
   check-license:
-    runs-on:
-      - linux
-      - arc
-      - x64
-      - self-hosted
+    runs-on: ubuntu-latest
     name: Check license
     steps:
     - uses: actions/checkout@v2
     - run: make check-license
   generate:
-    runs-on:
-      - linux
-      - arc
-      - x64
-      - self-hosted
+    runs-on: ubuntu-latest
     name: Generate
     steps:
     - uses: actions/checkout@v2
@@ -32,11 +24,7 @@ jobs:
         go-version: ${{ env.go-version }}
     - run: make generate && git diff --exit-code
   lint:
-    runs-on:
-      - linux
-      - arc
-      - x64
-      - self-hosted
+    runs-on: ubuntu-latest
     name: Lint
     steps:
     - uses: actions/checkout@v2
@@ -46,11 +34,7 @@ jobs:
         version: latest
         args: --timeout=5m
   build:
-    runs-on:
-      - linux
-      - arc
-      - x64
-      - self-hosted
+    runs-on: ubuntu-latest
     name: Build
     steps:
     - uses: actions/checkout@v2
@@ -59,11 +43,7 @@ jobs:
         go-version: ${{ env.go-version }}
     - run: make build
   unit-tests:
-    runs-on:
-      - linux
-      - arc
-      - x64
-      - self-hosted
+    runs-on: ubuntu-latest
     name: Unit tests
     steps:
     - uses: actions/checkout@v2
@@ -103,11 +83,7 @@ jobs:
         done
         make test-e2e
   publish:
-    runs-on:
-      - linux
-      - arc
-      - x64
-      - self-hosted
+    runs-on: ubuntu-latest
     name: Publish container image to Quay
     if: github.event_name == 'push'
     needs:
