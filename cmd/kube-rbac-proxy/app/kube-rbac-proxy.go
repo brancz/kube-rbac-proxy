@@ -434,7 +434,7 @@ func Run(cfg *completedProxyRunOptions) error {
 				srv.TLSConfig.NextProtos = []string{"http/1.1"}
 			} else {
 				if err := http2.ConfigureServer(srv, cfg.http2Options); err != nil {
-					return fmt.Errorf("failed to configure http2 server: %w", err)
+					return fmt.Errorf("failed to configure http2 server: %v", err)
 				}
 			}
 
@@ -442,7 +442,7 @@ func Run(cfg *completedProxyRunOptions) error {
 				klog.Infof("Starting TCP socket on %v", cfg.secureListenAddress)
 				l, err := net.Listen("tcp", cfg.secureListenAddress)
 				if err != nil {
-					return fmt.Errorf("failed to listen on secure address: %w", err)
+					return fmt.Errorf("failed to listen on secure address: %v", err)
 				}
 				defer l.Close()
 
@@ -451,7 +451,7 @@ func Run(cfg *completedProxyRunOptions) error {
 				return srv.Serve(tlsListener)
 			}, func(err error) {
 				if err := srv.Shutdown(context.Background()); err != nil {
-					klog.Errorf("failed to gracefully shutdown server: %w", err)
+					klog.Errorf("failed to gracefully shutdown server: %v", err)
 				}
 			})
 
@@ -499,7 +499,7 @@ func Run(cfg *completedProxyRunOptions) error {
 					return proxyEndpointsSrv.Serve(tlsListener)
 				}, func(err error) {
 					if err := proxyEndpointsSrv.Shutdown(context.Background()); err != nil {
-						klog.Errorf("failed to gracefully shutdown proxy endpoints server: %w", err)
+						klog.Errorf("failed to gracefully shutdown proxy endpoints server: %v", err)
 					}
 				})
 			}
@@ -524,10 +524,10 @@ func Run(cfg *completedProxyRunOptions) error {
 				return srv.Serve(l)
 			}, func(err error) {
 				if err := srv.Shutdown(context.Background()); err != nil {
-					klog.Errorf("failed to gracefully shutdown server: %w", err)
+					klog.Errorf("failed to gracefully shutdown server: %v", err)
 				}
 				if err := l.Close(); err != nil {
-					klog.Errorf("failed to gracefully close listener: %w", err)
+					klog.Errorf("failed to gracefully close listener: %v", err)
 				}
 			})
 		}

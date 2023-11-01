@@ -11,7 +11,7 @@ OUT_DIR=_output
 VERSION?=$(shell cat VERSION)-$(shell git rev-parse --short HEAD)
 VERSION_SEMVER?=$(shell echo $(VERSION) | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+')
 PKGS=$(shell go list ./... | grep -v /test/e2e)
-DOCKER_REPO?=quay.io/brancz/kube-rbac-proxy
+DOCKER_REPO?=docker.io/tetrate//kube-rbac-proxy
 KUBECONFIG?=$(HOME)/.kube/config
 CONTAINER_NAME?=$(DOCKER_REPO):$(VERSION)
 

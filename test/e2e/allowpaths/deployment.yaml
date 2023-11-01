@@ -16,7 +16,7 @@ spec:
       serviceAccountName: kube-rbac-proxy
       containers:
         - name: kube-rbac-proxy
-          image: quay.io/brancz/kube-rbac-proxy:local
+          image: docker.io/tetrate//kube-rbac-proxy:local
           args:
             - "--secure-listen-address=0.0.0.0:8443"
             - "--proxy-endpoints-port=8643"
