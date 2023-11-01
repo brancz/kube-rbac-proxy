@@ -3,7 +3,7 @@ name: Go
 on: [push, pull_request]
 
 env:
-  QUAY_PATH: quay.io/brancz/kube-rbac-proxy
+  QUAY_PATH: docker.io/tetrate/kube-rbac-proxy
   go-version: '1.21.3'
   kind-version: 'v0.20.0'
 
