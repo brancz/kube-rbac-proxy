@@ -298,14 +298,20 @@ func setupAuthorizer(krbInfo *server.KubeRBACProxyInfo, delegatedAuthz *serverco
 	// pathAuthorizer is running before any other authorizer.
 	// It works outside of the default authorizers.
 	var pathAuthorizer authorizer.Authorizer
-
-	// AllowPaths denies access to paths that are not listed.
-	// IgnorePaths doesn't auth(n/z) paths that are listed.
+	var err error
+	// AllowPaths are the only paths that are not denied.
+	// IgnorePaths bypass all authorization checks.
 	switch {
 	case len(krbInfo.AllowPaths) > 0:
-		pathAuthorizer = path.NewAllowPathAuthorizer(krbInfo.AllowPaths)
+		pathAuthorizer, err = path.NewAllowedPathsAuthorizer(krbInfo.AllowPaths)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create allow path authorizer: %w", err)
+		}
 	case len(krbInfo.IgnorePaths) > 0:
-		pathAuthorizer = path.NewAlwaysAllowPathAuthorizer(krbInfo.IgnorePaths)
+		pathAuthorizer, err = path.NewPassthroughAuthorizer(krbInfo.IgnorePaths)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create ignore path authorizer: %w", err)
+		}
 	}
 
 	// Delegated authorizers are running after the pathAuthorizer
