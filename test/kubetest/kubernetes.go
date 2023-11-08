@@ -41,7 +41,7 @@ import (
 func CreatedManifests(client kubernetes.Interface, paths ...string) Setup {
 	return func(ctx *ScenarioContext) error {
 		for _, path := range paths {
-			content, err := ioutil.ReadFile(path)
+			content, err := ioutil.ReadFile(path) // #nosec: G304 -- This is intended and unavoidable.
 			if err != nil {
 				return err
 			}
@@ -181,7 +181,7 @@ func dumpLogs(client kubernetes.Interface, ctx *ScenarioContext, opts metav1.Lis
 				return
 			}
 
-			io.Copy(os.Stdout, stream)
+			_, _ = io.Copy(os.Stdout, stream)
 		}
 	}
 }

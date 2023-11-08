@@ -32,7 +32,7 @@ func initTransport(upstreamCAFile string) (http.RoundTripper, error) {
 		return http.DefaultTransport, nil
 	}
 
-	rootPEM, err := ioutil.ReadFile(upstreamCAFile)
+	rootPEM, err := ioutil.ReadFile(upstreamCAFile) // #nosec: G304 -- This is intended and unavoidable.
 	if err != nil {
 		return nil, fmt.Errorf("error reading upstream CA file: %v", err)
 	}
@@ -54,7 +54,7 @@ func initTransport(upstreamCAFile string) (http.RoundTripper, error) {
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       &tls.Config{RootCAs: roots},
+		TLSClientConfig:       &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12},
 	}
 
 	return transport, nil

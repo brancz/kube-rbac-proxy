@@ -133,7 +133,7 @@ func main() {
 	//Kubeconfig flag
 	flagset.StringVar(&cfg.kubeconfigLocation, "kubeconfig", "", "Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used")
 
-	flagset.Parse(os.Args[1:])
+	_ = flagset.Parse(os.Args[1:])
 	kcfg := initKubeConfig(cfg.kubeconfigLocation)
 
 	upstreamURL, err := url.Parse(cfg.upstream)
@@ -242,7 +242,11 @@ func main() {
 	var gr run.Group
 	{
 		if cfg.secureListenAddress != "" {
-			srv := &http.Server{Handler: mux, TLSConfig: &tls.Config{}}
+			srv := &http.Server{
+				Handler:           mux,
+				TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
+				ReadHeaderTimeout: 5 * time.Second,
+			}
 
 			if cfg.tls.certFile == "" && cfg.tls.keyFile == "" {
 				klog.Info("Generating self signed cert as no cert is provided")
@@ -332,7 +336,10 @@ func main() {
 				}
 			}
 
-			srv := &http.Server{Handler: h2c.NewHandler(mux, &http2.Server{})}
+			srv := &http.Server{
+				Handler:           h2c.NewHandler(mux, &http2.Server{}),
+				ReadHeaderTimeout: 5 * time.Second,
+			}
 
 			l, err := net.Listen("tcp", cfg.insecureListenAddress)
 			if err != nil {

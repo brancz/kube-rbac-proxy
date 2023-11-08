@@ -23,13 +23,14 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/brancz/kube-rbac-proxy/pkg/authn"
-	"github.com/brancz/kube-rbac-proxy/pkg/authz"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/user"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
+
+	"github.com/brancz/kube-rbac-proxy/pkg/authn"
+	"github.com/brancz/kube-rbac-proxy/pkg/authz"
 )
 
 // Config holds proxy authorization and authentication settings
@@ -259,6 +260,6 @@ func (c *Config) DeepCopy() *Config {
 func templateWithValue(templateString, value string) string {
 	tmpl, _ := template.New("valueTemplate").Parse(templateString)
 	out := bytes.NewBuffer(nil)
-	tmpl.Execute(out, struct{ Value string }{Value: value})
+	_ = tmpl.Execute(out, struct{ Value string }{Value: value})
 	return out.String()
 }
