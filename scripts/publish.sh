@@ -12,7 +12,7 @@ set -x
 # we need tags though to create a release version string.
 git fetch --tags
 
-QUAY_PATH="${QUAY_PATH:-quay.io/brancz/kube-rbac-proxy}"
+QUAY_PATH="cbartifactory/kube-rbac-proxy"
 CPU_ARCHS="amd64 arm64 arm ppc64le s390x"
 TAG_COMMIT=$(git rev-list --abbrev-commit --tags --max-count=1)
 COMMIT=$(git rev-parse --short HEAD)

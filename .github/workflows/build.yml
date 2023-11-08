@@ -95,11 +95,11 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ env.go-version }}
-      - name: Login to Quay.io
+      - name: Login to DockerHub
         uses: docker/login-action@v1
         with:
           registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_PASSWORD }}
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
       - name: Build images and push
         run: ./scripts/publish.sh
