@@ -1,6 +1,7 @@
 ARG GOARCH=amd64
 ARG GOOS=linux
-FROM gcr.io/distroless/static:nonroot-$GOARCH
+ARG BASEIMAGE=gcr.io/distroless/static:nonroot-$GOARCH
+FROM $BASEIMAGE
 
 ARG BINARY=kube-rbac-proxy-$GOOS-$GOARCH
 COPY _output/$BINARY /usr/local/bin/kube-rbac-proxy
