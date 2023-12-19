@@ -7,6 +7,7 @@ PROGRAM_NAME?=kube-rbac-proxy
 GITHUB_URL=github.com/brancz/kube-rbac-proxy
 GOOS?=$(shell uname -s | tr A-Z a-z)
 GOARCH?=$(shell go env GOARCH)
+BASEIMAGE?=gcr.io/distroless/static:nonroot-$(GOARCH)
 OUT_DIR=_output
 VERSION?=$(shell cat VERSION)-$(shell git rev-parse --short HEAD)
 VERSION_SEMVER?=$(shell echo $(VERSION) | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+')
@@ -56,7 +57,7 @@ update-go-deps:
 	go mod tidy
 
 container: $(OUT_DIR)/$(PROGRAM_NAME)-$(GOOS)-$(GOARCH) Dockerfile
-	docker build --build-arg BINARY=$(PROGRAM_NAME)-$(GOOS)-$(GOARCH) --build-arg GOARCH=$(GOARCH) -t $(CONTAINER_NAME)-$(GOARCH) .
+	docker build --build-arg BINARY=$(PROGRAM_NAME)-$(GOOS)-$(GOARCH) --build-arg GOARCH=$(GOARCH) --build-arg BASEIMAGE=$(BASEIMAGE) -t $(CONTAINER_NAME)-$(GOARCH) .
 ifeq ($(GOARCH), amd64)
 	docker tag $(DOCKER_REPO):$(VERSION)-$(GOARCH) $(CONTAINER_NAME)
 endif
