@@ -20,8 +20,7 @@ spec:
           args:
             - "--secure-listen-address=0.0.0.0:8443"
             - "--upstream=http://127.0.0.1:8081/"
-            - "--ignore-paths=/metrics,/api/v1/*"
-            - "--http2-disable=true"
+            - "--logtostderr=true"
             - "--v=10"
           ports:
             - containerPort: 8443

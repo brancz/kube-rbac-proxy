@@ -108,6 +108,92 @@ func testBasics(client kubernetes.Interface) kubetest.TestSuite {
 	}
 }
 
+func testFlags(client kubernetes.Interface) kubetest.TestSuite {
+	return func(t *testing.T) {
+		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
+
+		kubetest.Scenario{
+			Name: "WithAllOtherDisabledFlags",
+			Description: `
+				This should succeed. Even though all flags are set for kube-rbac-proxy.
+				This implies deprecated flags that got disabled.
+			`,
+
+			Given: kubetest.Actions(
+				kubetest.CreatedManifests(
+					client,
+					"flags/clusterRole.yaml",
+					"flags/clusterRoleBinding.yaml",
+					"flags/deployment-other-flags.yaml",
+					"flags/service.yaml",
+					"flags/serviceAccount.yaml",
+					"flags/clusterRole-client.yaml",
+					"flags/clusterRoleBinding-client.yaml",
+				),
+			),
+			When: kubetest.Actions(
+				kubetest.PodsAreReady(
+					client,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					client,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Actions(
+				kubetest.ClientSucceeds(
+					client,
+					command,
+					nil,
+				),
+			),
+		}.Run(t)
+
+		kubetest.Scenario{
+			Name: "WithDisabledLogToStdErr",
+			Description: `
+				This should succeed. Even though logtostderr flag is set for
+				kube-rbac-proxy.
+				It is complementary to the other flags above.
+			`,
+
+			Given: kubetest.Actions(
+				kubetest.CreatedManifests(
+					client,
+					"flags/clusterRole.yaml",
+					"flags/clusterRoleBinding.yaml",
+					"flags/deployment-logtostderr.yaml",
+					"flags/service.yaml",
+					"flags/serviceAccount.yaml",
+					// This adds the clients cluster role to succeed
+					"flags/clusterRole-client.yaml",
+					"flags/clusterRoleBinding-client.yaml",
+				),
+			),
+			When: kubetest.Actions(
+				kubetest.PodsAreReady(
+					client,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					client,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Actions(
+				kubetest.ClientSucceeds(
+					client,
+					command,
+					nil,
+				),
+			),
+		}.Run(t)
+	}
+}
+
 func testTokenAudience(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/tokens/requestedtoken)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`

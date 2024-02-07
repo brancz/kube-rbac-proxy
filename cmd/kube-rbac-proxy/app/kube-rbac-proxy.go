@@ -40,7 +40,6 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authorization/union"
 	"k8s.io/client-go/kubernetes"
@@ -84,15 +83,14 @@ that can perform RBAC authorization against the Kubernetes API using SubjectAcce
 
 			k8sapiflag.PrintFlags(fs)
 
+			if err := o.Validate(); err != nil {
+				return err
+			}
+
 			// set default options
 			completedOptions, err := Complete(o)
 			if err != nil {
 				return err
-			}
-
-			// validate options
-			if errs := completedOptions.Validate(); len(errs) != 0 {
-				return utilerrors.NewAggregate(errs)
 			}
 
 			return Run(completedOptions)
@@ -144,63 +142,6 @@ type completedProxyRunOptions struct {
 
 	allowPaths  []string
 	ignorePaths []string
-}
-
-func (o *completedProxyRunOptions) Validate() []error {
-	var errs []error
-
-	hasCerts := !(o.tls.CertFile == "") && !(o.tls.KeyFile == "")
-	hasInsecureListenAddress := o.insecureListenAddress != ""
-	if !hasCerts || hasInsecureListenAddress {
-		klog.Warning(`
-==== Deprecation Warning ======================
-
-Insecure listen address will be removed.
-Using --insecure-listen-address won't be possible!
-
-The ability to run kube-rbac-proxy without TLS certificates will be removed.
-Not using --tls-cert-file and --tls-private-key-file won't be possible!
-
-For more information, please go to https://github.com/brancz/kube-rbac-proxy/issues/187
-
-===============================================
-
-		`)
-	}
-
-	if o.tls.ReloadInterval != time.Minute {
-		klog.Warning(`
-==== Deprecation Warning ======================
-
-tls-reload-interval will be removed.
-Using --tls-reload-interval won't be possible!
-
-For more information, please go to https://github.com/brancz/kube-rbac-proxy/issues/196
-
-===============================================
-		`)
-
-	}
-
-	if len(o.allowPaths) > 0 && len(o.ignorePaths) > 0 {
-		errs = append(errs, fmt.Errorf("cannot use --allow-paths and --ignore-paths together"))
-	}
-
-	for _, pathAllowed := range o.allowPaths {
-		_, err := path.Match(pathAllowed, "")
-		if err != nil {
-			errs = append(errs, fmt.Errorf("failed to verify allow path: %s", pathAllowed))
-		}
-	}
-
-	for _, pathIgnored := range o.ignorePaths {
-		_, err := path.Match(pathIgnored, "")
-		if err != nil {
-			errs = append(errs, fmt.Errorf("failed to verify ignored path: %s", pathIgnored))
-		}
-	}
-
-	return errs
 }
 
 func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
@@ -451,7 +392,7 @@ func Run(cfg *completedProxyRunOptions) error {
 				return srv.Serve(tlsListener)
 			}, func(err error) {
 				if err := srv.Shutdown(context.Background()); err != nil {
-					klog.Errorf("failed to gracefully shutdown server: %w", err)
+					klog.Errorf("failed to gracefully shutdown server: %+v", err)
 				}
 			})
 
@@ -499,7 +440,7 @@ func Run(cfg *completedProxyRunOptions) error {
 					return proxyEndpointsSrv.Serve(tlsListener)
 				}, func(err error) {
 					if err := proxyEndpointsSrv.Shutdown(context.Background()); err != nil {
-						klog.Errorf("failed to gracefully shutdown proxy endpoints server: %w", err)
+						klog.Errorf("failed to gracefully shutdown proxy endpoints server: %+v", err)
 					}
 				})
 			}
@@ -524,10 +465,10 @@ func Run(cfg *completedProxyRunOptions) error {
 				return srv.Serve(l)
 			}, func(err error) {
 				if err := srv.Shutdown(context.Background()); err != nil {
-					klog.Errorf("failed to gracefully shutdown server: %w", err)
+					klog.Errorf("failed to gracefully shutdown server: %+v", err)
 				}
 				if err := l.Close(); err != nil {
-					klog.Errorf("failed to gracefully close listener: %w", err)
+					klog.Errorf("failed to gracefully close listener: %+v", err)
 				}
 			})
 		}
