@@ -17,13 +17,18 @@ limitations under the License.
 package options
 
 import (
+	"fmt"
+	"path"
 	"time"
 
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	k8sapiflag "k8s.io/component-base/cli/flag"
+	"k8s.io/klog/v2"
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
 	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
+	"github.com/spf13/pflag"
 )
 
 type ProxyRunOptions struct {
@@ -45,6 +50,22 @@ type ProxyRunOptions struct {
 	HTTP2Disable              bool
 	HTTP2MaxConcurrentStreams uint32
 	HTTP2MaxSize              uint32
+
+	flagSet *pflag.FlagSet
+}
+
+var disabledFlags = []string{
+	"logtostderr",
+	"add-dir-header",
+	"alsologtostderr",
+	"log-backtrace-at",
+	"log-dir",
+	"log-file",
+	"log-file-max-size",
+	"one-output",
+	"skip-headers",
+	"skip-log-headers",
+	"stderrthreshold",
 }
 
 type TLSConfig struct {
@@ -122,5 +143,84 @@ func (o *ProxyRunOptions) Flags() k8sapiflag.NamedFlagSets {
 	flagset.Uint32Var(&o.HTTP2MaxConcurrentStreams, "http2-max-concurrent-streams", 100, "The maximum number of concurrent streams per HTTP/2 connection.")
 	flagset.Uint32Var(&o.HTTP2MaxSize, "http2-max-size", 256*1024, "The maximum number of bytes that the server will accept for frame size and buffer per stream in a HTTP/2 request.")
 
+	// disabled flags
+	o.flagSet = flagset // reference used for validation
+	for _, disabledOpt := range disabledFlags {
+		_ = flagset.String(disabledOpt, "", "[DISABLED]")
+		if err := flagset.MarkHidden(disabledOpt); err != nil {
+			panic(err)
+		}
+	}
+
 	return namedFlagSets
+}
+
+func (o *ProxyRunOptions) Validate() error {
+	var errs []error
+
+	hasCerts := !(o.TLS.CertFile == "") && !(o.TLS.KeyFile == "")
+	hasInsecureListenAddress := o.InsecureListenAddress != ""
+	if !hasCerts || hasInsecureListenAddress {
+		klog.Warning(`
+==== Deprecation Warning ======================
+
+Insecure listen address will be removed.
+Using --insecure-listen-address won't be possible!
+
+The ability to run kube-rbac-proxy without TLS certificates will be removed.
+Not using --tls-cert-file and --tls-private-key-file won't be possible!
+
+For more information, please go to https://github.com/brancz/kube-rbac-proxy/issues/187
+
+===============================================
+
+		`)
+	}
+
+	if o.TLS.ReloadInterval != time.Minute {
+		klog.Warning(`
+==== Deprecation Warning ======================
+
+tls-reload-interval will be removed.
+Using --tls-reload-interval won't be possible!
+
+For more information, please go to https://github.com/brancz/kube-rbac-proxy/issues/196
+
+===============================================
+		`)
+
+	}
+
+	if len(o.AllowPaths) > 0 && len(o.IgnorePaths) > 0 {
+		errs = append(errs, fmt.Errorf("cannot use --allow-paths and --ignore-paths together"))
+	}
+
+	for _, pathAllowed := range o.AllowPaths {
+		_, err := path.Match(pathAllowed, "")
+		if err != nil {
+			errs = append(errs, fmt.Errorf("failed to verify allow path: %s", pathAllowed))
+		}
+	}
+
+	for _, pathIgnored := range o.IgnorePaths {
+		_, err := path.Match(pathIgnored, "")
+		if err != nil {
+			errs = append(errs, fmt.Errorf("failed to verify ignored path: %s", pathIgnored))
+		}
+	}
+
+	// Removed upstream flags shouldn't be use
+	for _, disabledOpt := range disabledFlags {
+		if flag := o.flagSet.Lookup(disabledOpt); flag.Changed {
+			klog.Warningf(`
+==== Removed Flag Warning ======================
+
+%s is removed in the k8s upstream and has no effect any more.
+
+===============================================
+		`, disabledOpt)
+		}
+	}
+
+	return utilerrors.NewAggregate(errs)
 }

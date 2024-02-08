@@ -60,6 +60,7 @@ func Test(t *testing.T) {
 		"TLS":                testTLS(client),
 		"StaticAuthorizer":   testStaticAuthorizer(client),
 		"HTTP2":              testHTTP2(client),
+		"Flags":              testFlags(client),
 	}
 
 	for name, tc := range tests {

@@ -335,7 +335,8 @@ func writeTempFile(pattern string, data []byte) (string, error) {
 func poll(interval, timeout time.Duration, f func() error) error {
 	var lastErr error
 
-	err := wait.Poll(interval, timeout, func() (bool, error) {
+	ctx := context.Background()
+	err := wait.PollUntilContextTimeout(ctx, interval, timeout, true, func(_ context.Context) (bool, error) {
 		lastErr = f()
 
 		if lastErr != nil {
@@ -346,7 +347,7 @@ func poll(interval, timeout time.Duration, f func() error) error {
 		return true, nil
 	})
 
-	if err != nil && err == wait.ErrWaitTimeout && lastErr != nil {
+	if err != nil && wait.Interrupted(err) && lastErr != nil {
 		err = fmt.Errorf("%v: %v", err, lastErr)
 	}
 
