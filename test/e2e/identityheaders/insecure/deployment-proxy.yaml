@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-rbac-proxy
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kube-rbac-proxy
+  template:
+    metadata:
+      labels:
+        app: kube-rbac-proxy
+    spec:
+      serviceAccountName: kube-rbac-proxy
+      containers:
+        - name: kube-rbac-proxy
+          image: quay.io/brancz/kube-rbac-proxy:local
+          args:
+            - "--secure-port=8443"
+            - "--upstream=http://nginx.default.svc.cluster.local:80/"
+            - "--authentication-skip-lookup"
+            - "--logtostderr=true"
+            - "--auth-header-user-field-name=x-remote-user"
+            - "--auth-header-groups-field-name=x-remote-groups"
+            - "--auth-header-groups-field-separator=|"
+            - "--v=10"
+          ports:
+            - containerPort: 8443
+              name: https

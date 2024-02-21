@@ -96,8 +96,8 @@ test-e2e:
 
 test-local-setup: VERSION = local
 test-local-setup: VERSION_SEMVER = $(shell cat VERSION)
-test-local-setup: clean container kind-create-cluster
-test-local: test-local-setup test-e2e
+test-local-setup: container kind-create-cluster
+test-local: test-local-setup test
 
 test-e2e-local:	test-local-setup test-e2e
 
