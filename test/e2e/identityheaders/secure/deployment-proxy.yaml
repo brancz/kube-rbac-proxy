@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-rbac-proxy
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kube-rbac-proxy
+  template:
+    metadata:
+      labels:
+        app: kube-rbac-proxy
+    spec:
+      serviceAccountName: kube-rbac-proxy
+      containers:
+        - name: kube-rbac-proxy
+          image: quay.io/brancz/kube-rbac-proxy:local
+          args:
+            - "--secure-port=8443"
+            - "--upstream=https://nginx.default.svc.cluster.local:8443/"
+            - "--authentication-skip-lookup"
+            - "--logtostderr=true"
+            - "--auth-header-user-field-name=x-remote-user"
+            - "--auth-header-groups-field-name=x-remote-groups"
+            - "--auth-header-groups-field-separator=|"
+            - "--tls-cert-file=/usr/local/etc/kube-rbac-proxy/server-certs/tls.crt"
+            - "--tls-private-key-file=/usr/local/etc/kube-rbac-proxy/server-keys/tls.key"
+            - "--upstream-ca-file=/usr/local/etc/kube-rbac-proxy/upstream-certs/ca.crt"
+            - "--upstream-client-cert-file=/usr/local/etc/kube-rbac-proxy/client-certs/tls.crt"
+            - "--upstream-client-key-file=/usr/local/etc/kube-rbac-proxy/client-keys/tls.key"
+            - "--v=10"
+          volumeMounts:
+            - name: kube-rbac-proxy-client-keys
+              mountPath: /usr/local/etc/kube-rbac-proxy/client-keys
+              readOnly: true
+            - name: kube-rbac-proxy-client-certs
+              mountPath: /usr/local/etc/kube-rbac-proxy/client-certs
+              readOnly: true
+            - name: nginx-certs
+              mountPath: /usr/local/etc/kube-rbac-proxy/upstream-certs
+              readOnly: true
+            - name: kube-rbac-proxy-keys
+              mountPath: /usr/local/etc/kube-rbac-proxy/server-keys
+              readOnly: true
+            - name: kube-rbac-proxy-certs
+              mountPath: /usr/local/etc/kube-rbac-proxy/server-certs
+              readOnly: true
+          ports:
+            - containerPort: 8443
+              name: https
+      volumes:
+        - name: kube-rbac-proxy-client-keys
+          secret:
+            secretName: kube-rbac-proxy-client-keys
+        - name: kube-rbac-proxy-client-certs
+          configMap:
+            name: kube-rbac-proxy-client-certs
+        - name: nginx-certs
+          configMap:
+            name: nginx-certs
+        - name: kube-rbac-proxy-keys
+          secret:
+            secretName: kube-rbac-proxy-keys
+        - name: kube-rbac-proxy-certs
+          configMap:
+            name: kube-rbac-proxy-certs

@@ -29,7 +29,29 @@ func testH2CUpstream(client kubernetes.Interface) kubetest.TestSuite {
 		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
 
 		kubetest.Scenario{
-			Name: "With H2C Upstream",
+			Name: "With H2C non-local upstream",
+
+			Given: kubetest.Actions(
+				kubetest.CreatedManifests(
+					client,
+					"h2c-upstream/clusterRole.yaml",
+					"h2c-upstream/clusterRoleBinding.yaml",
+					"h2c-upstream/deployment-proxy-non-loopback.yaml",
+					"h2c-upstream/deployment-upstream-non-loopback.yaml",
+					"h2c-upstream/service.yaml",
+					"h2c-upstream/serviceAccount.yaml",
+				),
+			),
+			Then: kubetest.Actions(
+				kubetest.PodIsCrashLoopBackOff(
+					client,
+					"kube-rbac-proxy",
+				),
+			),
+		}.Run(t)
+
+		kubetest.Scenario{
+			Name: "With H2C local upstream",
 
 			Given: kubetest.Actions(
 				kubetest.CreatedManifests(

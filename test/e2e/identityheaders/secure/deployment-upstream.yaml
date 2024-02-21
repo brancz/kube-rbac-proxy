@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: default
+  labels:
+    app: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 8443
+        volumeMounts:
+        - name: nginx-certs
+          mountPath: "/etc/nginx/certs"
+          readOnly: true
+        - name: nginx-keys
+          mountPath: "/etc/nginx/keys"
+          readOnly: true
+        - name: kube-rbac-proxy-client-certs
+          mountPath: "/etc/nginx/client-ca"
+          readOnly: true
+        - name: nginx-config
+          mountPath: "/etc/nginx/conf.d/server.conf"
+          subPath: server.conf
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: nginx-config
+      - name: nginx-certs
+        configMap:
+          name: nginx-certs
+      - name: nginx-keys
+        secret:
+          secretName: nginx-keys
+      - name: kube-rbac-proxy-client-certs
+        configMap:
+          name: kube-rbac-proxy-client-certs

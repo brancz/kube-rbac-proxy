@@ -38,8 +38,7 @@ type AuthnHeaderConfig struct {
 // WithAuthHeaders adds identity information to the headers.
 // Must not be used, if connection is not encrypted with TLS.
 func WithAuthHeaders(handler http.Handler, cfg *AuthnHeaderConfig) http.Handler {
-	upstreamHeadersEnabled := len(cfg.GroupsFieldName) > 0 || len(cfg.UserFieldName) > 0
-	if !upstreamHeadersEnabled {
+	if !HasIdentityHeadersEnabled(cfg) {
 		return handler
 	}
 
@@ -54,4 +53,8 @@ func WithAuthHeaders(handler http.Handler, cfg *AuthnHeaderConfig) http.Handler 
 
 		handler.ServeHTTP(w, req)
 	})
+}
+
+func HasIdentityHeadersEnabled(cfg *AuthnHeaderConfig) bool {
+	return len(cfg.GroupsFieldName) > 0 || len(cfg.UserFieldName) > 0
 }
