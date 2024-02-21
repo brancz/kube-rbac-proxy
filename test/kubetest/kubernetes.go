@@ -19,6 +19,8 @@ package kubetest
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"os"
@@ -35,6 +37,65 @@ import (
 	kubeyaml "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
 )
+
+func CreateServerCerts(client kubernetes.Interface, name string) Action {
+	return createCerts(client, name, createSignedServerCert)
+}
+
+func CreateClientCerts(client kubernetes.Interface, name string) Action {
+	return createCerts(client, name, createSignedClientCert)
+}
+
+func createCerts(client kubernetes.Interface, name string, createSignedCert createCertsFunc) Action {
+	return func(ctx *ScenarioContext) error {
+		caCert, caKey, err := createSelfSignedCA(fmt.Sprintf("%s-ca", name))
+		if err != nil {
+			return err
+		}
+		cert, key, err := createSignedCert(caCert, caKey, fmt.Sprintf("%s.default.svc.cluster.local", name))
+		if err != nil {
+			return err
+		}
+
+		configMapName := fmt.Sprintf("%s-trust", name)
+		_, err = client.CoreV1().ConfigMaps(ctx.Namespace).Create(context.TODO(), &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: configMapName,
+			},
+			Data: map[string]string{
+				"ca.crt": string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCert.Raw})),
+			},
+		}, metav1.CreateOptions{})
+		if err != nil {
+			return err
+		}
+		ctx.AddCleanUp(func() error {
+			return client.CoreV1().ConfigMaps(ctx.Namespace).Delete(context.TODO(), configMapName, metav1.DeleteOptions{})
+		})
+
+		secretName := fmt.Sprintf("%s-certs", name)
+		_, err = client.CoreV1().Secrets(ctx.Namespace).Create(context.TODO(), &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: secretName,
+			},
+			Data: map[string][]byte{
+				"tls.crt": pem.EncodeToMemory(&pem.Block{
+					Type:  "CERTIFICATE",
+					Bytes: cert.Raw,
+				}),
+				"tls.key": []byte(pem.EncodeToMemory(&pem.Block{
+					Type:  "RSA PRIVATE KEY",
+					Bytes: x509.MarshalPKCS1PrivateKey(key),
+				})),
+			},
+		}, metav1.CreateOptions{})
+		ctx.AddCleanUp(func() error {
+			return client.CoreV1().Secrets(ctx.Namespace).Delete(context.TODO(), secretName, metav1.DeleteOptions{})
+		})
+
+		return err
+	}
+}
 
 func CreatedManifests(client kubernetes.Interface, paths ...string) Action {
 	return func(ctx *ScenarioContext) error {
@@ -150,7 +211,7 @@ func createDeployment(client kubernetes.Interface, ctx *ScenarioContext, content
 			return err
 		}
 
-		dumpLogs(client, ctx, metav1.ListOptions{LabelSelector: sel.String()})
+		logsFprintf(client, ctx, metav1.ListOptions{LabelSelector: sel.String()}, os.Stdout)
 
 		err = client.AppsV1().Deployments(dep.Namespace).Delete(context.TODO(), dep.Name, metav1.DeleteOptions{})
 		if err != nil {
@@ -163,7 +224,7 @@ func createDeployment(client kubernetes.Interface, ctx *ScenarioContext, content
 	return err
 }
 
-func dumpLogs(client kubernetes.Interface, ctx *ScenarioContext, opts metav1.ListOptions) {
+func logsFprintf(client kubernetes.Interface, ctx *ScenarioContext, opts metav1.ListOptions, w io.Writer) {
 	pods, err := client.CoreV1().Pods(ctx.Namespace).List(context.TODO(), opts)
 	if err != nil {
 		return
@@ -171,19 +232,19 @@ func dumpLogs(client kubernetes.Interface, ctx *ScenarioContext, opts metav1.Lis
 
 	for _, p := range pods.Items {
 		for _, c := range p.Spec.Containers {
-			fmt.Println("=== LOGS", ctx.Namespace, p.Name, c.Name)
+			fmt.Fprintf(w, "\n=== LOGS %s %s %s", ctx.Namespace, p.Name, c.Name)
 
-			rest := client.CoreV1().Pods(ctx.Namespace).GetLogs(p.GetName(), &corev1.PodLogOptions{
+			req := client.CoreV1().Pods(ctx.Namespace).GetLogs(p.GetName(), &corev1.PodLogOptions{
 				Container: c.Name,
 				Follow:    false,
 			})
 
-			stream, err := rest.Stream(context.TODO())
+			stream, err := req.Stream(context.TODO())
 			if err != nil {
 				return
 			}
 
-			_, _ = io.Copy(os.Stdout, stream)
+			_, _ = io.Copy(w, stream)
 		}
 	}
 }
@@ -262,6 +323,32 @@ func createConfigmap(client kubernetes.Interface, ctx *ScenarioContext, content 
 	})
 
 	return err
+}
+
+// PodIsCrashLoopBackOff checks if there is any pod that is in the state of CrashLoopBackOff.
+// This is required to verify negative test cases.
+func PodIsCrashLoopBackOff(client kubernetes.Interface, labels string) func(*ScenarioContext) error {
+	return func(ctx *ScenarioContext) error {
+		return wait.Poll(time.Second, time.Minute, func() (bool, error) {
+			list, err := client.CoreV1().Pods(ctx.Namespace).List(context.TODO(), metav1.ListOptions{})
+			if err != nil {
+				return false, fmt.Errorf("failed to list pods: %v", err)
+			}
+
+			for _, p := range list.Items {
+				for _, c := range p.Status.ContainerStatuses {
+					if c.State.Waiting != nil &&
+						c.Name == labels &&
+						c.State.Waiting.Reason == "CrashLoopBackOff" {
+
+						return true, nil
+					}
+				}
+			}
+
+			return false, nil
+		})
+	}
 }
 
 // PodsAreReady waits for a number if replicas matching the given labels to be ready.
@@ -364,6 +451,7 @@ type RunOptions struct {
 	ServiceAccount     string
 	TokenAudience      string
 	ClientCertificates bool
+	OutputStream       io.Writer // Functional Options would be better
 }
 
 func RunSucceeds(client kubernetes.Interface, image string, name string, command []string, opts *RunOptions) Action {
@@ -381,6 +469,29 @@ func RunFails(client kubernetes.Interface, image string, name string, command []
 		if err != errRun {
 			return err
 		}
+		return nil
+	}
+}
+
+func RunHasLogEntry(client kubernetes.Interface, image string, name string, command, logEntries []string, opts *RunOptions) Action {
+	return func(ctx *ScenarioContext) error {
+		if opts == nil {
+			opts = &RunOptions{}
+		}
+
+		builder := &strings.Builder{}
+		opts.OutputStream = builder
+		if err := run(client, ctx, image, name, command, opts); err != nil {
+			return fmt.Errorf("failed to run for log entries: %v", err)
+		}
+
+		output := builder.String()
+		for _, entry := range logEntries {
+			if !strings.Contains(output, entry) {
+				return fmt.Errorf("log entry not found: %s", entry)
+			}
+		}
+
 		return nil
 	}
 }
@@ -487,6 +598,13 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 		return fmt.Errorf("failed to watch job: %v", err)
 	}
 
+	if opts == nil {
+		opts = &RunOptions{}
+	}
+	if opts.OutputStream == nil {
+		opts.OutputStream = os.Stdout
+	}
+
 	for event := range watch.ResultChan() {
 		job := event.Object.(*batchv1.Job)
 		conditions := job.Status.Conditions
@@ -499,7 +617,7 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 		}
 
 		if failed {
-			dumpLogs(client, ctx, metav1.ListOptions{LabelSelector: "job-name=" + batch.Name})
+			logsFprintf(client, ctx, metav1.ListOptions{LabelSelector: "job-name=" + batch.Name}, opts.OutputStream)
 			return errRun
 		}
 
@@ -510,7 +628,7 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 			}
 		}
 		if complete && !failed {
-			dumpLogs(client, ctx, metav1.ListOptions{LabelSelector: "job-name=" + batch.Name})
+			logsFprintf(client, ctx, metav1.ListOptions{LabelSelector: "job-name=" + batch.Name}, opts.OutputStream)
 			return nil
 		}
 	}
