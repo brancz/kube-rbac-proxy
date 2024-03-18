@@ -51,6 +51,9 @@ type ProxyRunOptions struct {
 	HTTP2MaxConcurrentStreams uint32
 	HTTP2MaxSize              uint32
 
+	QPS   float32
+	Burst int
+
 	flagSet *pflag.FlagSet
 }
 
@@ -137,6 +140,8 @@ func (o *ProxyRunOptions) Flags() k8sapiflag.NamedFlagSets {
 
 	//Kubeconfig flag
 	flagset.StringVar(&o.KubeconfigLocation, "kubeconfig", "", "Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used")
+	flagset.Float32Var(&o.QPS, "kube-api-qps", 0, "queries per second to the api, kube-client starts client-side throttling, when breached")
+	flagset.IntVar(&o.Burst, "kube-api-burst", 0, "kube-api burst value; needed when kube-api-qps is set")
 
 	// HTTP2 flags
 	flagset.BoolVar(&o.HTTP2Disable, "http2-disable", false, "Disable HTTP/2 support")

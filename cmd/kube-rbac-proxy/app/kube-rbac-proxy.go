@@ -189,6 +189,13 @@ func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
 		return nil, fmt.Errorf("failed to load kubeconfig: %w", err)
 	}
 
+	if o.QPS > 0 {
+	    kubeconfig.QPS = o.QPS
+	}
+	if o.Burst > 0 {
+	    kubeconfig.Burst = o.Burst
+	}
+
 	completed.kubeClient, err = kubernetes.NewForConfig(kubeconfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to instantiate Kubernetes client: %w", err)
