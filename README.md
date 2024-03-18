@@ -67,6 +67,8 @@ Kube-rbac-proxy flags:
       --http2-max-size uint32                       The maximum number of bytes that the server will accept for frame size and buffer per stream in a HTTP/2 request. (default 262144)
       --ignore-paths strings                        Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the requst matches, it will proxy the request without performing an authentication or authorization check. Cannot be used with --allow-paths.
       --insecure-listen-address string              [DEPRECATED] The address the kube-rbac-proxy HTTP server should listen on.
+      --kube-api-burst int                          kube-api burst value; needed when kube-api-qps is set
+      --kube-api-qps float32                        queries per second to the api, kube-client starts client-side throttling, when breached
       --kubeconfig string                           Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used
       --oidc-ca-file string                         If set, the OpenID server's certificate will be verified by one of the authorities in the oidc-ca-file, otherwise the host's root CA set will be used.
       --oidc-clientID string                        The client ID for the OpenID Connect client, must be set if oidc-issuer-url is set.
