@@ -20,6 +20,7 @@ import (
 	"context"
 	"net/http"
 
+	"k8s.io/apiserver/pkg/apis/apiserver"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/request/bearertoken"
 	"k8s.io/apiserver/pkg/server/dynamiccertificates"
@@ -43,13 +44,23 @@ func NewOIDCAuthenticator(config *OIDCConfig) (*OIDCAuthenticator, error) {
 	}
 
 	tokenAuthenticator, err := oidc.New(oidc.Options{
-		IssuerURL:            config.IssuerURL,
-		ClientID:             config.ClientID,
+		JWTAuthenticator: apiserver.JWTAuthenticator{
+			Issuer: apiserver.Issuer{
+				URL:       config.IssuerURL,
+				Audiences: []string{config.ClientID},
+			},
+			ClaimMappings: apiserver.ClaimMappings{
+				Username: apiserver.PrefixedClaimOrExpression{
+					Prefix: &config.UsernamePrefix,
+					Claim:  config.UsernameClaim,
+				},
+				Groups: apiserver.PrefixedClaimOrExpression{
+					Prefix: &config.GroupsPrefix,
+					Claim:  config.GroupsClaim,
+				},
+			},
+		},
 		CAContentProvider:    dyCA,
-		UsernameClaim:        config.UsernameClaim,
-		UsernamePrefix:       config.UsernamePrefix,
-		GroupsClaim:          config.GroupsClaim,
-		GroupsPrefix:         config.GroupsPrefix,
 		SupportedSigningAlgs: config.SupportedSigningAlgs,
 	})
 	if err != nil {
