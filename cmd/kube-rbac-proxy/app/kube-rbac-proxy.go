@@ -190,10 +190,10 @@ func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
 	}
 
 	if o.QPS > 0 {
-	    kubeconfig.QPS = o.QPS
+		kubeconfig.QPS = o.QPS
 	}
 	if o.Burst > 0 {
-	    kubeconfig.Burst = o.Burst
+		kubeconfig.Burst = o.Burst
 	}
 
 	completed.kubeClient, err = kubernetes.NewForConfig(kubeconfig)
@@ -490,6 +490,10 @@ func Run(cfg *completedProxyRunOptions) error {
 		}, func(err error) {
 			close(sig)
 		})
+	}
+
+	if len(cfg.secureListenAddress) == 0 && len(cfg.insecureListenAddress) == 0 {
+		return fmt.Errorf("no listen address provided")
 	}
 
 	if err := gr.Run(); err != nil {
