@@ -485,6 +485,10 @@ func Run(cfg *completedProxyRunOptions) error {
 		})
 	}
 
+	if len(cfg.secureListenAddress) == 0 && len(cfg.insecureListenAddress) == 0 {
+		return fmt.Errorf("no listen address provided")
+	}
+
 	if err := gr.Run(); err != nil {
 		return fmt.Errorf("failed to run groups: %w", err)
 	}
