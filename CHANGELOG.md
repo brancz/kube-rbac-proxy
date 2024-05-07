@@ -1,3 +1,7 @@
+## 0.17.1 / 2024-05-07
+
+- [BUGFIX] make deprecated (usptream removed) flags behave like before
+
 ## 0.17.0 / 2024-02-08
 
 - [ENHANCEMENT] add command-line args --kube-api-qps/--kube-api-burst
