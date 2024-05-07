@@ -1,3 +1,7 @@
+## 0.16.1 / 2024-05-07
+
+- [BUGFIX] make deprecated (usptream removed) flags behave like before
+
 ## 0.16.0 / 2024-02-08
 
 - [ENHANCEMENT] Bump dependencies and in particular to kubernetes to v1.28
