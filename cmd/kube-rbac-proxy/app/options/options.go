@@ -57,20 +57,6 @@ type ProxyRunOptions struct {
 	flagSet *pflag.FlagSet
 }
 
-var disabledFlags = []string{
-	"logtostderr",
-	"add-dir-header",
-	"alsologtostderr",
-	"log-backtrace-at",
-	"log-dir",
-	"log-file",
-	"log-file-max-size",
-	"one-output",
-	"skip-headers",
-	"skip-log-headers",
-	"stderrthreshold",
-}
-
 type TLSConfig struct {
 	CertFile       string
 	KeyFile        string
@@ -149,13 +135,7 @@ func (o *ProxyRunOptions) Flags() k8sapiflag.NamedFlagSets {
 	flagset.Uint32Var(&o.HTTP2MaxSize, "http2-max-size", 256*1024, "The maximum number of bytes that the server will accept for frame size and buffer per stream in a HTTP/2 request.")
 
 	// disabled flags
-	o.flagSet = flagset // reference used for validation
-	for _, disabledOpt := range disabledFlags {
-		_ = flagset.String(disabledOpt, "", "[DISABLED]")
-		if err := flagset.MarkHidden(disabledOpt); err != nil {
-			panic(err)
-		}
-	}
+	o.addDisabledFlags(flagset)
 
 	return namedFlagSets
 }
@@ -215,16 +195,8 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 	}
 
 	// Removed upstream flags shouldn't be use
-	for _, disabledOpt := range disabledFlags {
-		if flag := o.flagSet.Lookup(disabledOpt); flag.Changed {
-			klog.Warningf(`
-==== Removed Flag Warning ======================
-
-%s is removed in the k8s upstream and has no effect any more.
-
-===============================================
-		`, disabledOpt)
-		}
+	if err := o.validateDisabledFlags(); err != nil {
+		errs = append(errs, err)
 	}
 
 	return utilerrors.NewAggregate(errs)
