@@ -77,6 +77,7 @@ Kube-rbac-proxy flags:
       --oidc-issuer string                          The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).
       --oidc-sign-alg stringArray                   Supported signing algorithms, default RS256 (default [RS256])
       --oidc-username-claim string                  Identifier of the user in JWT claim, by default set to 'email' (default "email")
+      --oidc-username-prefix string                 If provided, the username will be prefixed with this value to prevent conflicts with other authentication strategies.
       --proxy-endpoints-port int                    The port to securely serve proxy-specific endpoints (such as '/healthz'). Uses the host from the '--secure-listen-address'.
       --secure-listen-address string                The address the kube-rbac-proxy HTTPs server should listen on.
       --tls-cert-file string                        File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert)
