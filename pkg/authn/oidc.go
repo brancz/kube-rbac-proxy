@@ -37,13 +37,13 @@ var (
 )
 
 // NewOIDCAuthenticator returns OIDC authenticator
-func NewOIDCAuthenticator(config *OIDCConfig) (*OIDCAuthenticator, error) {
+func NewOIDCAuthenticator(ctx context.Context, config *OIDCConfig) (*OIDCAuthenticator, error) {
 	dyCA, err := dynamiccertificates.NewDynamicCAContentFromFile("oidc-ca", config.CAFile)
 	if err != nil {
 		return nil, err
 	}
 
-	tokenAuthenticator, err := oidc.New(oidc.Options{
+	tokenAuthenticator, err := oidc.New(ctx, oidc.Options{
 		JWTAuthenticator: apiserver.JWTAuthenticator{
 			Issuer: apiserver.Issuer{
 				URL:       config.IssuerURL,
