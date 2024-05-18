@@ -220,7 +220,7 @@ func Run(cfg *completedProxyRunOptions) error {
 
 	// If OIDC configuration provided, use oidc authenticator
 	if cfg.auth.Authentication.OIDC.IssuerURL != "" {
-		oidcAuthenticator, err := authn.NewOIDCAuthenticator(cfg.auth.Authentication.OIDC)
+		oidcAuthenticator, err := authn.NewOIDCAuthenticator(ctx, cfg.auth.Authentication.OIDC)
 		if err != nil {
 			return fmt.Errorf("failed to instantiate OIDC authenticator: %w", err)
 		}
