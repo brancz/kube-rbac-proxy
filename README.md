@@ -84,7 +84,7 @@ Kube-rbac-proxy flags:
       --tls-cipher-suites strings                   Comma-separated list of cipher suites for the server. Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants). If omitted, the default Go cipher suites will be used
       --tls-min-version string                      Minimum TLS version supported. Value must match version names from https://golang.org/pkg/crypto/tls/#pkg-constants. (default "VersionTLS12")
       --tls-private-key-file string                 File containing the default x509 private key matching --tls-cert-file.
-      --tls-reload-interval duration                The interval at which to watch for TLS certificate changes, by default set to 1 minute. (default 1m0s)
+      --tls-reload-interval duration                [DEPRECATED] The interval at which to watch for TLS certificate changes, by default set to 1 minute. (default 1m0s)
       --upstream string                             The upstream URL to proxy to once requests have successfully been authenticated and authorized.
       --upstream-ca-file string                     The CA the upstream uses for TLS connection. This is required when the upstream uses TLS and its own CA certificate
       --upstream-client-cert-file string            If set, the client will be used to authenticate the proxy to upstream. Requires --upstream-client-key-file to be set, too.
