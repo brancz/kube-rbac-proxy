@@ -156,7 +156,7 @@ func validateSecureConnectionConfig(o *ProxyOptions) error {
 		return fmt.Errorf("loopback address is required for h2c: %w", errLoopback)
 	}
 
-	klog.V(4).Info("Failed to validate loopback address: %v", errLoopback)
+	klog.V(4).Infof("Failed to validate loopback address: %v", errLoopback)
 
 	u, err := url.Parse(o.Upstream)
 	if err != nil {
