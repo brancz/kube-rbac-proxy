@@ -60,6 +60,10 @@ ifeq ($(GOARCH), amd64)
 	docker tag $(DOCKER_REPO):$(VERSION)-$(GOARCH) $(CONTAINER_NAME)
 endif
 
+container-test: GOOS = linux
+container-test: $(OUT_DIR)/$(BIN)-$(GOOS)-$(GOARCH) Dockerfile
+	docker build --build-arg BINARY=$(BIN)-$(GOOS)-$(GOARCH) --build-arg GOARCH=$(GOARCH) -t $(CONTAINER_NAME) .
+
 manifest-tool:
 	curl -fsSL https://github.com/estesp/manifest-tool/releases/download/v1.0.2/manifest-tool-linux-amd64 > ./manifest-tool
 	chmod +x ./manifest-tool
@@ -96,7 +100,7 @@ test-e2e:
 
 test-local-setup: VERSION = local
 test-local-setup: VERSION_SEMVER = $(shell cat VERSION)
-test-local-setup: container kind-create-cluster
+test-local-setup: container-test kind-create-cluster
 test-local: test-local-setup test
 
 test-e2e-local:	test-local-setup test-e2e
