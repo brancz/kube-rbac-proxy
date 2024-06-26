@@ -22,7 +22,6 @@ spec:
             - "--upstream=http://127.0.0.1:8081/"
             - "--authentication-skip-lookup"
             - "--upstream-force-h2c=true"
-            - "--logtostderr=true"
             - "--v=10"
           ports:
             - containerPort: 8443
