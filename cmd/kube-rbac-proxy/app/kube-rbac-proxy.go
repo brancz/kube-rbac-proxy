@@ -152,7 +152,7 @@ func (opts *completedProxyRunOptions) ProxyConfig() (*server.KubeRBACProxyConfig
 		return nil, err
 	}
 
-	if err := opts.ProxyOptions.ApplyTo(proxyConfig.KubeRBACProxyInfo, proxyConfig.DelegatingAuthentication); err != nil {
+	if err := opts.ProxyOptions.ApplyTo(proxyConfig.KubeRBACProxyInfo, proxyConfig.DelegatingAuthentication, proxyConfig.SecureServing); err != nil {
 		return nil, err
 	}
 
