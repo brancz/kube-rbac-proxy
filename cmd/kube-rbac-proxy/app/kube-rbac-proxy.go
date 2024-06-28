@@ -196,7 +196,7 @@ func Run(cfg *server.KubeRBACProxyConfig) error {
 	var authenticator authenticator.Request
 	// If OIDC configuration provided, use oidc authenticator
 	if cfg.KubeRBACProxyInfo.OIDC.IssuerURL != "" {
-		oidcAuthenticator, err := authn.NewOIDCAuthenticator(cfg.KubeRBACProxyInfo.OIDC)
+		oidcAuthenticator, err := authn.NewOIDCAuthenticator(ctx, cfg.KubeRBACProxyInfo.OIDC)
 		if err != nil {
 			return fmt.Errorf("failed to instantiate OIDC authenticator: %w", err)
 		}
@@ -232,7 +232,7 @@ func Run(cfg *server.KubeRBACProxyConfig) error {
 
 	handler := identityheaders.WithAuthHeaders(proxy, cfg.KubeRBACProxyInfo.UpstreamHeaders)
 	handler = kubefilters.WithAuthorization(handler, authz, scheme.Codecs)
-	handler = kubefilters.WithAuthentication(handler, authenticator, http.HandlerFunc(filters.UnauthorizedHandler), cfg.DelegatingAuthentication.APIAudiences)
+	handler = kubefilters.WithAuthentication(handler, authenticator, http.HandlerFunc(filters.UnauthorizedHandler), cfg.DelegatingAuthentication.APIAudiences, nil)
 	// passing an empty RequestInfoFactory results in attaching a non-resource RequestInfo to the context
 	handler = kubefilters.WithRequestInfo(handler, &request.RequestInfoFactory{})
 	handler = rewrite.WithKubeRBACProxyParamsHandler(handler, cfg.KubeRBACProxyInfo.Authorization.RewriteAttributesConfig)
