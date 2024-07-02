@@ -22,7 +22,6 @@ spec:
             - "--upstream=http://http-echo-service.default.svc.cluster.local:80/"
             - "--authentication-skip-lookup"
             - "--upstream-force-h2c=true"
-            - "--logtostderr=true"
             - "--v=10"
           ports:
             - containerPort: 8443
