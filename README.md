@@ -109,7 +109,7 @@ Proxy flags:
 OIDC flags:
 
       --oidc-ca-file string           If set, the OpenID server's certificate will be verified by one of the authorities in the oidc-ca-file, otherwise the host's root CA set will be used.
-      --oidc-clientID string          The client ID for the OpenID Connect client, must be set if oidc-issuer-url is set.
+      --oidc-clientID strings         The client ID for the OpenID Connect client, must be set if oidc-issuer-url is set.
       --oidc-groups-claim string      Identifier of groups in JWT claim, by default set to 'groups' (default "groups")
       --oidc-groups-prefix string     If provided, all groups will be prefixed with this value to prevent conflicts with other authentication strategies.
       --oidc-issuer string            The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).

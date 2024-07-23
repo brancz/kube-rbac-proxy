@@ -26,8 +26,9 @@ import (
 	"os"
 
 	serverconfig "k8s.io/apiserver/pkg/server"
+	"k8s.io/apiserver/pkg/server/dynamiccertificates"
+	"k8s.io/apiserver/plugin/pkg/authenticator/token/oidc"
 
-	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authn/identityheaders"
 	authz "github.com/brancz/kube-rbac-proxy/pkg/authorization"
 	"github.com/brancz/kube-rbac-proxy/pkg/authorization/rewrite"
@@ -55,7 +56,8 @@ type KubeRBACProxyInfo struct {
 
 	Authorization *authz.AuthzConfig
 
-	OIDC *authn.OIDCConfig
+	OIDC                 *oidc.Options
+	OIDCDynamicCAContent *dynamiccertificates.DynamicFileCAContent
 
 	AllowPaths  []string
 	IgnorePaths []string
@@ -73,6 +75,10 @@ func NewConfig() *KubeRBACProxyConfig {
 			UpstreamHeaders: &identityheaders.AuthnHeaderConfig{},
 		},
 	}
+}
+
+func (i *KubeRBACProxyInfo) HasOIDCSetup() bool {
+	return i.OIDC != nil && i.OIDC.JWTAuthenticator.Issuer.URL != ""
 }
 
 // SetUpstreamTransport configures the transport to use when talking to upstream

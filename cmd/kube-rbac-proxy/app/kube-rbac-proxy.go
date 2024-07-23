@@ -32,11 +32,13 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	waitgroup "k8s.io/apimachinery/pkg/util/waitgroup"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
+	"k8s.io/apiserver/pkg/authentication/request/bearertoken"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	"k8s.io/apiserver/pkg/authorization/union"
 	kubefilters "k8s.io/apiserver/pkg/endpoints/filters"
 	"k8s.io/apiserver/pkg/endpoints/request"
 	serverconfig "k8s.io/apiserver/pkg/server"
+	"k8s.io/apiserver/plugin/pkg/authenticator/token/oidc"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	k8sapiflag "k8s.io/component-base/cli/flag"
@@ -47,7 +49,6 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/brancz/kube-rbac-proxy/cmd/kube-rbac-proxy/app/options"
-	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authn/identityheaders"
 	"github.com/brancz/kube-rbac-proxy/pkg/authorization/path"
 	"github.com/brancz/kube-rbac-proxy/pkg/authorization/rewrite"
@@ -195,14 +196,14 @@ func Run(cfg *server.KubeRBACProxyConfig) error {
 
 	var authenticator authenticator.Request
 	// If OIDC configuration provided, use oidc authenticator
-	if cfg.KubeRBACProxyInfo.OIDC.IssuerURL != "" {
-		oidcAuthenticator, err := authn.NewOIDCAuthenticator(ctx, cfg.KubeRBACProxyInfo.OIDC)
+	if cfg.KubeRBACProxyInfo.HasOIDCSetup() {
+		tokenAuthenticator, err := oidc.New(ctx, *cfg.KubeRBACProxyInfo.OIDC)
 		if err != nil {
-			return fmt.Errorf("failed to instantiate OIDC authenticator: %w", err)
+			return fmt.Errorf("setting up oidc failed: %w", err)
 		}
 
-		go oidcAuthenticator.Run(ctx)
-		authenticator = oidcAuthenticator
+		go cfg.KubeRBACProxyInfo.OIDCDynamicCAContent.Run(ctx, 1)
+		authenticator = bearertoken.New(tokenAuthenticator)
 	} else {
 		authenticator = cfg.DelegatingAuthentication.Authenticator
 	}

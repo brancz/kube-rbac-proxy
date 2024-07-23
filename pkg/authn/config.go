@@ -16,6 +16,8 @@ limitations under the License.
 
 package authn
 
+import "k8s.io/apiserver/plugin/pkg/authenticator/token/oidc"
+
 // X509Config holds public client certificate used for authentication requests if specified
 type X509Config struct {
 	ClientCAFile              string
@@ -30,12 +32,7 @@ type TokenConfig struct {
 
 // OIDCConfig represents configuration used for JWT request authentication
 type OIDCConfig struct {
-	IssuerURL            string
-	ClientID             string
-	CAFile               string
-	UsernameClaim        string
-	UsernamePrefix       string
-	GroupsClaim          string
-	GroupsPrefix         string
-	SupportedSigningAlgs []string
+	CAFile string
+
+	oidc.Options
 }
