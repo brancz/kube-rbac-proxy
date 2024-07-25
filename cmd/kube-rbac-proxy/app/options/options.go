@@ -19,10 +19,11 @@ package options
 import (
 	"fmt"
 
-	"github.com/brancz/kube-rbac-proxy/pkg/authn"
-	"github.com/brancz/kube-rbac-proxy/pkg/authn/identityheaders"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
+	"k8s.io/apiserver/plugin/pkg/authenticator/token/oidc"
 	kubeflags "k8s.io/component-base/cli/flag"
+
+	"github.com/brancz/kube-rbac-proxy/pkg/authn/identityheaders"
 )
 
 // ProxyRunOptions bundles both generic server run options from upstream, the
@@ -54,7 +55,7 @@ func NewProxyRunOptions() *ProxyRunOptions {
 			UpstreamHeader: &identityheaders.AuthnHeaderConfig{},
 		},
 		OIDCOptions: &OIDCOptions{
-			OIDCConfig: &authn.OIDCConfig{},
+			Options: oidc.Options{},
 		},
 	}
 }

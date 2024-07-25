@@ -21,7 +21,6 @@ spec:
             - "--secure-port=8443"
             - "--upstream=https://nginx.default.svc.cluster.local:8443/"
             - "--authentication-skip-lookup"
-            - "--logtostderr=true"
             - "--auth-header-user-field-name=x-remote-user"
             - "--auth-header-groups-field-name=x-remote-groups"
             - "--auth-header-groups-field-separator=|"

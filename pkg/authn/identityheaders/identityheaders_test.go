@@ -150,7 +150,7 @@ func TestProxyWithOIDCSupport(t *testing.T) {
 			handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 			handler = identityheaders.WithAuthHeaders(handler, cfg)
 			handler = kubefilters.WithAuthorization(handler, v.authorizer, scheme.Codecs)
-			handler = kubefilters.WithAuthentication(handler, authenticator, http.HandlerFunc(filters.UnauthorizedHandler), []string{})
+			handler = kubefilters.WithAuthentication(handler, authenticator, http.HandlerFunc(filters.UnauthorizedHandler), []string{}, nil)
 			handler = kubefilters.WithRequestInfo(handler, &request.RequestInfoFactory{})
 
 			handler.ServeHTTP(w, v.req)

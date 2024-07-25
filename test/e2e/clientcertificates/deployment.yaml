@@ -20,7 +20,6 @@ spec:
           args:
             - "--secure-port=8443"
             - "--upstream=http://127.0.0.1:8081/"
-            - "--logtostderr=true"
             - "--client-ca-file=/certs/ca.crt"
             - "--authentication-skip-lookup"
             - "--v=10"

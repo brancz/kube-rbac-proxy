@@ -100,7 +100,6 @@ spec:
         - "--secure-port=8443"
         - "--upstream=http://127.0.0.1:8081/"
         - "--config-file=/etc/kube-rbac-proxy/config-file.yaml"
-        - "--logtostderr=true"
         - "--v=10"
         ports:
         - containerPort: 8443
