@@ -88,6 +88,9 @@ run-curl-container:
 grpcc-container:
 	docker build -f ./examples/grpcc/Dockerfile -t mumoshu/grpcc:v0.0.1 .
 
+test-container: $(OUT_DIR)/$(PROGRAM_NAME)-linux-$(GOARCH) Dockerfile
+	docker build --build-arg BINARY=$(PROGRAM_NAME)-linux-$(GOARCH) --build-arg BASEIMAGE=$(BASEIMAGE) -t $(CONTAINER_NAME) .
+
 test: test-unit test-e2e
 
 test-unit:
@@ -98,7 +101,7 @@ test-e2e:
 
 test-local-setup: VERSION = local
 test-local-setup: VERSION_SEMVER = $(shell cat VERSION)
-test-local-setup: clean container kind-create-cluster
+test-local-setup: clean test-container kind-create-cluster
 test-local: test-local-setup test
 
 kind-delete-cluster:
