@@ -104,7 +104,7 @@ type staticAuthorizer struct {
 	config []StaticAuthorizationConfig
 }
 
-func (saConfig StaticAuthorizationConfig) Matches(a authorizer.Attributes) bool {
+func (saConfig StaticAuthorizationConfig) Matches(a authorizer.Attributes) (bool, bool) {
 	isAllowed := func(staticConf string, requestVal string) bool {
 		if staticConf == "" {
 			return true
@@ -118,25 +118,27 @@ func (saConfig StaticAuthorizationConfig) Matches(a authorizer.Attributes) bool 
 		userName = a.GetUser().GetName()
 	}
 
-	if isAllowed(saConfig.User.Name, userName) &&
-		isAllowed(saConfig.Verb, a.GetVerb()) &&
+	hasAnyAccess := isAllowed(saConfig.User.Name, userName) &&
 		isAllowed(saConfig.Namespace, a.GetNamespace()) &&
 		isAllowed(saConfig.APIGroup, a.GetAPIGroup()) &&
 		isAllowed(saConfig.Resource, a.GetResource()) &&
 		isAllowed(saConfig.Subresource, a.GetSubresource()) &&
 		isAllowed(saConfig.Name, a.GetName()) &&
 		isAllowed(saConfig.Path, a.GetPath()) &&
-		saConfig.ResourceRequest == a.IsResourceRequest() {
-		return true
-	}
-	return false
+		saConfig.ResourceRequest == a.IsResourceRequest()
+	hasAccess := hasAnyAccess && isAllowed(saConfig.Verb, a.GetVerb())
+
+	return hasAccess, hasAnyAccess
 }
 
 func (sa staticAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
 	// compare a against the configured static auths
 	for _, saConfig := range sa.config {
-		if saConfig.Matches(a) {
+		hasAccess, hasAnyAccess := saConfig.Matches(a)
+		if hasAccess {
 			return authorizer.DecisionAllow, "found corresponding static auth config", nil
+		} else if hasAnyAccess {
+			return authorizer.DecisionDeny, "can't find verb corresponding to this request", nil
 		}
 	}
 

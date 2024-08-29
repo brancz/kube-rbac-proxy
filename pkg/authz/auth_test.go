@@ -31,6 +31,7 @@ func TestStaticAuthorizer(t *testing.T) {
 
 		shouldFail      bool
 		shouldPass      []authorizer.Attributes
+		shouldDeny      []authorizer.Attributes
 		shouldNoOpinion []authorizer.Attributes
 	}{
 		{
@@ -55,11 +56,13 @@ func TestStaticAuthorizer(t *testing.T) {
 			shouldPass: []authorizer.Attributes{
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "get", Path: "/metrics"},
 			},
+			shouldDeny: []authorizer.Attributes{
+				// wrong verb
+				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "update", Path: "/metrics"},
+			},
 			shouldNoOpinion: []authorizer.Attributes{
 				// wrong path
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "get", Path: "/api"},
-				// wrong path
-				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "update", Path: "/metrics"},
 			},
 		},
 		{
@@ -84,6 +87,10 @@ func TestStaticAuthorizer(t *testing.T) {
 			shouldPass: []authorizer.Attributes{
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "get", Path: "/metrics", ResourceRequest: false},
 			},
+			shouldDeny: []authorizer.Attributes{
+				// wrong verb
+				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "create", Path: "/metrics", ResourceRequest: false},
+			},
 			shouldNoOpinion: []authorizer.Attributes{
 				// wrong resourceRequest
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "get", Path: "/metrics", ResourceRequest: true},
@@ -97,14 +104,16 @@ func TestStaticAuthorizer(t *testing.T) {
 			shouldPass: []authorizer.Attributes{
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "get", Path: "/metrics", ResourceRequest: false},
 			},
+			shouldDeny: []authorizer.Attributes{
+				// wrong verb
+				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "update", Path: "/metrics", ResourceRequest: false},
+			},
 			shouldNoOpinion: []authorizer.Attributes{
 				// Verb: get and ResourceRequest: true should be
 				// mutually exclusive
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "get", Path: "/metrics", ResourceRequest: true},
 				// wrong path
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "get", Path: "/api", ResourceRequest: true},
-				// wrong path
-				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "update", Path: "/metrics", ResourceRequest: false},
 			},
 		},
 		{
@@ -115,6 +124,9 @@ func TestStaticAuthorizer(t *testing.T) {
 			shouldPass: []authorizer.Attributes{
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "get", Resource: "namespaces", ResourceRequest: true},
 				authorizer.AttributesRecord{Verb: "get", Resource: "namespaces", ResourceRequest: true},
+			},
+			shouldDeny: []authorizer.Attributes{
+				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "create", Resource: "namespaces", ResourceRequest: true},
 			},
 			shouldNoOpinion: []authorizer.Attributes{
 				authorizer.AttributesRecord{Verb: "get", Resource: "services", ResourceRequest: true},
@@ -127,6 +139,9 @@ func TestStaticAuthorizer(t *testing.T) {
 			},
 			shouldPass: []authorizer.Attributes{
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "get", Resource: "namespaces", ResourceRequest: true},
+			},
+			shouldDeny: []authorizer.Attributes{
+				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:foo"}, Verb: "create", Resource: "namespaces", ResourceRequest: true},
 			},
 			shouldNoOpinion: []authorizer.Attributes{
 				authorizer.AttributesRecord{User: &user.DefaultInfo{Name: "system:bar"}, Verb: "get", Resource: "namespaces", ResourceRequest: true},
@@ -146,6 +161,12 @@ func TestStaticAuthorizer(t *testing.T) {
 			for _, attr := range tt.shouldPass {
 				if decision, _, _ := auth.Authorize(context.Background(), attr); decision != authorizer.DecisionAllow {
 					t.Errorf("incorrectly restricted %v", attr)
+				}
+			}
+
+			for _, attr := range tt.shouldDeny {
+				if decision, _, _ := auth.Authorize(context.Background(), attr); decision != authorizer.DecisionDeny {
+					t.Errorf("incorrectly denied %v", attr)
 				}
 			}
 
