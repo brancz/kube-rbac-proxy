@@ -58,7 +58,7 @@ func withRequestDeadline(handler http.Handler, sink audit.Sink, policy audit.Pol
 
 		requestInfo, ok := request.RequestInfoFrom(ctx)
 		if !ok {
-			handleError(w, req, http.StatusInternalServerError, fmt.Errorf("no RequestInfo found in context, handler chain must be wrong"))
+			handleError(w, req, http.StatusInternalServerError, nil, "no RequestInfo found in context, handler chain must be wrong")
 			return
 		}
 		if longRunning(req, requestInfo) {
@@ -108,20 +108,18 @@ func withFailedRequestAudit(failedHandler http.Handler, statusErr *apierrors.Sta
 		return failedHandler
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		a, err := evaluatePolicyAndCreateAuditEvent(req, policy)
+		ac, err := evaluatePolicyAndCreateAuditEvent(req, policy)
 		if err != nil {
 			utilruntime.HandleError(fmt.Errorf("failed to create audit event: %v", err))
 			responsewriters.InternalError(w, req, errors.New("failed to create audit event"))
 			return
 		}
 
-		ev := a.Event
-		if ev == nil {
+		if !ac.Enabled() {
 			failedHandler.ServeHTTP(w, req)
 			return
 		}
-
-		req = req.WithContext(audit.WithAuditContext(req.Context(), a))
+		ev := &ac.Event
 
 		ev.ResponseStatus = &metav1.Status{}
 		ev.Stage = auditinternal.StageResponseStarted
@@ -129,7 +127,7 @@ func withFailedRequestAudit(failedHandler http.Handler, statusErr *apierrors.Sta
 			ev.ResponseStatus.Message = statusErr.Error()
 		}
 
-		rw := decorateResponseWriter(req.Context(), w, ev, sink, a.RequestAuditConfig.OmitStages)
+		rw := decorateResponseWriter(req.Context(), w, ev, sink, ac.RequestAuditConfig.OmitStages)
 		failedHandler.ServeHTTP(rw, req)
 	})
 }
@@ -168,8 +166,12 @@ func parseTimeout(req *http.Request) (time.Duration, bool, error) {
 	return timeout, true, nil
 }
 
-func handleError(w http.ResponseWriter, r *http.Request, code int, err error) {
-	errorMsg := fmt.Sprintf("Error - %s: %#v", err.Error(), r.RequestURI)
-	http.Error(w, errorMsg, code)
-	klog.Errorf(errorMsg)
+// handleError does the following:
+// a) it writes the specified error code, and msg to the ResponseWriter
+// object, it does not print the given innerErr into the ResponseWriter object.
+// b) additionally, it prints the given msg, and innerErr to the log with other
+// request scoped data that helps identify the given request.
+func handleError(w http.ResponseWriter, r *http.Request, code int, innerErr error, msg string) {
+	http.Error(w, msg, code)
+	klog.ErrorSDepth(1, innerErr, msg, "method", r.Method, "URI", r.RequestURI, "auditID", audit.GetAuditIDTruncated(r.Context()))
 }

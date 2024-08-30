@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	apirequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/features"
+	"k8s.io/apiserver/pkg/storage"
+	etcdfeature "k8s.io/apiserver/pkg/storage/feature"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/klog/v2"
 )
@@ -76,7 +78,16 @@ func (e *listWorkEstimator) estimate(r *http.Request, flowSchemaName, priorityLe
 		// return maximumSeats for this request to be consistent.
 		return WorkEstimate{InitialSeats: maxSeats}
 	}
-	isListFromCache := !shouldListFromStorage(query, &listOptions)
+
+	// For watch requests, we want to adjust the cost only if they explicitly request
+	// sending initial events.
+	if requestInfo.Verb == "watch" {
+		if listOptions.SendInitialEvents == nil || !*listOptions.SendInitialEvents {
+			return WorkEstimate{InitialSeats: e.config.MinimumSeats}
+		}
+	}
+
+	isListFromCache := requestInfo.Verb == "watch" || !shouldListFromStorage(query, &listOptions)
 
 	numStored, err := e.countGetterFn(key(requestInfo))
 	switch {
@@ -108,8 +119,7 @@ func (e *listWorkEstimator) estimate(r *http.Request, flowSchemaName, priorityLe
 	}
 
 	limit := numStored
-	if utilfeature.DefaultFeatureGate.Enabled(features.APIListChunking) && listOptions.Limit > 0 &&
-		listOptions.Limit < numStored {
+	if listOptions.Limit > 0 && listOptions.Limit < numStored {
 		limit = listOptions.Limit
 	}
 
@@ -155,8 +165,18 @@ func key(requestInfo *apirequest.RequestInfo) string {
 //	staging/src/k8s.io/apiserver/pkg/storage/cacher/cacher.go
 func shouldListFromStorage(query url.Values, opts *metav1.ListOptions) bool {
 	resourceVersion := opts.ResourceVersion
-	pagingEnabled := utilfeature.DefaultFeatureGate.Enabled(features.APIListChunking)
-	hasContinuation := pagingEnabled && len(opts.Continue) > 0
-	hasLimit := pagingEnabled && opts.Limit > 0 && resourceVersion != "0"
-	return resourceVersion == "" || hasContinuation || hasLimit || opts.ResourceVersionMatch == metav1.ResourceVersionMatchExact
+	match := opts.ResourceVersionMatch
+	consistentListFromCacheEnabled := utilfeature.DefaultFeatureGate.Enabled(features.ConsistentListFromCache)
+	requestWatchProgressSupported := etcdfeature.DefaultFeatureSupportChecker.Supports(storage.RequestWatchProgress)
+
+	// Serve consistent reads from storage if ConsistentListFromCache is disabled
+	consistentReadFromStorage := resourceVersion == "" && !(consistentListFromCacheEnabled && requestWatchProgressSupported)
+	// Watch cache doesn't support continuations, so serve them from etcd.
+	hasContinuation := len(opts.Continue) > 0
+	// Watch cache only supports ResourceVersionMatchNotOlderThan (default).
+	// see https://kubernetes.io/docs/reference/using-api/api-concepts/#semantics-for-get-and-list
+	isLegacyExactMatch := opts.Limit > 0 && match == "" && len(resourceVersion) > 0 && resourceVersion != "0"
+	unsupportedMatch := match != "" && match != metav1.ResourceVersionMatchNotOlderThan || isLegacyExactMatch
+
+	return consistentReadFromStorage || hasContinuation || unsupportedMatch
 }

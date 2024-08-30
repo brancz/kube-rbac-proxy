@@ -66,6 +66,14 @@ func (e *mutatingWorkEstimator) estimate(r *http.Request, flowSchemaName, priori
 		}
 	}
 
+	if isRequestExemptFromWatchEvents(requestInfo) {
+		return WorkEstimate{
+			InitialSeats:      minSeats,
+			FinalSeats:        0,
+			AdditionalLatency: time.Duration(0),
+		}
+	}
+
 	watchCount := e.countFn(requestInfo)
 	metrics.ObserveWatchCount(r.Context(), priorityLevelName, flowSchemaName, watchCount)
 
@@ -137,4 +145,13 @@ func (e *mutatingWorkEstimator) estimate(r *http.Request, flowSchemaName, priori
 		FinalSeats:        finalSeats,
 		AdditionalLatency: additionalLatency,
 	}
+}
+
+func isRequestExemptFromWatchEvents(requestInfo *apirequest.RequestInfo) bool {
+	// Creating token for service account does not produce any event,
+	// but still serviceaccounts can have multiple watchers.
+	if requestInfo.Resource == "serviceaccounts" && requestInfo.Subresource == "token" {
+		return true
+	}
+	return false
 }

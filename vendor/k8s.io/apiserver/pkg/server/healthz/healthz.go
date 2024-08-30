@@ -18,6 +18,7 @@ package healthz
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -30,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apiserver/pkg/endpoints/metrics"
 	"k8s.io/apiserver/pkg/server/httplog"
+	"k8s.io/component-base/metrics/prometheus/slis"
 	"k8s.io/klog/v2"
 )
 
@@ -103,6 +105,29 @@ func (i *informerSync) Name() string {
 	return "informer-sync"
 }
 
+type shutdown struct {
+	stopCh <-chan struct{}
+}
+
+// NewShutdownHealthz returns a new HealthChecker that will fail if the embedded channel is closed.
+// This is intended to allow for graceful shutdown sequences.
+func NewShutdownHealthz(stopCh <-chan struct{}) HealthChecker {
+	return &shutdown{stopCh}
+}
+
+func (s *shutdown) Name() string {
+	return "shutdown"
+}
+
+func (s *shutdown) Check(req *http.Request) error {
+	select {
+	case <-s.stopCh:
+		return fmt.Errorf("process is shutting down")
+	default:
+	}
+	return nil
+}
+
 func (i *informerSync) Check(_ *http.Request) error {
 	stopCh := make(chan struct{})
 	// Close stopCh to force checking if informers are synced now.
@@ -138,12 +163,6 @@ func InstallHandler(mux mux, checks ...HealthChecker) {
 // than once for the same mux will result in a panic.
 func InstallReadyzHandler(mux mux, checks ...HealthChecker) {
 	InstallPathHandler(mux, "/readyz", checks...)
-}
-
-// InstallReadyzHandlerWithHealthyFunc is like InstallReadyzHandler, but in addition call firstTimeReady
-// the first time /readyz succeeds.
-func InstallReadyzHandlerWithHealthyFunc(mux mux, firstTimeReady func(), checks ...HealthChecker) {
-	InstallPathHandlerWithHealthyFunc(mux, "/readyz", firstTimeReady, checks...)
 }
 
 // InstallLivezHandler registers handlers for liveness checking on the path
@@ -237,6 +256,7 @@ func handleRootHealth(name string, firstTimeHealthy func(), checks ...HealthChec
 				continue
 			}
 			if err := check.Check(r); err != nil {
+				slis.ObserveHealthcheck(context.Background(), check.Name(), name, slis.Error)
 				// don't include the error since this endpoint is public.  If someone wants more detail
 				// they should have explicit permission to the detailed checks.
 				fmt.Fprintf(&individualCheckOutput, "[-]%s failed: reason withheld\n", check.Name())
@@ -244,12 +264,13 @@ func handleRootHealth(name string, firstTimeHealthy func(), checks ...HealthChec
 				fmt.Fprintf(&failedVerboseLogOutput, "[-]%s failed: %v\n", check.Name(), err)
 				failedChecks = append(failedChecks, check.Name())
 			} else {
+				slis.ObserveHealthcheck(context.Background(), check.Name(), name, slis.Success)
 				fmt.Fprintf(&individualCheckOutput, "[+]%s ok\n", check.Name())
 			}
 		}
 		if excluded.Len() > 0 {
 			fmt.Fprintf(&individualCheckOutput, "warn: some health checks cannot be excluded: no matches for %s\n", formatQuoted(excluded.List()...))
-			klog.Warningf("cannot exclude some health checks, no health checks are installed matching %s",
+			klog.V(6).Infof("cannot exclude some health checks, no health checks are installed matching %s",
 				formatQuoted(excluded.List()...))
 		}
 		// always be verbose on failure

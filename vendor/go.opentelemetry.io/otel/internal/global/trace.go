@@ -1,18 +1,7 @@
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 
-package global
+package global // import "go.opentelemetry.io/otel/internal/global"
 
 /*
 This file contains the forwarding implementation of the TracerProvider used as
@@ -36,8 +25,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"go.opentelemetry.io/otel/internal/trace/noop"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/embedded"
 )
 
 // tracerProvider is a placeholder for a configured SDK TracerProvider.
@@ -45,6 +36,8 @@ import (
 // All TracerProvider functionality is forwarded to a delegate once
 // configured.
 type tracerProvider struct {
+	embedded.TracerProvider
+
 	mtx      sync.Mutex
 	tracers  map[il]*tracer
 	delegate trace.TracerProvider
@@ -89,9 +82,11 @@ func (p *tracerProvider) Tracer(name string, opts ...trace.TracerOption) trace.T
 
 	// At this moment it is guaranteed that no sdk is installed, save the tracer in the tracers map.
 
+	c := trace.NewTracerConfig(opts...)
 	key := il{
 		name:    name,
-		version: trace.NewTracerConfig(opts...).InstrumentationVersion,
+		version: c.InstrumentationVersion(),
+		schema:  c.SchemaURL(),
 	}
 
 	if p.tracers == nil {
@@ -102,23 +97,23 @@ func (p *tracerProvider) Tracer(name string, opts ...trace.TracerOption) trace.T
 		return val
 	}
 
-	t := &tracer{name: name, opts: opts}
+	t := &tracer{name: name, opts: opts, provider: p}
 	p.tracers[key] = t
 	return t
 }
 
-type il struct {
-	name    string
-	version string
-}
+type il struct{ name, version, schema string }
 
 // tracer is a placeholder for a trace.Tracer.
 //
 // All Tracer functionality is forwarded to a delegate once configured.
 // Otherwise, all functionality is forwarded to a NoopTracer.
 type tracer struct {
-	name string
-	opts []trace.TracerOption
+	embedded.Tracer
+
+	name     string
+	opts     []trace.TracerOption
+	provider *tracerProvider
 
 	delegate atomic.Value
 }
@@ -138,10 +133,57 @@ func (t *tracer) setDelegate(provider trace.TracerProvider) {
 
 // Start implements trace.Tracer by forwarding the call to t.delegate if
 // set, otherwise it forwards the call to a NoopTracer.
-func (t *tracer) Start(ctx context.Context, name string, opts ...trace.SpanOption) (context.Context, trace.Span) {
+func (t *tracer) Start(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
 	delegate := t.delegate.Load()
 	if delegate != nil {
 		return delegate.(trace.Tracer).Start(ctx, name, opts...)
 	}
-	return noop.Tracer.Start(ctx, name, opts...)
+
+	s := nonRecordingSpan{sc: trace.SpanContextFromContext(ctx), tracer: t}
+	ctx = trace.ContextWithSpan(ctx, s)
+	return ctx, s
 }
+
+// nonRecordingSpan is a minimal implementation of a Span that wraps a
+// SpanContext. It performs no operations other than to return the wrapped
+// SpanContext.
+type nonRecordingSpan struct {
+	embedded.Span
+
+	sc     trace.SpanContext
+	tracer *tracer
+}
+
+var _ trace.Span = nonRecordingSpan{}
+
+// SpanContext returns the wrapped SpanContext.
+func (s nonRecordingSpan) SpanContext() trace.SpanContext { return s.sc }
+
+// IsRecording always returns false.
+func (nonRecordingSpan) IsRecording() bool { return false }
+
+// SetStatus does nothing.
+func (nonRecordingSpan) SetStatus(codes.Code, string) {}
+
+// SetError does nothing.
+func (nonRecordingSpan) SetError(bool) {}
+
+// SetAttributes does nothing.
+func (nonRecordingSpan) SetAttributes(...attribute.KeyValue) {}
+
+// End does nothing.
+func (nonRecordingSpan) End(...trace.SpanEndOption) {}
+
+// RecordError does nothing.
+func (nonRecordingSpan) RecordError(error, ...trace.EventOption) {}
+
+// AddEvent does nothing.
+func (nonRecordingSpan) AddEvent(string, ...trace.EventOption) {}
+
+// AddLink does nothing.
+func (nonRecordingSpan) AddLink(trace.Link) {}
+
+// SetName does nothing.
+func (nonRecordingSpan) SetName(string) {}
+
+func (s nonRecordingSpan) TracerProvider() trace.TracerProvider { return s.tracer.provider }
