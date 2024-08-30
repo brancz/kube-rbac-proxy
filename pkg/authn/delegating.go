@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"time"
 
+	"k8s.io/apiserver/pkg/apis/apiserver"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/authenticatorfactory"
 	"k8s.io/apiserver/pkg/server/dynamiccertificates"
@@ -50,7 +51,9 @@ func NewDelegatingAuthenticator(client authenticationclient.AuthenticationV1Inte
 	)
 
 	authenticatorConfig := authenticatorfactory.DelegatingAuthenticatorConfig{
-		Anonymous: false, // always require authentication
+		Anonymous: &apiserver.AnonymousAuthConfig{
+			Enabled: false, // always require authentication
+		},
 		// Better defaults would be here: apiserver/pkg/server/options/authentication.go.
 		CacheTTL:                2 * time.Minute,
 		TokenAccessReviewClient: client,
