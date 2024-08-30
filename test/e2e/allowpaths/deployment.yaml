@@ -22,7 +22,6 @@ spec:
             - "--proxy-endpoints-port=8643"
             - "--upstream=http://127.0.0.1:8081/"
             - "--allow-paths=/metrics,/api/v1/label/*/values"
-            - "--logtostderr=true"
             - "--v=10"
           ports:
             - containerPort: 8443

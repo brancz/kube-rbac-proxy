@@ -17,13 +17,18 @@ limitations under the License.
 package options
 
 import (
+	"fmt"
+	"path"
 	"time"
 
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	k8sapiflag "k8s.io/component-base/cli/flag"
+	"k8s.io/klog/v2"
 
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authz"
 	"github.com/brancz/kube-rbac-proxy/pkg/proxy"
+	"github.com/spf13/pflag"
 )
 
 type ProxyRunOptions struct {
@@ -45,6 +50,11 @@ type ProxyRunOptions struct {
 	HTTP2Disable              bool
 	HTTP2MaxConcurrentStreams uint32
 	HTTP2MaxSize              uint32
+
+	QPS   float32
+	Burst int
+
+	flagSet *pflag.FlagSet
 }
 
 type TLSConfig struct {
@@ -110,17 +120,85 @@ func (o *ProxyRunOptions) Flags() k8sapiflag.NamedFlagSets {
 	flagset.StringVar(&o.Auth.Authentication.OIDC.ClientID, "oidc-clientID", "", "The client ID for the OpenID Connect client, must be set if oidc-issuer-url is set.")
 	flagset.StringVar(&o.Auth.Authentication.OIDC.GroupsClaim, "oidc-groups-claim", "groups", "Identifier of groups in JWT claim, by default set to 'groups'")
 	flagset.StringVar(&o.Auth.Authentication.OIDC.UsernameClaim, "oidc-username-claim", "email", "Identifier of the user in JWT claim, by default set to 'email'")
+	flagset.StringVar(&o.Auth.Authentication.OIDC.UsernamePrefix, "oidc-username-prefix", "", "If provided, the username will be prefixed with this value to prevent conflicts with other authentication strategies.")
 	flagset.StringVar(&o.Auth.Authentication.OIDC.GroupsPrefix, "oidc-groups-prefix", "", "If provided, all groups will be prefixed with this value to prevent conflicts with other authentication strategies.")
 	flagset.StringArrayVar(&o.Auth.Authentication.OIDC.SupportedSigningAlgs, "oidc-sign-alg", []string{"RS256"}, "Supported signing algorithms, default RS256")
 	flagset.StringVar(&o.Auth.Authentication.OIDC.CAFile, "oidc-ca-file", "", "If set, the OpenID server's certificate will be verified by one of the authorities in the oidc-ca-file, otherwise the host's root CA set will be used.")
 
 	//Kubeconfig flag
 	flagset.StringVar(&o.KubeconfigLocation, "kubeconfig", "", "Path to a kubeconfig file, specifying how to connect to the API server. If unset, in-cluster configuration will be used")
+	flagset.Float32Var(&o.QPS, "kube-api-qps", 0, "queries per second to the api, kube-client starts client-side throttling, when breached")
+	flagset.IntVar(&o.Burst, "kube-api-burst", 0, "kube-api burst value; needed when kube-api-qps is set")
 
 	// HTTP2 flags
 	flagset.BoolVar(&o.HTTP2Disable, "http2-disable", false, "Disable HTTP/2 support")
 	flagset.Uint32Var(&o.HTTP2MaxConcurrentStreams, "http2-max-concurrent-streams", 100, "The maximum number of concurrent streams per HTTP/2 connection.")
 	flagset.Uint32Var(&o.HTTP2MaxSize, "http2-max-size", 256*1024, "The maximum number of bytes that the server will accept for frame size and buffer per stream in a HTTP/2 request.")
 
+	// disabled flags
+	o.addDisabledFlags(flagset)
+
 	return namedFlagSets
+}
+
+func (o *ProxyRunOptions) Validate() error {
+	var errs []error
+
+	hasCerts := !(o.TLS.CertFile == "") && !(o.TLS.KeyFile == "")
+	hasInsecureListenAddress := o.InsecureListenAddress != ""
+	if !hasCerts || hasInsecureListenAddress {
+		klog.Warning(`
+==== Deprecation Warning ======================
+
+Insecure listen address will be removed.
+Using --insecure-listen-address won't be possible!
+
+The ability to run kube-rbac-proxy without TLS certificates will be removed.
+Not using --tls-cert-file and --tls-private-key-file won't be possible!
+
+For more information, please go to https://github.com/brancz/kube-rbac-proxy/issues/187
+
+===============================================
+
+		`)
+	}
+
+	if o.TLS.ReloadInterval != time.Minute {
+		klog.Warning(`
+==== Deprecation Warning ======================
+
+tls-reload-interval will be removed.
+Using --tls-reload-interval won't be possible!
+
+For more information, please go to https://github.com/brancz/kube-rbac-proxy/issues/196
+
+===============================================
+		`)
+
+	}
+
+	if len(o.AllowPaths) > 0 && len(o.IgnorePaths) > 0 {
+		errs = append(errs, fmt.Errorf("cannot use --allow-paths and --ignore-paths together"))
+	}
+
+	for _, pathAllowed := range o.AllowPaths {
+		_, err := path.Match(pathAllowed, "")
+		if err != nil {
+			errs = append(errs, fmt.Errorf("failed to verify allow path: %s", pathAllowed))
+		}
+	}
+
+	for _, pathIgnored := range o.IgnorePaths {
+		_, err := path.Match(pathIgnored, "")
+		if err != nil {
+			errs = append(errs, fmt.Errorf("failed to verify ignored path: %s", pathIgnored))
+		}
+	}
+
+	// Removed upstream flags shouldn't be use
+	if err := o.validateDisabledFlags(); err != nil {
+		errs = append(errs, err)
+	}
+
+	return utilerrors.NewAggregate(errs)
 }

@@ -7,7 +7,12 @@ Release shepherds are chosen on a voluntary basis.
 
 | release series | date of release (year-month-day) | release shepherd                            |
 |----------------|----------------------------------|---------------------------------------------|
-| v0.16.0        | TBD                              | Krzysztof Ostrowski (GitHub: @ibihim)       |
+| v0.19.0        | TBD                              | Krzysztof Ostrowski (GitHub: @ibihim)       |
+| v0.18.1        | 2024-08-30                       | Krzysztof Ostrowski (GitHub: @ibihim)       |
+| v0.18.0        | 2024-06-05                       | Krzysztof Ostrowski (GitHub: @ibihim)       |
+| v0.17.1        | 2024-05-07                       | Krzysztof Ostrowski (GitHub: @ibihim)       |
+| v0.17.0        | 2024-04-18                       | Krzysztof Ostrowski (GitHub: @ibihim)       |
+| v0.16.0        | 2024-02-08                       | Krzysztof Ostrowski (GitHub: @ibihim)       |
 | v0.15.0        | 2023-10-20                       | Krzysztof Ostrowski (GitHub: @ibihim)       |
 | v0.14.4        | 2023-10-16                       | Krzysztof Ostrowski (GitHub: @ibihim)       |
 | v0.14.3        | 2023-09-07                       | Krzysztof Ostrowski (GitHub: @ibihim)       |
@@ -139,4 +144,3 @@ to be pushed to Quay.io.
 
 If the release has happened in the latest release branch, merge the changes into
 main.
-
