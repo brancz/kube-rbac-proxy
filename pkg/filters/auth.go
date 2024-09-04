@@ -95,7 +95,11 @@ func WithAuthorization(
 			if authorized != authorizer.DecisionAllow {
 				msg := fmt.Sprintf("Forbidden (user=%s, verb=%s, resource=%s, subresource=%s)", u.GetName(), attrs.GetVerb(), attrs.GetResource(), attrs.GetSubresource())
 				klog.V(2).Infof("%s. Reason: %q.", msg, reason)
-				http.Error(w, msg, http.StatusForbidden)
+				if authorized == authorizer.DecisionDeny {
+					http.Error(w, msg, http.StatusMethodNotAllowed)
+				} else {
+					http.Error(w, msg, http.StatusForbidden)
+				}
 				return
 			}
 		}

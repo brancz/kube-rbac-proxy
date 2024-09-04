@@ -164,10 +164,19 @@ func TestWithAuthorization(t *testing.T) {
 			name: "should fail with authorization failure",
 			req:  userRequest,
 			authz: authorizerFunc(func(ctx context.Context, attr authorizer.Attributes) (authorizer.Decision, string, error) {
-				return authorizer.DecisionDeny, "not authorized", nil
+				return authorizer.DecisionNoOpinion, "not authorized", nil
 			}),
 			cfg:    &authz.Config{},
 			status: http.StatusForbidden,
+		},
+		{
+			name: "should fail with method authorization failure",
+			req:  userRequest,
+			authz: authorizerFunc(func(ctx context.Context, attr authorizer.Attributes) (authorizer.Decision, string, error) {
+				return authorizer.DecisionDeny, "not authorized to this methos", nil
+			}),
+			cfg:    &authz.Config{},
+			status: http.StatusMethodNotAllowed,
 		},
 		{
 			name: "should succeed with authorization",
@@ -300,10 +309,20 @@ func TestProxyWithOIDCSupport(t *testing.T) {
 			description: "Request with valid token should return 403 due to lack of permissions",
 			given: given{
 				req:        fakeJWTRequest("GET", "/accounts", "Bearer VALID"),
-				authorizer: denier{},
+				authorizer: noOpinion{},
 			},
 			expected: expected{
 				status: http.StatusForbidden,
+			},
+		},
+		{
+			description: "Request with valid token should return 405 due to lack of method permissions",
+			given: given{
+				req:        fakeJWTRequest("GET", "/accounts", "Bearer VALID"),
+				authorizer: denier{},
+			},
+			expected: expected{
+				status: http.StatusMethodNotAllowed,
 			},
 		},
 		{
@@ -366,10 +385,16 @@ func fakeOIDCAuthenticator(t *testing.T, fakeUser *user.DefaultInfo) authenticat
 	return auth
 }
 
+type noOpinion struct{}
+
+func (n noOpinion) Authorize(ctx context.Context, auth authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
+	return authorizer.DecisionNoOpinion, "user not allowed", nil
+}
+
 type denier struct{}
 
 func (d denier) Authorize(ctx context.Context, auth authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
-	return authorizer.DecisionDeny, "user not allowed", nil
+	return authorizer.DecisionDeny, "user has no access to this method", nil
 }
 
 type approver struct{}
