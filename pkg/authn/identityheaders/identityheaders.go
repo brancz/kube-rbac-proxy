@@ -43,6 +43,10 @@ func WithAuthHeaders(handler http.Handler, cfg *AuthnHeaderConfig) http.Handler 
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// We don't want the client to impersonate someone else.
+		req.Header.Del(cfg.UserFieldName)
+		req.Header.Del(cfg.GroupsFieldName)
+
 		u, ok := request.UserFrom(req.Context())
 		if ok {
 			// Seemingly well-known headers to tell the upstream about user's identity
