@@ -71,6 +71,8 @@ that can perform RBAC authorization against the Kubernetes API using SubjectAcce
 		// stop printing usage when the command errors
 		SilenceUsage: true,
 		PersistentPreRunE: func(*cobra.Command, []string) error {
+			klog.SetLogFilter(&SanitizingFilter{})
+
 			// silence client-go warnings.
 			// kube-apiserver loopback clients should not log self-issued warnings.
 			rest.SetDefaultWarningHandler(rest.NoWarnings{})
