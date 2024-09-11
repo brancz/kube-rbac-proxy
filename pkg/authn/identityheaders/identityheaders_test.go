@@ -43,16 +43,22 @@ func TestWithAuthHeaders(t *testing.T) {
 	groupKey := "Group"
 	groupValue := "utzer"
 
+	defaultUserHeader := map[string]string{
+		userKey:  userValue,
+		groupKey: groupValue,
+	}
+
 	for _, tt := range []struct {
 		name   string
 		cfg    *identityheaders.AuthnHeaderConfig
-		ctx    context.Context
-		header map[string][]string
+		req    *http.Request
+		header map[string]string
 	}{
 		{
 			name:   "should pass through",
 			cfg:    &identityheaders.AuthnHeaderConfig{},
-			header: map[string][]string{},
+			req:    testRequest(t, withHeader(defaultUserHeader)),
+			header: defaultUserHeader,
 		},
 		{
 			name: "should set username in header",
@@ -60,40 +66,33 @@ func TestWithAuthHeaders(t *testing.T) {
 				UserFieldName:   userKey,
 				GroupsFieldName: groupKey,
 			},
-			header: map[string][]string{
-				userKey:  {userValue},
-				groupKey: {groupValue},
+			header: defaultUserHeader,
+			req:    testRequest(t, withUserContext(userValue, groupValue)),
+		},
+		{
+			name: "should not pass client header",
+			cfg: &identityheaders.AuthnHeaderConfig{
+				UserFieldName:   userKey,
+				GroupsFieldName: groupKey,
 			},
+			req:    testRequest(t, withHeader(map[string]string{userKey: "admin", groupKey: "system:admin"})),
+			header: map[string]string{},
 		},
 	} {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			req, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			req = req.WithContext(
-				request.WithUser(
-					req.Context(),
-					&user.DefaultInfo{
-						Name:   userValue,
-						Groups: []string{groupValue},
-					},
-				),
-			)
-
 			rec := httptest.NewRecorder()
-			identityheaders.WithAuthHeaders(okHandler, tt.cfg).ServeHTTP(rec, req)
+			identityheaders.WithAuthHeaders(okHandler, tt.cfg).ServeHTTP(rec, tt.req)
 
-			if len(req.Header) != len(tt.header) {
-				t.Errorf("want: %+v\nhave:%+v", tt.header, req.Header)
+			if len(tt.req.Header) != len(tt.header) {
+				t.Errorf("want: %+v\nhave:%+v", tt.header, tt.req.Header)
 				return
 			}
 
 			if len(tt.header) > 0 {
 				for k, v := range tt.header {
-					if req.Header[k][0] != v[0] {
-						t.Errorf("want: %s\nhave: %s", v[0], req.Header[k][0])
+					if tt.req.Header[k][0] != v {
+						t.Errorf("want: %s\nhave: %s", v, tt.req.Header[k][0])
 					}
 				}
 			}
@@ -150,7 +149,7 @@ func TestProxyWithOIDCSupport(t *testing.T) {
 			handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 			handler = identityheaders.WithAuthHeaders(handler, cfg)
 			handler = kubefilters.WithAuthorization(handler, v.authorizer, scheme.Codecs)
-			handler = kubefilters.WithAuthentication(handler, authenticator, http.HandlerFunc(filters.UnauthorizedHandler), []string{})
+			handler = kubefilters.WithAuthentication(handler, authenticator, http.HandlerFunc(filters.UnauthorizedHandler), []string{}, nil)
 			handler = kubefilters.WithRequestInfo(handler, &request.RequestInfoFactory{})
 
 			handler.ServeHTTP(w, v.req)
@@ -220,4 +219,44 @@ type testCase struct {
 	given
 	expected
 	description string
+}
+
+func testRequest(t *testing.T, withOpts ...func(*http.Request) (*http.Request, error)) *http.Request {
+	req, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, opt := range withOpts {
+		req, err = opt(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	return req
+}
+
+func withHeader(header map[string]string) func(*http.Request) (*http.Request, error) {
+	return func(req *http.Request) (*http.Request, error) {
+		for key, value := range header {
+			req.Header.Set(key, value)
+		}
+
+		return req, nil
+	}
+}
+
+func withUserContext(userValue, groupValue string) func(*http.Request) (*http.Request, error) {
+	return func(req *http.Request) (*http.Request, error) {
+		return req.WithContext(
+			request.WithUser(
+				req.Context(),
+				&user.DefaultInfo{
+					Name:   userValue,
+					Groups: []string{groupValue},
+				},
+			),
+		), nil
+	}
 }

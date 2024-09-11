@@ -57,6 +57,8 @@ type ProxyOptions struct {
 	ProxyEndpointsPort int
 
 	TokenAudiences []string
+
+	DisableHTTP2Serving bool
 }
 
 func (o *ProxyOptions) AddFlags(flagset *pflag.FlagSet) {
@@ -81,6 +83,9 @@ func (o *ProxyOptions) AddFlags(flagset *pflag.FlagSet) {
 
 	// proxy endpoints flag
 	flagset.IntVar(&o.ProxyEndpointsPort, "proxy-endpoints-port", 0, "The port to securely serve proxy-specific endpoints (such as '/healthz'). Uses the host from the '--secure-listen-address'.")
+
+	// http2 serving flag, remove with k8s 1.31
+	flagset.BoolVar(&o.DisableHTTP2Serving, "disable-http2-serving", o.DisableHTTP2Serving, "If true, HTTP2 serving will be disabled [default=false]")
 }
 
 func (o *ProxyOptions) Validate() []error {
@@ -116,29 +121,30 @@ func (o *ProxyOptions) Validate() []error {
 	return errs
 }
 
-func (o *ProxyOptions) ApplyTo(c *server.KubeRBACProxyInfo, a *serverconfig.AuthenticationInfo) error {
+func (o *ProxyOptions) ApplyTo(krpInfo *server.KubeRBACProxyInfo, authInfo *serverconfig.AuthenticationInfo, serving *serverconfig.SecureServingInfo) error {
 	var err error
 
-	c.UpstreamURL, err = url.Parse(o.Upstream)
+	krpInfo.UpstreamURL, err = url.Parse(o.Upstream)
 	if err != nil {
 		return fmt.Errorf("failed to parse upstream URL: %w", err)
 	}
 
-	if err := c.SetUpstreamTransport(o.UpstreamCAFile, o.UpstreamClientCertFile, o.UpstreamClientKeyFile); err != nil {
+	if err := krpInfo.SetUpstreamTransport(o.UpstreamCAFile, o.UpstreamClientCertFile, o.UpstreamClientKeyFile); err != nil {
 		return fmt.Errorf("failed to setup transport for upstream: %w", err)
 	}
 
 	if configFileName := o.ConfigFileName; len(configFileName) > 0 {
-		c.Authorization, err = parseAuthorizationConfigFile(configFileName)
+		krpInfo.Authorization, err = parseAuthorizationConfigFile(configFileName)
 		if err != nil {
 			return fmt.Errorf("failed to read the config file: %w", err)
 		}
 	}
 
-	c.UpstreamHeaders = o.UpstreamHeader
-	c.IgnorePaths = o.IgnorePaths
-	c.AllowPaths = o.AllowPaths
-	a.APIAudiences = o.TokenAudiences
+	serving.DisableHTTP2 = o.DisableHTTP2Serving
+	krpInfo.UpstreamHeaders = o.UpstreamHeader
+	krpInfo.IgnorePaths = o.IgnorePaths
+	krpInfo.AllowPaths = o.AllowPaths
+	authInfo.APIAudiences = o.TokenAudiences
 
 	return nil
 }
@@ -156,7 +162,7 @@ func validateSecureConnectionConfig(o *ProxyOptions) error {
 		return fmt.Errorf("loopback address is required for h2c: %w", errLoopback)
 	}
 
-	klog.V(4).Info("Failed to validate loopback address: %v", errLoopback)
+	klog.V(4).Infof("Failed to validate loopback address: %v", errLoopback)
 
 	u, err := url.Parse(o.Upstream)
 	if err != nil {

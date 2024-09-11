@@ -56,7 +56,7 @@ Usage:
 
 Secure serving flags:
 
-      --bind-address ip                        The IP address on which to listen for the --secure-port port. The associated interface(s) must be reachable by the rest of the cluster, and by CLI/web clients. If blank or an unspecified address (0.0.0.0 or ::), all interfaces will be used. (default 0.0.0.0)
+      --bind-address ip                        The IP address on which to listen for the --secure-port port. The associated interface(s) must be reachable by the rest of the cluster, and by CLI/web clients. If blank or an unspecified address (0.0.0.0 or ::), all interfaces and IP address families will be used. (default 0.0.0.0)
       --cert-dir string                        The directory where the TLS certs are located. If --tls-cert-file and --tls-private-key-file are provided, this flag will be ignored. (default "apiserver.local.config/certificates")
       --http2-max-streams-per-connection int   The limit that the server gives to clients for the maximum number of streams in an HTTP/2 connection. Zero means to use golang's default.
       --permit-address-sharing                 If true, SO_REUSEADDR will be used when binding the port. This allows binding to wildcard IPs like 0.0.0.0 and specific IPs in parallel, and it avoids waiting for the kernel to release sockets in TIME_WAIT state. [default=false]
@@ -97,6 +97,7 @@ Proxy flags:
       --auth-header-user-field-name string          The name of the field inside a http(2) request header to tell the upstream server about the user's name (default "x-remote-user")
       --auth-token-audiences strings                Comma-separated list of token audiences to accept. By default a token does not have to have any specific audience. It is recommended to set a specific audience.
       --config-file string                          Configuration file to configure static and rewrites authorization of the kube-rbac-proxy.
+      --disable-http2-serving                       If true, HTTP2 serving will be disabled [default=false]
       --ignore-paths strings                        Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the requst matches, it will proxy the request without performing an authentication or authorization check. Cannot be used with --allow-paths.
       --proxy-endpoints-port int                    The port to securely serve proxy-specific endpoints (such as '/healthz'). Uses the host from the '--secure-listen-address'.
       --upstream string                             The upstream URL to proxy to once requests have successfully been authenticated and authorized.
@@ -107,29 +108,19 @@ Proxy flags:
 
 OIDC flags:
 
-      --oidc-ca-file string          If set, the OpenID server's certificate will be verified by one of the authorities in the oidc-ca-file, otherwise the host's root CA set will be used.
-      --oidc-clientID string         The client ID for the OpenID Connect client, must be set if oidc-issuer-url is set.
-      --oidc-groups-claim string     Identifier of groups in JWT claim, by default set to 'groups' (default "groups")
-      --oidc-groups-prefix string    If provided, all groups will be prefixed with this value to prevent conflicts with other authentication strategies.
-      --oidc-issuer string           The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).
-      --oidc-sign-alg stringArray    Supported signing algorithms, default RS256 (default [RS256])
-      --oidc-username-claim string   Identifier of the user in JWT claim, by default set to 'email' (default "email")
+      --oidc-ca-file string           If set, the OpenID server's certificate will be verified by one of the authorities in the oidc-ca-file, otherwise the host's root CA set will be used.
+      --oidc-clientID string          The client ID for the OpenID Connect client, must be set if oidc-issuer-url is set.
+      --oidc-groups-claim string      Identifier of groups in JWT claim, by default set to 'groups' (default "groups")
+      --oidc-groups-prefix string     If provided, all groups will be prefixed with this value to prevent conflicts with other authentication strategies.
+      --oidc-issuer string            The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).
+      --oidc-sign-alg stringArray     Supported signing algorithms, default RS256 (default [RS256])
+      --oidc-username-claim string    Identifier of the user in JWT claim, by default set to 'email' (default "email")
+      --oidc-username-prefix string   If provided, the username will be prefixed with this value to prevent conflicts with other authentication strategies.
 
 Global flags:
 
-      --add-dir-header                   If true, adds the file directory to the header of the log messages (DEPRECATED: will be removed in a future release, see https://github.com/kubernetes/enhancements/tree/master/keps/sig-instrumentation/2845-deprecate-klog-specific-flags-in-k8s-components)
-      --alsologtostderr                  log to standard error as well as files (no effect when -logtostderr=true) (DEPRECATED: will be removed in a future release, see https://github.com/kubernetes/enhancements/tree/master/keps/sig-instrumentation/2845-deprecate-klog-specific-flags-in-k8s-components)
-  -h, --help                             help for kube-rbac-proxy
-      --log-backtrace-at traceLocation   when logging hits line file:N, emit a stack trace (default :0) (DEPRECATED: will be removed in a future release, see https://github.com/kubernetes/enhancements/tree/master/keps/sig-instrumentation/2845-deprecate-klog-specific-flags-in-k8s-components)
-      --log-dir string                   If non-empty, write log files in this directory (no effect when -logtostderr=true) (DEPRECATED: will be removed in a future release, see https://github.com/kubernetes/enhancements/tree/master/keps/sig-instrumentation/2845-deprecate-klog-specific-flags-in-k8s-components)
-      --log-file string                  If non-empty, use this log file (no effect when -logtostderr=true) (DEPRECATED: will be removed in a future release, see https://github.com/kubernetes/enhancements/tree/master/keps/sig-instrumentation/2845-deprecate-klog-specific-flags-in-k8s-components)
-      --log-file-max-size uint           Defines the maximum size a log file can grow to (no effect when -logtostderr=true). Unit is megabytes. If the value is 0, the maximum file size is unlimited. (default 1800) (DEPRECATED: will be removed in a future release, see https://github.com/kubernetes/enhancements/tree/master/keps/sig-instrumentation/2845-deprecate-klog-specific-flags-in-k8s-components)
-      --logtostderr                      log to standard error instead of files (default true) (DEPRECATED: will be removed in a future release, see https://github.com/kubernetes/enhancements/tree/master/keps/sig-instrumentation/2845-deprecate-klog-specific-flags-in-k8s-components)
-      --one-output                       If true, only write logs to their native severity level (vs also writing to each lower severity level; no effect when -logtostderr=true) (DEPRECATED: will be removed in a future release, see https://github.com/kubernetes/enhancements/tree/master/keps/sig-instrumentation/2845-deprecate-klog-specific-flags-in-k8s-components)
-      --skip-headers                     If true, avoid header prefixes in the log messages (DEPRECATED: will be removed in a future release, see https://github.com/kubernetes/enhancements/tree/master/keps/sig-instrumentation/2845-deprecate-klog-specific-flags-in-k8s-components)
-      --skip-log-headers                 If true, avoid headers when opening log files (no effect when -logtostderr=true) (DEPRECATED: will be removed in a future release, see https://github.com/kubernetes/enhancements/tree/master/keps/sig-instrumentation/2845-deprecate-klog-specific-flags-in-k8s-components)
-      --stderrthreshold severity         logs at or above this threshold go to stderr when writing to files and stderr (no effect when -logtostderr=true or -alsologtostderr=false) (default 2) (DEPRECATED: will be removed in a future release, see https://github.com/kubernetes/enhancements/tree/master/keps/sig-instrumentation/2845-deprecate-klog-specific-flags-in-k8s-components)
-      --version version[=true]           Print version information and quit
+  -h, --help                     help for kube-rbac-proxy
+      --version version[=true]   --version, --version=raw prints version information and quits; --version=vX.Y.Z... sets the reported version
 ```
 
 ### Authorization configuration
