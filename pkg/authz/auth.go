@@ -53,6 +53,7 @@ type QueryParameterRewriteConfig struct {
 // be used to rewrite a SubjectAccessReview on a given request.
 type HTTPHeaderRewriteConfig struct {
 	Name string `json:"name,omitempty"`
+	Sep  string `json:"separator,omitempty"`
 }
 
 // ResourceAttributes describes attributes available for resource request authorization
