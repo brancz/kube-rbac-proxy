@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-rbac-proxy
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kube-rbac-proxy
+  template:
+    metadata:
+      labels:
+        app: kube-rbac-proxy
+    spec:
+      serviceAccountName: kube-rbac-proxy
+      volumes:
+        - name: server-certs
+          secret:
+            secretName: kube-rbac-proxy-server-certs
+        - name: mock-issuer-trust
+          configMap:
+            name: mock-issuer-trust
+      containers:
+        - name: kube-rbac-proxy
+          image: quay.io/brancz/kube-rbac-proxy:local
+          args:
+            - "--secure-listen-address=0.0.0.0:8443"
+            - "--tls-cert-file=/usr/local/etc/kube-rbac-proxy/server-certs/tls.crt"
+            - "--tls-private-key-file=/usr/local/etc/kube-rbac-proxy/server-certs/tls.key"
+            - "--upstream=http://127.0.0.1:8081/"
+            - "--oidc-issuer=https://mock-issuer.default.svc.cluster.local:8443"
+            - "--oidc-clientID=test-client-id"
+            - "--oidc-username-claim=preferred_username"
+            - "--oidc-groups-claim=roles"
+            - "--oidc-ca-file=/usr/local/etc/kube-rbac-proxy/mock-issuer-trust/ca.crt"
+            - "--v=10"
+          ports:
+            - containerPort: 8443
+              name: https
+          volumeMounts:
+            - mountPath: /usr/local/etc/kube-rbac-proxy/server-certs
+              name: server-certs
+            - mountPath: /usr/local/etc/kube-rbac-proxy/mock-issuer-trust
+              name: mock-issuer-trust
+        - name: prometheus-example-app
+          image: quay.io/brancz/prometheus-example-app:v0.5.0
+          args:
+            - "--bind=127.0.0.1:8081"

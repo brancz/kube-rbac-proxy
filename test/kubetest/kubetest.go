@@ -17,10 +17,11 @@ limitations under the License.
 package kubetest
 
 import (
+	"github.com/wiremock/go-wiremock"
+	"k8s.io/client-go/tools/clientcmd"
 	"testing"
 
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 func NewClientFromKubeconfig(path string) (kubernetes.Interface, error) {
@@ -53,6 +54,7 @@ type Scenario struct {
 func (s Scenario) Run(t *testing.T) bool {
 	ctx := &ScenarioContext{
 		Namespace: "default",
+		stubs:     map[string]*wiremock.StubRule{},
 	}
 
 	defer func(ctx *ScenarioContext) {
@@ -87,10 +89,22 @@ func (s Scenario) Run(t *testing.T) bool {
 type ScenarioContext struct {
 	Namespace string
 	CleanUp   []CleanUp
+	stubs     map[string]*wiremock.StubRule
 }
 
 func (ctx *ScenarioContext) AddCleanUp(f CleanUp) {
 	ctx.CleanUp = append(ctx.CleanUp, f)
+}
+
+// AddStub adds a wiremock test stub to the test scenario context
+func (ctx *ScenarioContext) AddStub(name string, stub *wiremock.StubRule) {
+	ctx.stubs[name] = stub
+}
+
+// GetStub retrieves a wiremock test stub by the given name
+func (ctx *ScenarioContext) GetStub(name string) (*wiremock.StubRule, bool) {
+	stub, found := ctx.stubs[name]
+	return stub, found
 }
 
 type CleanUp func() error
