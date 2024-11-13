@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-issuer
+  labels:
+    app: mock-issuer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-issuer
+  template:
+    metadata:
+      name: mock-issuer
+      labels:
+        app: mock-issuer
+    spec:
+      containers:
+        - name: mock-issuer
+          image: docker.io/mockserver/mockserver:mockserver-5.15.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: api
+              containerPort: 8443
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: api
+            initialDelaySeconds: 2
+            periodSeconds: 2
+            successThreshold: 1
+            failureThreshold: 10
+          env:
+            - name: MOCKSERVER_TLS_PRIVATE_KEY_PATH
+              value: "/usr/local/etc/mock-issuer/server-keys/tls.key"
+            - name: MOCKSERVER_TLS_X509_CERTIFICATE_PATH
+              value: "/usr/local/etc/mock-issuer/server-certs/tls.crt"
+            - name: MOCKSERVER_CERTIFICATE_AUTHORITY_X509_CERTIFICATE
+              value: "/usr/local/etc/mock-issuer/server-certs/ca.crt"
+            - name: MOCKSERVER_LOG_LEVEL
+              value: "INFO"
+            - name: SERVER_PORT
+              value: "8443"
+          volumeMounts:
+            - name: mock-issuer-certs
+              mountPath: /usr/local/etc/mock-issuer/server-certs
+            - name: mock-issuer-keys
+              mountPath: /usr/local/etc/mock-issuer/server-keys
+      volumes:
+        - name: mock-issuer-keys
+          secret:
+            secretName: mock-issuer-keys
+        - name: mock-issuer-certs
+          configMap:
+            name: mock-issuer-certs

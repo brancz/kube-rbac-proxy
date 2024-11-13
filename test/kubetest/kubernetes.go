@@ -426,6 +426,7 @@ type RunOptions struct {
 	ServiceAccount     string
 	TokenAudience      string
 	ClientCertificates bool
+	OIDCToken          string
 }
 
 func RunSucceeds(client kubernetes.Interface, image string, name string, command []string, opts *RunOptions) Action {
@@ -508,6 +509,24 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 			corev1.VolumeMount{
 				Name:      "clientcertificates",
 				MountPath: "/certs",
+			},
+		)
+	}
+
+	if opts != nil && opts.OIDCToken != "" {
+		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+			Name: "clienttoken",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: fmt.Sprintf("%s-token", opts.OIDCToken),
+				},
+			},
+		})
+
+		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts,
+			corev1.VolumeMount{
+				Name:      "clienttoken",
+				MountPath: "/tokens",
 			},
 		)
 	}

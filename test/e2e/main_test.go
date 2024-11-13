@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"flag"
+	"k8s.io/client-go/rest"
 	"log"
 	"os"
 	"testing"
@@ -30,6 +31,7 @@ import (
 // Sadly there's no way to pass the k8s client from TestMain to Test,
 // so we need this global instance
 var client kubernetes.Interface
+var config *rest.Config
 
 // TestMain adds the kubeconfig flag to our tests
 func TestMain(m *testing.M) {
@@ -41,7 +43,7 @@ func TestMain(m *testing.M) {
 	flag.Parse()
 
 	var err error
-	client, err = kubetest.NewClientFromKubeconfig(*kubeconfig)
+	client, config, err = kubetest.NewClientFromKubeconfig(*kubeconfig)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -62,6 +64,7 @@ func Test(t *testing.T) {
 		"HTTP2":              testHTTP2(client),
 		"Flags":              testFlags(client),
 		"TokenMasking":       testTokenMasking(client),
+		"OIDC":               testOIDC(client, config),
 	}
 
 	for name, tc := range tests {
