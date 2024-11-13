@@ -242,6 +242,7 @@ func Run(cfg *server.KubeRBACProxyConfig) error {
 		return err
 	}
 
+	var stoppedCh, listenerStoppedCh <-chan struct{}
 	go func() {
 		defer wg.Done()
 		defer cancel()
@@ -256,11 +257,15 @@ func Run(cfg *server.KubeRBACProxyConfig) error {
 		<-stoppedCh
 	}()
 
+	cfg.SecureServing.Cert.CurrentCertKeyContent()
+
 	if cfg.KubeRBACProxyInfo.ProxyEndpointsSecureServing != nil {
 		// we need a second listener in order to serve proxy-specific endpoints
 		// on a different port (--proxy-endpoints-port)
 		proxyEndpointsMux := http.NewServeMux()
-		proxyEndpointsMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
+		proxyEndpointsMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+			proxyHealtzCheck(w, cfg.SecureServing.Listener.Addr().String(), listenerStoppedCh, stoppedCh)
+		})
 
 		if err := wg.Add(1); err != nil {
 			return err
@@ -346,4 +351,32 @@ func setupAuthorizer(krbInfo *server.KubeRBACProxyInfo, delegatedAuthz *serverco
 	}
 
 	return rewritingAuthorizer, nil
+}
+
+func proxyHealtzCheck(w http.ResponseWriter, localProxyAddr string, listenerStoppedChan, stoppedChan <-chan struct{}) {
+	select {
+	case <-stoppedChan:
+		http.Error(w, "the proxying port serving logic has stopped", http.StatusServiceUnavailable)
+		return
+	case <-listenerStoppedChan:
+		http.Error(w, "listener stopped", http.StatusServiceUnavailable)
+		return
+	default:
+	}
+
+	// we need the tls.Dialer otherwise the server would log EOF for TLS handshakes
+	// since the connection would be cut before that was ever attempted
+	dialer := tls.Dialer{NetDialer: &net.Dialer{}, Config: &tls.Config{InsecureSkipVerify: true}}
+	dialCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// we just knock on the other listener as we don't want to trigger proxying to upstream
+	conn, err := dialer.DialContext(dialCtx, "tcp", localProxyAddr)
+	if err != nil {
+		http.Error(w, "failed to connect to the proxying listener", http.StatusInternalServerError)
+		klog.Errorf("failed to connect to the proxying listener: %v", err)
+		return
+	}
+	_ = conn.Close()
+	_, _ = w.Write([]byte("ok"))
 }
