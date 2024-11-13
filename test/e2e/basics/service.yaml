@@ -10,5 +10,8 @@ spec:
     - name: https
       port: 8443
       targetPort: https
+    - name: proxy
+      port: 8643
+      targetPort: proxy
   selector:
     app: kube-rbac-proxy

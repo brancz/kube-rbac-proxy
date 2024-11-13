@@ -519,3 +519,47 @@ func testIgnorePaths(client kubernetes.Interface) kubetest.TestSuite {
 		}.Run(t)
 	}
 }
+
+func testHealthz(client kubernetes.Interface) kubetest.TestSuite {
+	return func(t *testing.T) {
+		command := `curl --connect-timeout 5 -v -s -k --fail https://kube-rbac-proxy.default.svc.cluster.local:8643/healthz`
+
+		kubetest.Scenario{
+			Name:        "healtz check",
+			Description: "check that proxy /healthz works as expected",
+
+			Given: kubetest.Actions(
+				kubetest.CreatedManifests(
+					client,
+					"basics/clusterRole.yaml",
+					"basics/clusterRoleBinding.yaml",
+					"basics/deployment.yaml",
+					"basics/service.yaml",
+					"basics/serviceAccount.yaml",
+				),
+			),
+			When: kubetest.Actions(
+				kubetest.PodsAreReady(
+					client,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					client,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Actions(
+				kubetest.ClientLogsContain(
+					client,
+					command,
+					[]string{
+						"{ [2 bytes data]",
+						"ok",
+					},
+					nil,
+				),
+			),
+		}.Run(t)
+	}
+}
