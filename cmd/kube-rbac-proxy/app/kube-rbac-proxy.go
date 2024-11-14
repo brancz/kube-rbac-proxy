@@ -205,23 +205,7 @@ func Run(cfg *server.KubeRBACProxyConfig) error {
 		return fmt.Errorf("failed to setup an authorizer: %v", err)
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(cfg.KubeRBACProxyInfo.UpstreamURL)
-	proxy.Transport = cfg.KubeRBACProxyInfo.UpstreamTransport
-
-	if cfg.KubeRBACProxyInfo.UpstreamForceH2C {
-		// Force http/2 for connections to the upstream i.e. do not start with HTTP1.1 UPGRADE req to
-		// initialize http/2 session.
-		// See https://github.com/golang/go/issues/14141#issuecomment-219212895 for more context
-		proxy.Transport = &http2.Transport{
-			// Allow http schema. This doesn't automatically disable TLS
-			AllowHTTP: true,
-			// Do disable TLS.
-			// In combination with the schema check above. We could enforce h2c against the upstream server
-			DialTLS: func(netw, addr string, cfg *tls.Config) (net.Conn, error) {
-				return net.Dial(netw, addr)
-			},
-		}
-	}
+	proxy := setupProxyHandler(cfg.KubeRBACProxyInfo)
 
 	handler := identityheaders.WithAuthHeaders(proxy, cfg.KubeRBACProxyInfo.UpstreamHeaders)
 	handler = kubefilters.WithAuthorization(handler, authz, scheme.Codecs)
@@ -346,4 +330,49 @@ func setupAuthorizer(krbInfo *server.KubeRBACProxyInfo, delegatedAuthz *serverco
 	}
 
 	return rewritingAuthorizer, nil
+}
+
+func setupProxyHandler(cfg *server.KubeRBACProxyInfo) http.Handler {
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			target := cfg.UpstreamURL
+			pr.SetURL(target)
+			pr.Out.Host = target.Host
+			copyHeaderIfSet(pr.In, pr.Out, "X-Forwarded-For")
+			pr.SetXForwarded()
+		},
+	}
+	proxy.Transport = cfg.UpstreamTransport
+
+	if cfg.UpstreamForceH2C {
+		// Force http/2 for connections to the upstream i.e. do not start with HTTP1.1 UPGRADE req to
+		// initialize http/2 session.
+		// See https://github.com/golang/go/issues/14141#issuecomment-219212895 for more context
+		proxy.Transport = &http2.Transport{
+			// Allow http schema. This doesn't automatically disable TLS
+			AllowHTTP: true,
+			// Do disable TLS.
+			// In combination with the schema check above. We could enforce h2c against the upstream server
+			DialTLS: func(netw, addr string, cfg *tls.Config) (net.Conn, error) {
+				return net.Dial(netw, addr)
+			},
+		}
+	}
+
+	return proxy
+}
+
+func copyHeaderIfSet(inReq *http.Request, outReq *http.Request, headerKey string) {
+	src := inReq.Header.Values(headerKey)
+	if src == nil {
+		return
+	}
+
+	if outReq.Header == nil {
+		outReq.Header = http.Header{}
+	}
+
+	for _, v := range src {
+		outReq.Header.Add(headerKey, v)
+	}
 }
