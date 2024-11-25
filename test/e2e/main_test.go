@@ -17,39 +17,26 @@ limitations under the License.
 package e2e
 
 import (
-	"flag"
-	"log"
-	"os"
+	"fmt"
 	"testing"
 
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/brancz/kube-rbac-proxy/test/kubetest"
 )
 
-// Sadly there's no way to pass the k8s client from TestMain to Test,
-// so we need this global instance
-var client kubernetes.Interface
-
-// TestMain adds the kubeconfig flag to our tests
-func TestMain(m *testing.M) {
-	kubeconfig := flag.String(
-		"kubeconfig",
-		"",
-		"path to kubeconfig",
-	)
-	flag.Parse()
-
-	var err error
-	client, err = kubetest.NewClientFromKubeconfig(*kubeconfig)
+func Test(t *testing.T) {
+	clientConfig, err := newClientConfigForTest()
 	if err != nil {
-		log.Fatal(err)
+		t.Fatalf("failed retrieving kubernetes client config: %v", err)
+	}
+	client, err := kubernetes.NewForConfig(clientConfig)
+	if err != nil {
+		t.Fatalf("failed to setup a client for the tests: %v", err)
 	}
 
-	os.Exit(m.Run())
-}
-
-func Test(t *testing.T) {
 	tests := map[string]kubetest.TestSuite{
 		"Basics":             testBasics(client),
 		"H2CUpstream":        testH2CUpstream(client),
@@ -67,4 +54,16 @@ func Test(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, tc)
 	}
+}
+
+// NewClientConfigForTest returns a config configured to connect to the api server
+func newClientConfigForTest() (*rest.Config, error) {
+	loader := clientcmd.NewDefaultClientConfigLoadingRules()
+	clientConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loader, &clientcmd.ConfigOverrides{})
+	config, err := clientConfig.ClientConfig()
+	if err == nil {
+		fmt.Printf("Found configuration for host %v.\n", config.Host)
+	}
+
+	return config, err
 }
