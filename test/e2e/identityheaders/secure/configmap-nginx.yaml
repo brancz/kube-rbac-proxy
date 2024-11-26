@@ -9,7 +9,7 @@ data:
         server_name upstream-nginx;
 
         ssl_certificate /etc/nginx/certs/tls.crt;
-        ssl_certificate_key /etc/nginx/keys/tls.key;
+        ssl_certificate_key /etc/nginx/certs/tls.key;
         ssl_client_certificate /etc/nginx/client-ca/ca.crt;
         ssl_verify_client on;
 

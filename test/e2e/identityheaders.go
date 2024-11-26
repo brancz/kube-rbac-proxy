@@ -102,7 +102,6 @@ func testIdentityHeaders(client kubernetes.Interface) kubetest.TestSuite {
 					Verifies that the proxy is able to connect to the remote upstream service,
 					through a mTLS connection, when providing identity headers.
 				`,
-
 			Given: kubetest.Actions(
 				kubetest.CreateServerCerts(client, "nginx"),
 				kubetest.CreateClientCerts(client, "kube-rbac-proxy-client"),
