@@ -46,7 +46,7 @@ func CreateClientCerts(client kubernetes.Interface, name string) Action {
 	return createCerts(client, name, createSignedClientCert)
 }
 
-func createCerts(client kubernetes.Interface, name string, createSignedCert certer) Action {
+func createCerts(client kubernetes.Interface, name string, createSignedCert createCertsFunc) Action {
 	return func(ctx *ScenarioContext) error {
 		caCert, caKey, err := createSelfSignedCA(fmt.Sprintf("%s-ca", name))
 		if err != nil {
@@ -57,14 +57,13 @@ func createCerts(client kubernetes.Interface, name string, createSignedCert cert
 			return err
 		}
 
-		configMapName := fmt.Sprintf("%s-certs", name)
+		configMapName := fmt.Sprintf("%s-trust", name)
 		_, err = client.CoreV1().ConfigMaps(ctx.Namespace).Create(context.TODO(), &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: configMapName,
 			},
 			Data: map[string]string{
-				"ca.crt":  string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCert.Raw})),
-				"tls.crt": string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})),
+				"ca.crt": string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCert.Raw})),
 			},
 		}, metav1.CreateOptions{})
 		if err != nil {
@@ -74,19 +73,19 @@ func createCerts(client kubernetes.Interface, name string, createSignedCert cert
 			return client.CoreV1().ConfigMaps(ctx.Namespace).Delete(context.TODO(), configMapName, metav1.DeleteOptions{})
 		})
 
-		secretName := fmt.Sprintf("%s-keys", name)
+		secretName := fmt.Sprintf("%s-certs", name)
 		_, err = client.CoreV1().Secrets(ctx.Namespace).Create(context.TODO(), &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: secretName,
 			},
 			Data: map[string][]byte{
+				"tls.crt": pem.EncodeToMemory(&pem.Block{
+					Type:  "CERTIFICATE",
+					Bytes: cert.Raw,
+				}),
 				"tls.key": []byte(pem.EncodeToMemory(&pem.Block{
 					Type:  "RSA PRIVATE KEY",
 					Bytes: x509.MarshalPKCS1PrivateKey(key),
-				})),
-				"ca.key": []byte(pem.EncodeToMemory(&pem.Block{
-					Type:  "RSA PRIVATE KEY",
-					Bytes: x509.MarshalPKCS1PrivateKey(caKey),
 				})),
 			},
 		}, metav1.CreateOptions{})
