@@ -17,24 +17,25 @@ limitations under the License.
 package kubetest
 
 import (
+	"k8s.io/client-go/rest"
 	"testing"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-func NewClientFromKubeconfig(path string) (kubernetes.Interface, error) {
+func NewClientFromKubeconfig(path string) (kubernetes.Interface, *rest.Config, error) {
 	config, err := clientcmd.BuildConfigFromFlags("", path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	client, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return client, nil
+	return client, config, nil
 }
 
 type TestSuite func(t *testing.T)
