@@ -97,7 +97,7 @@ test-unit:
 	go test -v -race -count=1 $(PKGS)
 
 test-e2e:
-	go test -timeout 55m -v ./test/e2e/ $(TEST_RUN_ARGS) --kubeconfig=$(KUBECONFIG)
+	go test -timeout 55m -v ./test/e2e/ $(TEST_RUN_ARGS)
 
 test-local-setup: VERSION = local
 test-local-setup: VERSION_SEMVER = $(shell cat VERSION)
