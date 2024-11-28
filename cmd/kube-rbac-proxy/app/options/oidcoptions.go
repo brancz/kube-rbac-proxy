@@ -17,6 +17,8 @@ limitations under the License.
 package options
 
 import (
+	"fmt"
+
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/server"
 	"github.com/spf13/pflag"
@@ -29,7 +31,7 @@ type OIDCOptions struct {
 func (o *OIDCOptions) AddFlags(flagset *pflag.FlagSet) {
 	//Authn OIDC flags
 	flagset.StringVar(&o.IssuerURL, "oidc-issuer", "", "The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).")
-	flagset.StringVar(&o.ClientID, "oidc-clientID", "", "The client ID for the OpenID Connect client, must be set if oidc-issuer-url is set.")
+	flagset.StringVar(&o.RequiredAudience, "oidc-required-audience", "", "The audience that must appear in all incoming tokens' `aud` claim. Must be set if `oidc-issuer` is configured.")
 	flagset.StringVar(&o.UsernameClaim, "oidc-username-claim", "email", "Identifier of the user in JWT claim, by default set to 'email'")
 	flagset.StringVar(&o.GroupsClaim, "oidc-groups-claim", "groups", "Identifier of groups in JWT claim, by default set to 'groups'")
 	flagset.StringVar(&o.UsernamePrefix, "oidc-username-prefix", "", "If provided, the username will be prefixed with this value to prevent conflicts with other authentication strategies.")
@@ -41,6 +43,14 @@ func (o *OIDCOptions) AddFlags(flagset *pflag.FlagSet) {
 
 func (o *OIDCOptions) Validate() []error {
 	var errs []error
+	if len(o.IssuerURL) == 0 {
+		return errs
+	}
+
+	if len(o.RequiredAudience) == 0 {
+		errs = append(errs, fmt.Errorf("oidc-required-audience must be set when `oidc-issuer` is configured"))
+	}
+
 	return errs
 }
 

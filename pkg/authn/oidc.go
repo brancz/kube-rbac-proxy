@@ -47,7 +47,7 @@ func NewOIDCAuthenticator(ctx context.Context, config *OIDCConfig) (*OIDCAuthent
 		JWTAuthenticator: apiserver.JWTAuthenticator{
 			Issuer: apiserver.Issuer{
 				URL:       config.IssuerURL,
-				Audiences: []string{config.ClientID},
+				Audiences: []string{config.RequiredAudience},
 			},
 			ClaimMappings: apiserver.ClaimMappings{
 				Username: apiserver.PrefixedClaimOrExpression{
