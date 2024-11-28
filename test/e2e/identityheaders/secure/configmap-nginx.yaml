@@ -13,6 +13,8 @@ data:
         ssl_client_certificate /etc/nginx/client-ca/ca.crt;
         ssl_verify_client on;
 
+        error_log /dev/stderr debug;
+
         location /metrics {
             add_header Content-Type text/plain;
             return 200 'metrics endpoint reached\n';
