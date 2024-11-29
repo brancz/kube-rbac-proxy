@@ -1,3 +1,8 @@
+## 0.18.2 / 2024-11-29
+
+- [BUGFIX] Mask tokens even in the high verbosity in logs
+- [ENHANCEMENT] Bump deps
+
 ## 0.18.1 / 2024-06-05
 
 - [ENHANCEMENT] Bump deps, in particular go-jose and golang (->CVE) and k8s (v1.31)
