@@ -3,7 +3,7 @@ on: [push, pull_request]
 env:
   QUAY_PATH: quay.io/brancz/kube-rbac-proxy
   go-version: '1.23'
-  kind-version: 'v0.24.0'
+  kind-version: 'v0.25.0'
 jobs:
   check-license:
     runs-on: ubuntu-latest
