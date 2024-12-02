@@ -88,6 +88,17 @@ func testIdentityHeaders(client kubernetes.Interface) kubetest.TestSuite {
 					"identityheaders/insecure/serviceAccount.yaml",
 				),
 			),
+			When: kubetest.Actions(
+				kubetest.PodsAreReady(
+					client,
+					1,
+					"app=nginx",
+				),
+				kubetest.ServiceIsReady(
+					client,
+					"nginx",
+				),
+			),
 			Then: kubetest.Actions(
 				kubetest.PodIsCrashLoopBackOff(
 					client,
@@ -118,6 +129,22 @@ func testIdentityHeaders(client kubernetes.Interface) kubetest.TestSuite {
 					"identityheaders/secure/deployment-proxy.yaml",
 					"identityheaders/secure/service-proxy.yaml",
 					"identityheaders/secure/serviceAccount.yaml",
+				),
+			),
+			When: kubetest.Actions(
+				kubetest.PodsAreReady(
+					client,
+					1,
+					"app=nginx",
+				),
+				kubetest.ServiceIsReady(
+					client,
+					"nginx",
+				),
+				kubetest.PodsAreReady(
+					client,
+					1,
+					"app=kube-rbac-proxy",
 				),
 			),
 			Then: kubetest.Actions(
