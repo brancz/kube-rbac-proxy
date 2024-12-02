@@ -24,10 +24,7 @@ spec:
         - name: nginx-certs
           mountPath: "/etc/nginx/certs"
           readOnly: true
-        - name: nginx-keys
-          mountPath: "/etc/nginx/keys"
-          readOnly: true
-        - name: kube-rbac-proxy-client-certs
+        - name: kube-rbac-proxy-client-trust
           mountPath: "/etc/nginx/client-ca"
           readOnly: true
         - name: nginx-config
@@ -38,11 +35,8 @@ spec:
         configMap:
           name: nginx-config
       - name: nginx-certs
-        configMap:
-          name: nginx-certs
-      - name: nginx-keys
         secret:
-          secretName: nginx-keys
-      - name: kube-rbac-proxy-client-certs
+          secretName: nginx-certs
+      - name: kube-rbac-proxy-client-trust
         configMap:
-          name: kube-rbac-proxy-client-certs
+          name: kube-rbac-proxy-client-trust

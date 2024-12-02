@@ -18,7 +18,6 @@ package kubetest
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha1"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"fmt"
@@ -33,7 +32,7 @@ var (
 	minimalRSAKeySize = 2048
 )
 
-type certer func(*x509.Certificate, *rsa.PrivateKey, string) (*x509.Certificate, *rsa.PrivateKey, error)
+type createCertsFunc func(*x509.Certificate, *rsa.PrivateKey, string) (*x509.Certificate, *rsa.PrivateKey, error)
 
 func createSignedClientCert(cacert *x509.Certificate, caPrivateKey *rsa.PrivateKey, name string) (*x509.Certificate, *rsa.PrivateKey, error) {
 	// Generate a private key.
@@ -42,34 +41,12 @@ func createSignedClientCert(cacert *x509.Certificate, caPrivateKey *rsa.PrivateK
 		return nil, nil, err
 	}
 
-	// Generate subject key id.
-	subjectKeyID := sha1.Sum(privateKey.PublicKey.N.Bytes())
-	authorityKeyID := cacert.SubjectKeyId
-
-	// Generate serial number with at least 20 bits of entropy.
-	serialNumber, err := generateSerialNumber()
+	template, err := certTemplate()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to generate cert template: %v", err)
 	}
-
-	// Create certificate template.
-	template := &x509.Certificate{
-		Subject: pkix.Name{CommonName: name},
-
-		NotBefore: time.Now().Add(-1 * time.Second),
-		NotAfter:  time.Now().Add(year),
-
-		SerialNumber:   serialNumber,
-		SubjectKeyId:   subjectKeyID[:],
-		AuthorityKeyId: authorityKeyID,
-
-		SignatureAlgorithm: x509.SHA256WithRSA,
-
-		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-
-		BasicConstraintsValid: true,
-	}
+	template.Subject = pkix.Name{CommonName: name}
+	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
 
 	// Sign Certificate
 	derBytes, err := x509.CreateCertificate(
@@ -102,36 +79,13 @@ func createSignedServerCert(caCert *x509.Certificate, caPrivateKey *rsa.PrivateK
 		return nil, nil, err
 	}
 
-	// Generate subject key id.
-	subjectKeyID := sha1.Sum(privateKey.PublicKey.N.Bytes())
-	authorityKeyID := caCert.SubjectKeyId
-
-	// Generate serial number with at least 20 bits of entropy.
-	serialNumber, err := generateSerialNumber()
+	template, err := certTemplate()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to generate cert template: %v", err)
 	}
-
-	// Create certificate template.
-	template := &x509.Certificate{
-		Subject: pkix.Name{CommonName: dnsName},
-
-		NotBefore: time.Now().Add(-1 * time.Second),
-		NotAfter:  time.Now().Add(year),
-
-		SerialNumber:   serialNumber,
-		SubjectKeyId:   subjectKeyID[:],
-		AuthorityKeyId: authorityKeyID,
-
-		SignatureAlgorithm: x509.SHA256WithRSA,
-
-		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-
-		DNSNames: []string{dnsName},
-
-		BasicConstraintsValid: true,
-	}
+	template.Subject = pkix.Name{CommonName: dnsName}
+	template.DNSNames = []string{dnsName}
+	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
 
 	// Sign Certificate
 	derBytes, err := x509.CreateCertificate(
@@ -155,6 +109,30 @@ func createSignedServerCert(caCert *x509.Certificate, caPrivateKey *rsa.PrivateK
 	}
 
 	return certs[0], privateKey, nil
+}
+
+// certTemplate creates a basic cert template to use in tests. The caller must
+// add its own Subject and any extensions specific to their use.
+func certTemplate() (*x509.Certificate, error) {
+	// Generate serial number with at least 20 bits of entropy.
+	serialNumber, err := generateSerialNumber()
+	if err != nil {
+		return nil, err
+	}
+
+	return &x509.Certificate{
+		NotBefore: time.Now().Add(-1 * time.Second),
+		NotAfter:  time.Now().Add(year),
+
+		SerialNumber: serialNumber,
+
+		SignatureAlgorithm: x509.SHA256WithRSA,
+
+		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+
+		BasicConstraintsValid: true,
+	}, nil
 }
 
 func createSelfSignedCA(name string) (*x509.Certificate, *rsa.PrivateKey, error) {
