@@ -21,7 +21,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
-	"strings"
+	"reflect"
 	"testing"
 
 	"k8s.io/apiserver/pkg/authentication/authenticator"
@@ -43,16 +43,16 @@ func TestWithAuthHeaders(t *testing.T) {
 	groupKey := "Group"
 	groupValue := "utzer"
 
-	defaultUserHeader := map[string]string{
-		userKey:  userValue,
-		groupKey: groupValue,
+	defaultUserHeader := map[string][]string{
+		userKey:  {userValue},
+		groupKey: {groupValue},
 	}
 
 	for _, tt := range []struct {
 		name   string
 		cfg    *identityheaders.AuthnHeaderConfig
 		req    *http.Request
-		header map[string]string
+		header map[string][]string
 	}{
 		{
 			name:   "should pass through",
@@ -67,7 +67,7 @@ func TestWithAuthHeaders(t *testing.T) {
 				GroupsFieldName: groupKey,
 			},
 			header: defaultUserHeader,
-			req:    testRequest(t, withUserContext(userValue, groupValue)),
+			req:    testRequest(t, withUserContext(userValue, []string{groupValue})),
 		},
 		{
 			name: "should not pass client header",
@@ -75,8 +75,33 @@ func TestWithAuthHeaders(t *testing.T) {
 				UserFieldName:   userKey,
 				GroupsFieldName: groupKey,
 			},
-			req:    testRequest(t, withHeader(map[string]string{userKey: "admin", groupKey: "system:admin"})),
-			header: map[string]string{},
+			req:    testRequest(t, withHeader(map[string][]string{userKey: {"admin"}, groupKey: {"system:admin"}})),
+			header: map[string][]string{},
+		},
+		{
+			name: "should include group containing comma",
+			cfg: &identityheaders.AuthnHeaderConfig{
+				UserFieldName:   userKey,
+				GroupsFieldName: groupKey,
+			},
+			req: testRequest(t, withUserContext(userValue, []string{groupValue, "group,with,comma", "anothergroup"})),
+			header: map[string][]string{
+				userKey:  {userValue},
+				groupKey: {groupValue, "group,with,comma", "anothergroup"},
+			},
+		},
+		{
+			name: "should drop group containing group separator",
+			cfg: &identityheaders.AuthnHeaderConfig{
+				UserFieldName:   userKey,
+				GroupsFieldName: groupKey,
+				GroupSeparator:  ";",
+			},
+			req: testRequest(t, withUserContext(userValue, []string{groupValue, "group;with;separator", "anothergroup"})),
+			header: map[string][]string{
+				userKey:  {userValue},
+				groupKey: {groupValue + ";" + "anothergroup"},
+			},
 		},
 	} {
 		tt := tt
@@ -91,8 +116,8 @@ func TestWithAuthHeaders(t *testing.T) {
 
 			if len(tt.header) > 0 {
 				for k, v := range tt.header {
-					if tt.req.Header[k][0] != v {
-						t.Errorf("want: %s\nhave: %s", v, tt.req.Header[k][0])
+					if !reflect.DeepEqual(tt.req.Header.Values(k), v) {
+						t.Errorf("want: %v,\nhave: %v", v, tt.req.Header.Values(k))
 					}
 				}
 			}
@@ -106,7 +131,7 @@ func TestProxyWithOIDCSupport(t *testing.T) {
 		GroupsFieldName: "groups",
 	}
 
-	fakeUser := user.DefaultInfo{Name: "Foo Bar", Groups: []string{"foo-bars"}}
+	fakeUser := user.DefaultInfo{Name: "Foo Bar", Groups: []string{"foo-bars", "admins"}}
 	authenticator := fakeOIDCAuthenticator(t, &fakeUser)
 
 	for _, v := range []testCase{
@@ -163,12 +188,12 @@ func TestProxyWithOIDCSupport(t *testing.T) {
 
 			if v.verifyUser {
 				user := v.req.Header.Get(cfg.UserFieldName)
-				groups := v.req.Header.Get(cfg.GroupsFieldName)
+				groups := v.req.Header.Values(cfg.GroupsFieldName)
 				if user != fakeUser.GetName() {
 					t.Errorf("User in the response header does not match authenticated user. Expected : %s, received : %s ", fakeUser.GetName(), user)
 				}
-				if groups != strings.Join(fakeUser.GetGroups(), cfg.GroupSeparator) {
-					t.Errorf("Groupsr in the response header does not match authenticated user groups. Expected : %s, received : %s ", fakeUser.GetName(), groups)
+				if !reflect.DeepEqual(groups, fakeUser.GetGroups()) {
+					t.Errorf("Groups in the response header do not match authenticated user groups. Expected : %v, received : %v ", fakeUser.GetGroups(), groups)
 				}
 			}
 		})
@@ -237,24 +262,26 @@ func testRequest(t *testing.T, withOpts ...func(*http.Request) (*http.Request, e
 	return req
 }
 
-func withHeader(header map[string]string) func(*http.Request) (*http.Request, error) {
+func withHeader(header map[string][]string) func(*http.Request) (*http.Request, error) {
 	return func(req *http.Request) (*http.Request, error) {
-		for key, value := range header {
-			req.Header.Set(key, value)
+		for key, values := range header {
+			for _, value := range values {
+				req.Header.Add(key, value)
+			}
 		}
 
 		return req, nil
 	}
 }
 
-func withUserContext(userValue, groupValue string) func(*http.Request) (*http.Request, error) {
+func withUserContext(userValue string, groupValues []string) func(*http.Request) (*http.Request, error) {
 	return func(req *http.Request) (*http.Request, error) {
 		return req.WithContext(
 			request.WithUser(
 				req.Context(),
 				&user.DefaultInfo{
 					Name:   userValue,
-					Groups: []string{groupValue},
+					Groups: groupValues,
 				},
 			),
 		), nil
