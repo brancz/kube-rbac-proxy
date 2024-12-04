@@ -17,10 +17,11 @@ limitations under the License.
 package identityheaders
 
 import (
-	"net/http"
+	"k8s.io/apiserver/pkg/endpoints/request"
+	"k8s.io/klog/v2"
 	"strings"
 
-	"k8s.io/apiserver/pkg/endpoints/request"
+	"net/http"
 )
 
 // AuthnHeaderConfig contains authentication header settings which enable more information about the user identity to be sent to the upstream
@@ -52,7 +53,31 @@ func WithAuthHeaders(handler http.Handler, cfg *AuthnHeaderConfig) http.Handler 
 			// Seemingly well-known headers to tell the upstream about user's identity
 			// so that the upstream can achieve the original goal of delegating RBAC authn/authz to kube-rbac-proxy
 			req.Header.Set(cfg.UserFieldName, u.GetName())
-			req.Header.Set(cfg.GroupsFieldName, strings.Join(u.GetGroups(), cfg.GroupSeparator))
+
+			if cfg.GroupSeparator == "" {
+				// Add each group as a separate header entry
+				for _, group := range u.GetGroups() {
+					if strings.Contains(group, ",") {
+						// Drop groups containing standard separator
+						klog.Infof("Dropping group %q because it contains a standard separator", group)
+						continue
+					}
+					req.Header.Add(cfg.GroupsFieldName, group)
+				}
+			} else {
+				// If GroupSeparator is set, concatenate groups using the separator
+				var validGroups []string
+				for _, group := range u.GetGroups() {
+					if strings.Contains(group, cfg.GroupSeparator) {
+						// Drop groups containing the separator
+						klog.Infof("Dropping group %q because it contains the group separator %q",
+							group, cfg.GroupSeparator)
+						continue
+					}
+					validGroups = append(validGroups, group)
+				}
+				req.Header.Set(cfg.GroupsFieldName, strings.Join(validGroups, cfg.GroupSeparator))
+			}
 		}
 
 		handler.ServeHTTP(w, req)
