@@ -38,8 +38,7 @@ type StaticAuthorizationConfig struct {
 }
 
 type UserConfig struct {
-	Name   string   `json:"name,omitempty"`
-	Groups []string `json:"groups,omitempty"`
+	Name string `json:"name,omitempty"`
 }
 
 type staticAuthorizer struct {
