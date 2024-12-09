@@ -81,11 +81,22 @@ func testIdentityHeaders(client kubernetes.Interface) kubetest.TestSuite {
 					"identityheaders/insecure/clusterRole.yaml",
 					"identityheaders/insecure/clusterRoleBinding-client.yaml",
 					"identityheaders/insecure/clusterRoleBinding.yaml",
-					"identityheaders/insecure/deployment-proxy.yaml",
 					"identityheaders/insecure/deployment-upstream.yaml",
-					"identityheaders/insecure/service-proxy.yaml",
 					"identityheaders/insecure/service-upstream.yaml",
+					"identityheaders/insecure/deployment-proxy.yaml",
+					"identityheaders/insecure/service-proxy.yaml",
 					"identityheaders/insecure/serviceAccount.yaml",
+				),
+			),
+			When: kubetest.Actions(
+				kubetest.PodsAreReady(
+					client,
+					1,
+					"app=nginx",
+				),
+				kubetest.ServiceIsReady(
+					client,
+					"nginx",
 				),
 			),
 			Then: kubetest.Actions(
@@ -102,7 +113,6 @@ func testIdentityHeaders(client kubernetes.Interface) kubetest.TestSuite {
 					Verifies that the proxy is able to connect to the remote upstream service,
 					through a mTLS connection, when providing identity headers.
 				`,
-
 			Given: kubetest.Actions(
 				kubetest.CreateServerCerts(client, "nginx"),
 				kubetest.CreateClientCerts(client, "kube-rbac-proxy-client"),
@@ -114,11 +124,27 @@ func testIdentityHeaders(client kubernetes.Interface) kubetest.TestSuite {
 					"identityheaders/secure/clusterRoleBinding-client.yaml",
 					"identityheaders/secure/clusterRoleBinding.yaml",
 					"identityheaders/secure/configmap-nginx.yaml",
-					"identityheaders/secure/deployment-proxy.yaml",
 					"identityheaders/secure/deployment-upstream.yaml",
-					"identityheaders/secure/service-proxy.yaml",
 					"identityheaders/secure/service-upstream.yaml",
+					"identityheaders/secure/deployment-proxy.yaml",
+					"identityheaders/secure/service-proxy.yaml",
 					"identityheaders/secure/serviceAccount.yaml",
+				),
+			),
+			When: kubetest.Actions(
+				kubetest.PodsAreReady(
+					client,
+					1,
+					"app=nginx",
+				),
+				kubetest.ServiceIsReady(
+					client,
+					"nginx",
+				),
+				kubetest.PodsAreReady(
+					client,
+					1,
+					"app=kube-rbac-proxy",
 				),
 			),
 			Then: kubetest.Actions(
