@@ -27,7 +27,7 @@ type OIDCOptions struct {
 }
 
 func (o *OIDCOptions) AddFlags(flagset *pflag.FlagSet) {
-	//Authn OIDC flags
+	// Authn OIDC flags
 	flagset.StringVar(&o.IssuerURL, "oidc-issuer", "", "The URL of the OpenID issuer, only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).")
 	flagset.StringVar(&o.ClientID, "oidc-clientID", "", "The client ID for the OpenID Connect client, must be set if oidc-issuer-url is set.")
 	flagset.StringVar(&o.UsernameClaim, "oidc-username-claim", "email", "Identifier of the user in JWT claim, by default set to 'email'")
