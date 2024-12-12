@@ -47,18 +47,26 @@ func WithKubeRBACProxyParamsHandler(handler http.Handler, config *RewriteAttribu
 func requestToParams(config *RewriteAttributesConfig, req *http.Request) []string {
 	params := []string{}
 
-	// FIXME / TODO: We should add a flag (--insecure-pass-through) that is required in order
-	//               to not remove the query / header attributes after consumption.
 	if config.Rewrites.ByQueryParameter != nil && config.Rewrites.ByQueryParameter.Name != "" {
 		if ps, ok := req.URL.Query()[config.Rewrites.ByQueryParameter.Name]; ok {
 			params = append(params, ps...)
+			if !config.Rewrites.InsecurePassthrough {
+				params := req.URL.Query()
+				params.Del(config.Rewrites.ByQueryParameter.Name)
+				req.URL.RawQuery = params.Encode()
+			}
 		}
 	}
+
 	if config.Rewrites.ByHTTPHeader != nil && config.Rewrites.ByHTTPHeader.Name != "" {
 		if ps := req.Header.Values(config.Rewrites.ByHTTPHeader.Name); len(ps) > 0 {
 			params = append(params, ps...)
+			if !config.Rewrites.InsecurePassthrough {
+				req.Header.Del(config.Rewrites.ByHTTPHeader.Name)
+			}
 		}
 	}
+
 	return params
 }
 

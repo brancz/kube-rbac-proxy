@@ -31,8 +31,9 @@ type RewriteAttributesConfig struct {
 // SubjectAccessReviewRewrites describes how SubjectAccessReview may be
 // rewritten on a given request.
 type SubjectAccessReviewRewrites struct {
-	ByQueryParameter *QueryParameterRewriteConfig `json:"byQueryParameter,omitempty"`
-	ByHTTPHeader     *HTTPHeaderRewriteConfig     `json:"byHttpHeader,omitempty"`
+	InsecurePassthrough bool                         `json:"insecurePassthrough,omitempty"`
+	ByQueryParameter    *QueryParameterRewriteConfig `json:"byQueryParameter,omitempty"`
+	ByHTTPHeader        *HTTPHeaderRewriteConfig     `json:"byHttpHeader,omitempty"`
 }
 
 // QueryParameterRewriteConfig describes which HTTP URL query parameter is to

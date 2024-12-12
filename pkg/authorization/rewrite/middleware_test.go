@@ -16,6 +16,7 @@ limitations under the License.
 package rewrite
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -29,6 +30,8 @@ func TestRewriteParamsMiddleware(t *testing.T) {
 		rewrite  *SubjectAccessReviewRewrites
 		request  *http.Request
 		expected []string
+
+		exptectedRequest func(*http.Request) error
 	}{
 		{
 			name: "with query param rewrites config",
@@ -112,17 +115,82 @@ func TestRewriteParamsMiddleware(t *testing.T) {
 			})),
 			expected: nil,
 		},
+		{
+			name: "with http header rewrites config, check consumption",
+			rewrite: &SubjectAccessReviewRewrites{
+				ByHTTPHeader:     &HTTPHeaderRewriteConfig{Name: "namespace"},
+				ByQueryParameter: &QueryParameterRewriteConfig{Name: "namespace"},
+			},
+			request: createRequest(
+				withHeaderParameters(map[string][]string{
+					"namespace": {"default"},
+				}),
+				withQueryParameters(map[string][]string{
+					"namespace": {"kube-system"},
+				}),
+			),
+			expected: []string{"kube-system", "default"},
+			exptectedRequest: func(r *http.Request) error {
+				if len(r.Header.Values("namespace")) > 0 {
+					return fmt.Errorf("expected namespace header to be deleted, have %+v", r.Header.Values("namespace"))
+				}
+
+				if len(r.URL.Query()["namespace"]) > 0 {
+					return fmt.Errorf("expected namespace query param to be deleted, have %+v", r.URL.Query()["namespace"])
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "with http header rewrites config, avoid consumption",
+			rewrite: &SubjectAccessReviewRewrites{
+				ByHTTPHeader:        &HTTPHeaderRewriteConfig{Name: "namespace"},
+				ByQueryParameter:    &QueryParameterRewriteConfig{Name: "namespace"},
+				InsecurePassthrough: true,
+			},
+			request: createRequest(
+				withHeaderParameters(map[string][]string{
+					"namespace": {"default", "openshift-config"},
+				}),
+				withQueryParameters(map[string][]string{
+					"namespace": {"kube-system", "openshift-managed-config"},
+				}),
+			),
+			expected: []string{"kube-system", "openshift-managed-config", "default", "openshift-config"},
+			exptectedRequest: func(r *http.Request) error {
+				if len(r.Header.Values("namespace")) != 2 {
+					return fmt.Errorf("expected namespace header to be have 2 values, have %+v", r.Header.Values("namespace"))
+				}
+
+				if len(r.URL.Query()["namespace"]) != 2 {
+					return fmt.Errorf("expected namespace query param to have 2 values, have %+v", r.URL.Query()["namespace"])
+				}
+
+				return nil
+			},
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			verifyExpectedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				values := getKubeRBACProxyParams(r.Context())
+				if !reflect.DeepEqual(values, tc.expected) {
+					t.Errorf("expected values to be %v, have %v", tc.expected, values)
+				}
+
+				if tc.exptectedRequest == nil {
+					return
+				}
+
+				if err := tc.exptectedRequest(r); err != nil {
+					t.Errorf("not expected request %v", err)
+				}
+			})
+
 			WithKubeRBACProxyParamsHandler(
-				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					values := getKubeRBACProxyParams(r.Context())
-					if !reflect.DeepEqual(values, tc.expected) {
-						t.Errorf("expected values to be %v, have %v", tc.expected, values)
-					}
-				}),
+				verifyExpectedHandler,
 				&RewriteAttributesConfig{Rewrites: tc.rewrite},
 			).ServeHTTP(nil, tc.request)
 		})
