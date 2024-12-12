@@ -73,6 +73,16 @@ func TestRewriteParamsMiddleware(t *testing.T) {
 			expected: []string{"default", "other"},
 		},
 		{
+			name: "with http header rewrites config and config key is weird",
+			rewrite: &SubjectAccessReviewRewrites{
+				ByHTTPHeader: &HTTPHeaderRewriteConfig{Name: "nAmEspAcE"},
+			},
+			request: createRequest(withHeaderParameters(map[string][]string{
+				"NaMeSPaCe": {"default", "other"},
+			})),
+			expected: []string{"default", "other"},
+		},
+		{
 			name: "with http header rewrites config but missing header",
 			rewrite: &SubjectAccessReviewRewrites{
 				ByQueryParameter: &QueryParameterRewriteConfig{Name: "namespace"},

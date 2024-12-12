@@ -18,7 +18,6 @@ package rewrite
 import (
 	"context"
 	"net/http"
-	"net/textproto"
 
 	"k8s.io/apiserver/pkg/endpoints/request"
 )
@@ -56,9 +55,7 @@ func requestToParams(config *RewriteAttributesConfig, req *http.Request) []strin
 		}
 	}
 	if config.Rewrites.ByHTTPHeader != nil && config.Rewrites.ByHTTPHeader.Name != "" {
-		mimeHeader := textproto.MIMEHeader(req.Header)
-		mimeKey := textproto.CanonicalMIMEHeaderKey(config.Rewrites.ByHTTPHeader.Name)
-		if ps, ok := mimeHeader[mimeKey]; ok {
+		if ps := req.Header.Values(config.Rewrites.ByHTTPHeader.Name); len(ps) > 0 {
 			params = append(params, ps...)
 		}
 	}
