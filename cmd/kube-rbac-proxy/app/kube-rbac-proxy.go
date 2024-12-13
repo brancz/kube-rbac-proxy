@@ -189,7 +189,11 @@ func Run(cfg *server.KubeRBACProxyConfig) error {
 	var authenticator authenticator.Request
 	// If OIDC configuration provided, use oidc authenticator
 	if cfg.KubeRBACProxyInfo.OIDC.IssuerURL != "" {
-		oidcAuthenticator, err := authn.NewOIDCAuthenticator(ctx, cfg.KubeRBACProxyInfo.OIDC)
+		oidcAuthenticator, err := authn.NewOIDCAuthenticator(
+			ctx,
+			cfg.KubeRBACProxyInfo.OIDC,
+			cfg.DelegatingAuthentication.APIAudiences,
+		)
 		if err != nil {
 			return fmt.Errorf("failed to instantiate OIDC authenticator: %w", err)
 		}

@@ -37,7 +37,11 @@ var (
 )
 
 // NewOIDCAuthenticator returns OIDC authenticator
-func NewOIDCAuthenticator(ctx context.Context, config *OIDCConfig) (*OIDCAuthenticator, error) {
+func NewOIDCAuthenticator(
+	ctx context.Context,
+	config *OIDCConfig,
+	auds authenticator.Audiences,
+) (*OIDCAuthenticator, error) {
 	dyCA, err := dynamiccertificates.NewDynamicCAContentFromFile("oidc-ca", config.CAFile)
 	if err != nil {
 		return nil, err
@@ -68,8 +72,13 @@ func NewOIDCAuthenticator(ctx context.Context, config *OIDCConfig) (*OIDCAuthent
 	}
 
 	return &OIDCAuthenticator{
-		dynamicClientCA:      dyCA,
-		requestAuthenticator: bearertoken.New(tokenAuthenticator),
+		dynamicClientCA: dyCA,
+		requestAuthenticator: bearertoken.New(
+			authenticator.WrapAudienceAgnosticToken(
+				auds,
+				tokenAuthenticator,
+			),
+		),
 	}, nil
 }
 
