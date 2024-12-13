@@ -50,9 +50,9 @@ type ProxyOptions struct {
 
 	UpstreamHeader *identityheaders.AuthnHeaderConfig
 
-	ConfigFileName string
-	AllowPaths     []string
-	IgnorePaths    []string
+	AuthzConfigFileName string
+	AllowPaths          []string
+	IgnorePaths         []string
 
 	ProxyEndpointsPort int
 
@@ -70,7 +70,7 @@ func (o *ProxyOptions) AddFlags(flagset *pflag.FlagSet) {
 	flagset.StringVar(&o.UpstreamClientCertFile, "upstream-client-cert-file", "", "If set, the client will be used to authenticate the proxy to upstream. Requires --upstream-client-key-file to be set, too.")
 	flagset.StringVar(&o.UpstreamClientKeyFile, "upstream-client-key-file", "", "The key matching the certificate from --upstream-client-cert-file. If set, requires --upstream-client-cert-file to be set, too.")
 
-	flagset.StringVar(&o.ConfigFileName, "config-file", "", "Configuration file to configure static and rewrites authorization of the kube-rbac-proxy.")
+	flagset.StringVar(&o.AuthzConfigFileName, "config-file", "", "Configuration file to configure static and rewrites authorization of the kube-rbac-proxy.")
 	flagset.StringSliceVar(&o.AllowPaths, "allow-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the request doesn't match, kube-rbac-proxy responds with a 404 status code. If omitted, the incoming request path isn't checked. Cannot be used with --ignore-paths.")
 	flagset.StringSliceVar(&o.IgnorePaths, "ignore-paths", nil, "Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the requst matches, it will proxy the request without performing an authentication or authorization check. Cannot be used with --allow-paths.")
 
@@ -133,7 +133,7 @@ func (o *ProxyOptions) ApplyTo(krpInfo *server.KubeRBACProxyInfo, authInfo *serv
 		return fmt.Errorf("failed to setup transport for upstream: %w", err)
 	}
 
-	if configFileName := o.ConfigFileName; len(configFileName) > 0 {
+	if configFileName := o.AuthzConfigFileName; len(configFileName) > 0 {
 		krpInfo.Authorization, err = parseAuthorizationConfigFile(configFileName)
 		if err != nil {
 			return fmt.Errorf("failed to read the config file: %w", err)
