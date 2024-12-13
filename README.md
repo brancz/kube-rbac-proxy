@@ -148,6 +148,7 @@ authorization:
     subresource: <string>
     name: <string>
   rewrites:
+    insecurePassthrough: <bool>
     byQueryParameter:
       name: <string>
     byHttpHeader:
@@ -160,6 +161,7 @@ The `authorization.resourceAttributes` and `authorization.rewrites` set how auth
  - `resourceAttributes` will set the given fields while sending the SAR to the kube-apiserver, while the keeping the `verb` and `user` based on the HTTP request
  - `rewrites` allows retrieving certain parameters from the incoming HTTP request and use them in the fields of `resourceAttributes` if these take the form of `{{ .Value }}`, thus allowing parametrization of the SAR sent to the kube-apiserver
 
+If `insecurePassthrough` is not set to true, the information from the HTTP request addressing the proxy for rewrites will be removed.
 
 ### How to update Go dependencies
 
