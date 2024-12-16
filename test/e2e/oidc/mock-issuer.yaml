@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-issuer
+  labels:
+    app: mock-issuer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-issuer
+  template:
+    metadata:
+      name: mock-issuer
+      labels:
+        app: mock-issuer
+    spec:
+      containers:
+        - name: mock-issuer
+          image: wiremock/wiremock:3.9.2
+          imagePullPolicy: IfNotPresent
+          env:
+            # wiremock has an issue handling arguments properly when run in
+            # Kubernetes so instead pass everything in an env variable.
+            - name: WIREMOCK_OPTIONS
+              value: >
+                --https-port 8443 
+                --port 8080
+                --https-keystore /usr/local/etc/mock-issuer/keystore/keystore.p12
+                --keystore-password password
+                --keystore-type pkcs12
+                --key-manager-password password
+                --verbose
+          ports:
+            - name: api
+              containerPort: 8443
+              protocol: TCP
+            - name: admin
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: admin
+            initialDelaySeconds: 2
+            periodSeconds: 2
+            successThreshold: 1
+            failureThreshold: 10
+          volumeMounts:
+            - name: mock-issuer-keystore
+              mountPath: /usr/local/etc/mock-issuer/keystore
+      volumes:
+        - name: mock-issuer-keystore
+          secret:
+            secretName: mock-issuer-keystore
