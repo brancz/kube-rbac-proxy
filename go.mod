@@ -7,7 +7,7 @@ require (
 	github.com/google/go-cmp v0.6.0
 	github.com/oklog/run v1.1.0
 	github.com/spf13/cobra v1.7.0
-	golang.org/x/net v0.23.0
+	golang.org/x/net v0.33.0
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.28.4
 	k8s.io/apimachinery v0.28.4
