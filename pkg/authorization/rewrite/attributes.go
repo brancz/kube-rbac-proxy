@@ -18,6 +18,7 @@ package rewrite
 import (
 	"bytes"
 	"context"
+	"sync"
 	"text/template"
 
 	"k8s.io/apiserver/pkg/authorization/authorizer"
@@ -95,6 +96,8 @@ type TemplatedResourceAttributesGenerator struct {
 	resource    *template.Template
 	subresource *template.Template
 	name        *template.Template
+
+	bufPool *sync.Pool
 }
 
 var _ AttributesGenerator = &TemplatedResourceAttributesGenerator{}
@@ -110,6 +113,12 @@ func NewTemplatedResourceAttributesGenerator(attributes *ResourceAttributes) *Te
 		resource:    template.Must(template.New("resource").Parse(attributes.Resource)),
 		subresource: template.Must(template.New("subresource").Parse(attributes.Subresource)),
 		name:        template.Must(template.New("name").Parse(attributes.Name)),
+
+		bufPool: &sync.Pool{
+			New: func() interface{} {
+				return &bytes.Buffer{}
+			},
+		},
 	}
 }
 
@@ -129,12 +138,12 @@ func (r *TemplatedResourceAttributesGenerator) Generate(ctx context.Context, att
 			authorizer.AttributesRecord{
 				User:            attr.GetUser(),
 				Verb:            attr.GetVerb(),
-				Namespace:       templateWithValue(r.namespace, param),
-				APIGroup:        templateWithValue(r.apiGroup, param),
-				APIVersion:      templateWithValue(r.apiVersion, param),
-				Resource:        templateWithValue(r.resource, param),
-				Subresource:     templateWithValue(r.subresource, param),
-				Name:            templateWithValue(r.name, param),
+				Namespace:       r.templateWithValue(r.namespace, param),
+				APIGroup:        r.templateWithValue(r.apiGroup, param),
+				APIVersion:      r.templateWithValue(r.apiVersion, param),
+				Resource:        r.templateWithValue(r.resource, param),
+				Subresource:     r.templateWithValue(r.subresource, param),
+				Name:            r.templateWithValue(r.name, param),
 				ResourceRequest: true,
 			})
 	}
@@ -147,11 +156,14 @@ func (r *TemplatedResourceAttributesGenerator) Generate(ctx context.Context, att
 	return attrs
 }
 
-func templateWithValue(tmpl *template.Template, value string) string {
-	out := bytes.NewBuffer(nil)
-	err := tmpl.Execute(out, struct{ Value string }{Value: value})
+func (r *TemplatedResourceAttributesGenerator) templateWithValue(tmpl *template.Template, value string) string {
+	buf := r.bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer r.bufPool.Put(buf)
+
+	err := tmpl.Execute(buf, struct{ Value string }{Value: value})
 	if err != nil {
 		return ""
 	}
-	return out.String()
+	return buf.String()
 }
