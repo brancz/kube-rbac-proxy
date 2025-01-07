@@ -60,17 +60,32 @@ func (saConfig StaticAuthorizationConfig) Matches(a authorizer.Attributes) bool 
 	isAllowed := func(staticConf string, requestVal string) bool {
 		if staticConf == "" {
 			return true
-		} else {
-			return staticConf == requestVal
 		}
+		return staticConf == requestVal
+	}
+	isGroupAllowed := func(configGroups, requestGroups []string) bool {
+		if len(configGroups) == 0 {
+			return true
+		}
+		for _, configGroup := range configGroups {
+			for _, requestGroup := range requestGroups {
+				if configGroup == requestGroup {
+					return true
+				}
+			}
+		}
+		return false
 	}
 
 	userName := ""
+	userGroups := []string{}
 	if a.GetUser() != nil {
 		userName = a.GetUser().GetName()
+		userGroups = a.GetUser().GetGroups()
 	}
 
 	if isAllowed(saConfig.User.Name, userName) &&
+		isGroupAllowed(saConfig.User.Groups, userGroups) &&
 		isAllowed(saConfig.Verb, a.GetVerb()) &&
 		isAllowed(saConfig.Namespace, a.GetNamespace()) &&
 		isAllowed(saConfig.APIGroup, a.GetAPIGroup()) &&
