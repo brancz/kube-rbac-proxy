@@ -133,8 +133,8 @@ func (o *ProxyOptions) ApplyTo(krpInfo *server.KubeRBACProxyInfo, authInfo *serv
 		return fmt.Errorf("failed to setup transport for upstream: %w", err)
 	}
 
-	if configFileName := o.AuthzConfigFileName; len(configFileName) > 0 {
-		krpInfo.Authorization, err = parseAuthorizationConfigFile(configFileName)
+	if len(o.AuthzConfigFileName) > 0 {
+		krpInfo.Authorization, err = parseAuthorizationConfigFile(o.AuthzConfigFileName)
 		if err != nil {
 			return fmt.Errorf("failed to read the config file: %w", err)
 		}
