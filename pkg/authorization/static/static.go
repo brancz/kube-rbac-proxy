@@ -67,6 +67,7 @@ func (saConfig StaticAuthorizationConfig) Matches(a authorizer.Attributes) bool 
 		if len(configGroups) == 0 {
 			return true
 		}
+		// O(n^2) is fine here as the groups are small. Optimize if n grows large.
 		for _, configGroup := range configGroups {
 			for _, requestGroup := range requestGroups {
 				if configGroup == requestGroup {
