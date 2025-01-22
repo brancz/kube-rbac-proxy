@@ -67,12 +67,13 @@ func (saConfig StaticAuthorizationConfig) Matches(a authorizer.Attributes) bool 
 		if len(configGroups) == 0 {
 			return true
 		}
-		// O(n^2) is fine here as the groups are small. Optimize if n grows large.
-		for _, configGroup := range configGroups {
-			for _, requestGroup := range requestGroups {
-				if configGroup == requestGroup {
-					return true
-				}
+		configGroupSet := make(map[string]struct{})
+		for _, group := range configGroups {
+			configGroupSet[group] = struct{}{}
+		}
+		for _, group := range requestGroups {
+			if _, exists := configGroupSet[group]; exists {
+				return true
 			}
 		}
 		return false
@@ -85,7 +86,7 @@ func (saConfig StaticAuthorizationConfig) Matches(a authorizer.Attributes) bool 
 		userGroups = a.GetUser().GetGroups()
 	}
 
-	if isAllowed(saConfig.User.Name, userName) &&
+	if (saConfig.User.Name == "" || isAllowed(saConfig.User.Name, userName)) &&
 		isGroupAllowed(saConfig.User.Groups, userGroups) &&
 		isAllowed(saConfig.Verb, a.GetVerb()) &&
 		isAllowed(saConfig.Namespace, a.GetNamespace()) &&
