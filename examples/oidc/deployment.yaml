@@ -72,7 +72,7 @@ spec:
         - "--upstream=http://127.0.0.1:8081/"
         - "--v=10"
         - "--oidc-issuer={ISSUER}"
-        - "--oidc-clientID={CLIENT_ID}"
+        - "--oidc-required-audience={CLIENT_ID}"
         ports:
         - containerPort: 8443
           name: https
