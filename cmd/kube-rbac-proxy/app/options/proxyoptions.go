@@ -58,6 +58,8 @@ type ProxyOptions struct {
 
 	TokenAudiences []string
 
+	AllowLegacyServiceAccountTokens bool
+
 	DisableHTTP2Serving bool
 }
 
@@ -79,7 +81,10 @@ func (o *ProxyOptions) AddFlags(flagset *pflag.FlagSet) {
 	flagset.StringVar(&o.UpstreamHeader.GroupsFieldName, "auth-header-groups-field-name", "x-remote-groups", "The name of the field inside a http(2) request header to tell the upstream server about the user's groups")
 	flagset.StringVar(&o.UpstreamHeader.GroupSeparator, "auth-header-groups-field-separator", "|", "The separator string used for concatenating multiple group names in a groups header field's value")
 
-	flagset.StringSliceVar(&o.TokenAudiences, "auth-token-audiences", []string{}, "Comma-separated list of token audiences to accept. By default a token does not have to have any specific audience. It is recommended to set a specific audience.")
+	flagset.StringSliceVar(&o.TokenAudiences, "auth-token-audiences", []string{}, "Comma-separated list of token audiences to accept. Tokens must have at least one audience from this list. If omitted, the token is considered legacy.")
+
+	// legacy tokens are disabled by default.
+	flagset.BoolVar(&o.AllowLegacyServiceAccountTokens, "allow-legacy-serviceaccount-tokens", false, "If true, allow legacy service account tokens (without an audience). Legacy tokens are less secure and are disabled by default.")
 
 	// proxy endpoints flag
 	flagset.IntVar(&o.ProxyEndpointsPort, "proxy-endpoints-port", 0, "The port to securely serve proxy-specific endpoints (such as '/healthz'). Uses the host from the '--secure-listen-address'.")
@@ -91,8 +96,10 @@ func (o *ProxyOptions) AddFlags(flagset *pflag.FlagSet) {
 func (o *ProxyOptions) Validate() []error {
 	var errs []error
 
-	if len(o.UpstreamHeader.GroupSeparator) > 0 && len(o.UpstreamHeader.GroupsFieldName) == 0 {
-		errs = append(errs, fmt.Errorf("--auth-header-groups-field-name must be set along with --auth-header-groups-field-separator"))
+	if o.UpstreamHeader != nil {
+		if len(o.UpstreamHeader.GroupSeparator) > 0 && len(o.UpstreamHeader.GroupsFieldName) == 0 {
+			errs = append(errs, fmt.Errorf("--auth-header-groups-field-name must be set along with --auth-header-groups-field-separator"))
+		}
 	}
 
 	if len(o.AllowPaths) > 0 && len(o.IgnorePaths) > 0 {
@@ -116,6 +123,13 @@ func (o *ProxyOptions) Validate() []error {
 	// Verify secure connection settings, if necessary.
 	if err := validateSecureConnectionConfig(o); err != nil {
 		errs = append(errs, err)
+	}
+
+	// If no token audiences are provided, then tokens will be legacy.
+	// By default, we do not allow legacy tokens unless the user explicitly opts in.
+	if len(o.TokenAudiences) == 0 && !o.AllowLegacyServiceAccountTokens {
+		errs = append(errs, fmt.Errorf("legacy service account tokens (tokens without audience) are disabled "+
+			"by default. Use --allow-legacy-serviceaccount-tokens to opt in"))
 	}
 
 	return errs
