@@ -17,6 +17,7 @@ limitations under the License.
 package options
 
 import (
+	"github.com/brancz/kube-rbac-proxy/pkg/authn/identityheaders"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -121,6 +122,96 @@ func Test_parseAuthorizationConfigFile(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("parseAuthorizationConfigFile(): %s", cmp.Diff(got, tt.want))
+			}
+		})
+	}
+}
+
+func TestProxyOptions_Validate(t *testing.T) {
+	type fields struct {
+		Upstream                        string
+		UpstreamForceH2C                bool
+		UpstreamCAFile                  string
+		UpstreamClientCertFile          string
+		UpstreamClientKeyFile           string
+		UpstreamHeader                  *identityheaders.AuthnHeaderConfig
+		AuthzConfigFileName             string
+		AllowPaths                      []string
+		IgnorePaths                     []string
+		ProxyEndpointsPort              int
+		TokenAudiences                  []string
+		AllowLegacyServiceAccountTokens bool
+		DisableHTTP2Serving             bool
+	}
+
+	userKey := "User"
+	groupKey := "Group"
+
+	tests := []struct {
+		name    string
+		fields  fields
+		wantErr bool
+	}{
+		{
+			name: "valid config with explicit token audience",
+			fields: fields{
+				Upstream:                        "http://127.0.0.1",
+				TokenAudiences:                  []string{"kube-apiserver"},
+				AllowLegacyServiceAccountTokens: false,
+				UpstreamHeader: &identityheaders.AuthnHeaderConfig{
+					UserFieldName:   userKey,
+					GroupsFieldName: groupKey,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "legacy tokens not allowed (empty audiences, flag false)",
+			fields: fields{
+				Upstream:                        "http://127.0.0.1",
+				TokenAudiences:                  []string{},
+				AllowLegacyServiceAccountTokens: false,
+				UpstreamHeader: &identityheaders.AuthnHeaderConfig{
+					UserFieldName:   userKey,
+					GroupsFieldName: groupKey,
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "legacy tokens allowed (empty audiences, flag true)",
+			fields: fields{
+				Upstream:                        "http://127.0.0.1",
+				TokenAudiences:                  []string{},
+				AllowLegacyServiceAccountTokens: true,
+				UpstreamHeader: &identityheaders.AuthnHeaderConfig{
+					UserFieldName:   userKey,
+					GroupsFieldName: groupKey,
+				},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			o := &ProxyOptions{
+				Upstream:                        tt.fields.Upstream,
+				UpstreamForceH2C:                tt.fields.UpstreamForceH2C,
+				UpstreamCAFile:                  tt.fields.UpstreamCAFile,
+				UpstreamClientCertFile:          tt.fields.UpstreamClientCertFile,
+				UpstreamClientKeyFile:           tt.fields.UpstreamClientKeyFile,
+				UpstreamHeader:                  tt.fields.UpstreamHeader,
+				AuthzConfigFileName:             tt.fields.AuthzConfigFileName,
+				AllowPaths:                      tt.fields.AllowPaths,
+				IgnorePaths:                     tt.fields.IgnorePaths,
+				ProxyEndpointsPort:              tt.fields.ProxyEndpointsPort,
+				TokenAudiences:                  tt.fields.TokenAudiences,
+				AllowLegacyServiceAccountTokens: tt.fields.AllowLegacyServiceAccountTokens,
+				DisableHTTP2Serving:             tt.fields.DisableHTTP2Serving,
+			}
+			errs := o.Validate()
+			if (len(errs) > 0) != tt.wantErr {
+				t.Errorf("Validate() errors = %v, wantErr %v", errs, tt.wantErr)
 			}
 		})
 	}
