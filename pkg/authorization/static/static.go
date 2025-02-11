@@ -42,18 +42,18 @@ type UserConfig struct {
 	Groups []string `json:"groups,omitempty"`
 }
 
-type staticAuthorizer struct {
+type StaticAuthorizer struct {
 	config []StaticAuthorizationConfig
 }
 
 // NewStaticAuthorizer creates an authorizer for static SubjectAccessReviews
-func NewStaticAuthorizer(config []StaticAuthorizationConfig) (*staticAuthorizer, error) {
+func NewStaticAuthorizer(config []StaticAuthorizationConfig) (*StaticAuthorizer, error) {
 	for _, c := range config {
 		if c.ResourceRequest != (c.Path == "") {
 			return nil, fmt.Errorf("invalid configuration: resource requests must not include a path: %v", config)
 		}
 	}
-	return &staticAuthorizer{config}, nil
+	return &StaticAuthorizer{config}, nil
 }
 
 func (saConfig StaticAuthorizationConfig) Matches(a authorizer.Attributes) bool {
@@ -84,7 +84,7 @@ func (saConfig StaticAuthorizationConfig) Matches(a authorizer.Attributes) bool 
 	return false
 }
 
-func (sa staticAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
+func (sa StaticAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
 	// compare a against the configured static auths
 	for _, saConfig := range sa.config {
 		if saConfig.Matches(a) {
