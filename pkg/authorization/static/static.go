@@ -38,8 +38,9 @@ type StaticAuthorizationConfig struct {
 }
 
 type UserConfig struct {
-	Name   string   `json:"name,omitempty"`
-	Groups []string `json:"groups,omitempty"`
+	Name     string   `json:"name,omitempty"`
+	Groups   []string `json:"groups,omitempty"`
+	GroupSet map[string]struct{}
 }
 
 type staticAuthorizer struct {
@@ -48,8 +49,15 @@ type staticAuthorizer struct {
 
 // NewStaticAuthorizer creates an authorizer for static SubjectAccessReviews
 func NewStaticAuthorizer(config []StaticAuthorizationConfig) (*staticAuthorizer, error) {
-	for _, c := range config {
-		if c.ResourceRequest != (c.Path == "") {
+	for c := range config {
+		if config[c].User.Groups != nil {
+			groupSet := make(map[string]struct{})
+			for _, group := range config[c].User.Groups {
+				groupSet[group] = struct{}{}
+			}
+			config[c].User.GroupSet = groupSet
+		}
+		if config[c].ResourceRequest != (config[c].Path == "") {
 			return nil, fmt.Errorf("invalid configuration: resource requests must not include a path: %v", config)
 		}
 	}
@@ -63,16 +71,12 @@ func (saConfig StaticAuthorizationConfig) Matches(a authorizer.Attributes) bool 
 		}
 		return staticConf == requestVal
 	}
-	isGroupAllowed := func(configGroups, requestGroups []string) bool {
-		if len(configGroups) == 0 {
+	isGroupAllowed := func(requestGroups []string) bool {
+		if len(saConfig.User.GroupSet) == 0 {
 			return true
 		}
-		configGroupSet := make(map[string]struct{})
-		for _, group := range configGroups {
-			configGroupSet[group] = struct{}{}
-		}
 		for _, group := range requestGroups {
-			if _, exists := configGroupSet[group]; exists {
+			if _, exists := saConfig.User.GroupSet[group]; exists {
 				return true
 			}
 		}
@@ -87,7 +91,7 @@ func (saConfig StaticAuthorizationConfig) Matches(a authorizer.Attributes) bool 
 	}
 
 	if (saConfig.User.Name == "" || isAllowed(saConfig.User.Name, userName)) &&
-		isGroupAllowed(saConfig.User.Groups, userGroups) &&
+		isGroupAllowed(userGroups) &&
 		isAllowed(saConfig.Verb, a.GetVerb()) &&
 		isAllowed(saConfig.Namespace, a.GetNamespace()) &&
 		isAllowed(saConfig.APIGroup, a.GetAPIGroup()) &&
