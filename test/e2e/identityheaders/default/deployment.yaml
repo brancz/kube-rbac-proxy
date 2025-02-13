@@ -24,6 +24,7 @@ spec:
             - "--auth-header-user-field-name=x-remote-user"
             - "--auth-header-groups-field-name=x-remote-groups"
             - "--auth-header-groups-field-separator=|"
+            - "--allow-legacy-serviceaccount-tokens=true"
             - "--v=10"
           ports:
             - containerPort: 8443
