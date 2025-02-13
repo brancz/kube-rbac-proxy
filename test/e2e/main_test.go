@@ -56,6 +56,7 @@ func Test(t *testing.T) {
 		"IdentityHeaders":    testIdentityHeaders(client),
 		"ClientCertificates": testClientCertificates(client),
 		"TokenAudience":      testTokenAudience(client),
+		"LegacyTokenFlag":    testLegacyTokenFlag(client),
 		"AllowPath":          testAllowPathsRegexp(client),
 		"IgnorePath":         testIgnorePaths(client),
 		"TLS":                testTLS(client),

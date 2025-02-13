@@ -24,6 +24,7 @@ spec:
             - "--auth-header-user-field-name=x-remote-user"
             - "--auth-header-groups-field-name=x-remote-groups"
             - "--auth-header-groups-field-separator=|"
+            - "--allow-legacy-serviceaccount-tokens=true"
             - "--tls-cert-file=/usr/local/etc/kube-rbac-proxy/server-certs/tls.crt"
             - "--tls-private-key-file=/usr/local/etc/kube-rbac-proxy/server-certs/tls.key"
             - "--upstream-ca-file=/usr/local/etc/kube-rbac-proxy/upstream-trust/ca.crt"

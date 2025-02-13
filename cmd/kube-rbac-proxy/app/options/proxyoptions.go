@@ -81,7 +81,7 @@ func (o *ProxyOptions) AddFlags(flagset *pflag.FlagSet) {
 	flagset.StringVar(&o.UpstreamHeader.GroupsFieldName, "auth-header-groups-field-name", "x-remote-groups", "The name of the field inside a http(2) request header to tell the upstream server about the user's groups")
 	flagset.StringVar(&o.UpstreamHeader.GroupSeparator, "auth-header-groups-field-separator", "|", "The separator string used for concatenating multiple group names in a groups header field's value")
 
-	flagset.StringSliceVar(&o.TokenAudiences, "auth-token-audiences", []string{}, "Comma-separated list of token audiences to accept. Tokens must have at least one audience from this list. If omitted, the token is considered legacy.")
+	flagset.StringSliceVar(&o.TokenAudiences, "auth-token-audiences", []string{}, "Comma-separated list of token audiences to accept. Tokens must have at least one audience from this list. Must be set unless --allow-legacy-serviceaccount-tokens is true.")
 
 	// legacy tokens are disabled by default.
 	flagset.BoolVar(&o.AllowLegacyServiceAccountTokens, "allow-legacy-serviceaccount-tokens", false, "If true, allow legacy service account tokens (without an audience). Legacy tokens are less secure and are disabled by default.")

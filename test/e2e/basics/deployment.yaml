@@ -20,6 +20,7 @@ spec:
           args:
             - "--secure-port=8443"
             - "--upstream=http://127.0.0.1:8081/"
+            - "--allow-legacy-serviceaccount-tokens=true"
             - "--authentication-skip-lookup"
             - "--v=10"
           ports:
