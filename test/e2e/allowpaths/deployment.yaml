@@ -22,6 +22,7 @@ spec:
             - "--proxy-endpoints-port=8643"
             - "--upstream=http://127.0.0.1:8081/"
             - "--allow-paths=/metrics,/api/v1/label/*"
+            - "--allow-legacy-serviceaccount-tokens=true"
             - "--authentication-skip-lookup"
             - "--v=10"
           ports:
