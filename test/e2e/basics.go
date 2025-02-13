@@ -519,3 +519,127 @@ func testIgnorePaths(client kubernetes.Interface) kubetest.TestSuite {
 		}.Run(t)
 	}
 }
+
+func testLegacyTokenFlag(client kubernetes.Interface) kubetest.TestSuite {
+	return func(t *testing.T) {
+		legacyCommand := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/tokens/requestedtoken)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
+		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
+
+		kubetest.Scenario{
+			Name: "LegacyAllowedAudienceSet",
+			Description: `
+				As a client with --allow-legacy-serviceaccount-tokens=true and a valid audience,
+				I succeed with my request
+			`,
+
+			Given: kubetest.Actions(
+				kubetest.CreatedManifests(
+					client,
+					"legacy/clusterRole.yaml",
+					"legacy/clusterRoleBinding.yaml",
+					"legacy/deployment-allowed.yaml",
+					"legacy/service.yaml",
+					"legacy/serviceAccount.yaml",
+					"legacy/clusterRole-client.yaml",
+					"legacy/clusterRoleBinding-client.yaml",
+				),
+			),
+			When: kubetest.Actions(
+				kubetest.PodsAreReady(
+					client,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					client,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Actions(
+				kubetest.ClientSucceeds(
+					client,
+					legacyCommand,
+					&kubetest.RunOptions{TokenAudience: "kube-rbac-proxy"},
+				),
+			),
+		}.Run(t)
+
+		kubetest.Scenario{
+			Name: "LegacyDisallowedAudienceSet",
+			Description: `
+				As a client with --allow-legacy-serviceaccount-tokens=false and a valid audience,
+				I succeed with my request
+			`,
+
+			Given: kubetest.Actions(
+				kubetest.CreatedManifests(
+					client,
+					"legacy/clusterRole.yaml",
+					"legacy/clusterRoleBinding.yaml",
+					"legacy/deployment-disallowed.yaml",
+					"legacy/service.yaml",
+					"legacy/serviceAccount.yaml",
+					"legacy/clusterRole-client.yaml",
+					"legacy/clusterRoleBinding-client.yaml",
+				),
+			),
+			When: kubetest.Actions(
+				kubetest.PodsAreReady(
+					client,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					client,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Actions(
+				kubetest.ClientSucceeds(
+					client,
+					legacyCommand,
+					&kubetest.RunOptions{TokenAudience: "kube-rbac-proxy"},
+				),
+			),
+		}.Run(t)
+
+		kubetest.Scenario{
+			Name: "LegacyAllowedNoAudience",
+			Description: `
+				As a client with --allow-legacy-serviceaccount-tokens=true and no audience set,
+				I succeed with my request
+			`,
+
+			Given: kubetest.Actions(
+				kubetest.CreatedManifests(
+					client,
+					"legacy/clusterRole.yaml",
+					"legacy/clusterRoleBinding.yaml",
+					"legacy/deployment-allowed-noaud.yaml",
+					"legacy/service.yaml",
+					"legacy/serviceAccount.yaml",
+					"legacy/clusterRole-client.yaml",
+					"legacy/clusterRoleBinding-client.yaml",
+				),
+			),
+			When: kubetest.Actions(
+				kubetest.PodsAreReady(
+					client,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					client,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Actions(
+				kubetest.ClientSucceeds(
+					client,
+					command,
+					&kubetest.RunOptions{TokenAudience: ""},
+				),
+			),
+		}.Run(t)
+	}
+}
