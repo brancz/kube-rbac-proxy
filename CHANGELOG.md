@@ -1,3 +1,8 @@
+## 0.19.0 / 2025-02-14
+
+- [ENHANCEMENT] Bump deps
+- [ENHANCEMENT] OIDC authenticator defaults to using host's root CA pool if CA file is not provided
+
 ## 0.18.2 / 2024-11-29
 
 - [BUGFIX] Mask tokens even in the high verbosity in logs
