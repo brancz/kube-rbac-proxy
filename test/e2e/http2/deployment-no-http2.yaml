@@ -21,6 +21,7 @@ spec:
             - "--secure-port=8443"
             - "--upstream=http://127.0.0.1:8081/"
             - "--authentication-skip-lookup"
+            - "--allow-legacy-serviceaccount-tokens=true"
             - "--ignore-paths=/metrics,/api/v1/*"
             - "--disable-http2-serving=true"
             - "--v=10"

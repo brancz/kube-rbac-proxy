@@ -24,6 +24,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/brancz/kube-rbac-proxy/pkg/authn/identityheaders"
 	authz "github.com/brancz/kube-rbac-proxy/pkg/authorization"
 	"github.com/brancz/kube-rbac-proxy/pkg/authorization/rewrite"
 	"github.com/brancz/kube-rbac-proxy/pkg/authorization/static"
@@ -121,6 +122,162 @@ func Test_parseAuthorizationConfigFile(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("parseAuthorizationConfigFile(): %s", cmp.Diff(got, tt.want))
+			}
+		})
+	}
+}
+
+func TestProxyOptions_Validate(t *testing.T) {
+	type fields struct {
+		Upstream                        string
+		UpstreamForceH2C                bool
+		UpstreamCAFile                  string
+		UpstreamClientCertFile          string
+		UpstreamClientKeyFile           string
+		UpstreamHeader                  *identityheaders.AuthnHeaderConfig
+		AuthzConfigFileName             string
+		AllowPaths                      []string
+		IgnorePaths                     []string
+		ProxyEndpointsPort              int
+		TokenAudiences                  []string
+		AllowLegacyServiceAccountTokens bool
+		DisableHTTP2Serving             bool
+	}
+
+	const (
+		userKey  = "User"
+		groupKey = "Group"
+	)
+
+	tests := []struct {
+		name    string
+		fields  fields
+		wantErr bool
+	}{
+		{
+			name: "valid config with client cert, key, config, port, and token audience",
+			fields: fields{
+				Upstream:                        "http://127.0.0.1",
+				UpstreamForceH2C:                true,
+				UpstreamCAFile:                  "ca.crt",
+				UpstreamClientCertFile:          "client.crt",
+				UpstreamClientKeyFile:           "client.key",
+				AuthzConfigFileName:             "authz.yaml",
+				AllowPaths:                      []string{"/path1", "/path2"},
+				ProxyEndpointsPort:              8081,
+				TokenAudiences:                  []string{"kube-apiserver"},
+				AllowLegacyServiceAccountTokens: false,
+				DisableHTTP2Serving:             true,
+				UpstreamHeader: &identityheaders.AuthnHeaderConfig{
+					UserFieldName:   userKey,
+					GroupsFieldName: groupKey,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid config with explicit token audience",
+			fields: fields{
+				Upstream:                        "http://127.0.0.1",
+				TokenAudiences:                  []string{"kube-apiserver"},
+				AllowLegacyServiceAccountTokens: false,
+				UpstreamHeader: &identityheaders.AuthnHeaderConfig{
+					UserFieldName:   userKey,
+					GroupsFieldName: groupKey,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "legacy tokens not allowed (empty audiences, flag false)",
+			fields: fields{
+				Upstream:                        "http://127.0.0.1",
+				TokenAudiences:                  []string{},
+				AllowLegacyServiceAccountTokens: false,
+				UpstreamHeader: &identityheaders.AuthnHeaderConfig{
+					UserFieldName:   userKey,
+					GroupsFieldName: groupKey,
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "legacy tokens allowed (empty audiences, flag true)",
+			fields: fields{
+				Upstream:                        "http://127.0.0.1",
+				TokenAudiences:                  []string{},
+				AllowLegacyServiceAccountTokens: true,
+				UpstreamHeader: &identityheaders.AuthnHeaderConfig{
+					UserFieldName:   userKey,
+					GroupsFieldName: groupKey,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid combination (both AllowPaths and IgnorePaths set)",
+			fields: fields{
+				Upstream:                        "http://127.0.0.1",
+				AllowPaths:                      []string{"/path1"},
+				IgnorePaths:                     []string{"/path2"},
+				TokenAudiences:                  []string{"kube-apiserver"},
+				AllowLegacyServiceAccountTokens: false,
+				UpstreamHeader: &identityheaders.AuthnHeaderConfig{
+					UserFieldName:   userKey,
+					GroupsFieldName: groupKey,
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid AllowPaths",
+			fields: fields{
+				Upstream:                        "http://127.0.0.1",
+				AllowPaths:                      []string{"[path"},
+				TokenAudiences:                  []string{"kube-apiserver"},
+				AllowLegacyServiceAccountTokens: false,
+				UpstreamHeader: &identityheaders.AuthnHeaderConfig{
+					UserFieldName:   userKey,
+					GroupsFieldName: groupKey,
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid IgnorePaths",
+			fields: fields{
+				Upstream:                        "http://127.0.0.1",
+				IgnorePaths:                     []string{"path\\"},
+				TokenAudiences:                  []string{"kube-apiserver"},
+				AllowLegacyServiceAccountTokens: false,
+				UpstreamHeader: &identityheaders.AuthnHeaderConfig{
+					UserFieldName:   userKey,
+					GroupsFieldName: groupKey,
+				},
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			o := &ProxyOptions{
+				Upstream:                        tt.fields.Upstream,
+				UpstreamForceH2C:                tt.fields.UpstreamForceH2C,
+				UpstreamCAFile:                  tt.fields.UpstreamCAFile,
+				UpstreamClientCertFile:          tt.fields.UpstreamClientCertFile,
+				UpstreamClientKeyFile:           tt.fields.UpstreamClientKeyFile,
+				UpstreamHeader:                  tt.fields.UpstreamHeader,
+				AuthzConfigFileName:             tt.fields.AuthzConfigFileName,
+				AllowPaths:                      tt.fields.AllowPaths,
+				IgnorePaths:                     tt.fields.IgnorePaths,
+				ProxyEndpointsPort:              tt.fields.ProxyEndpointsPort,
+				TokenAudiences:                  tt.fields.TokenAudiences,
+				AllowLegacyServiceAccountTokens: tt.fields.AllowLegacyServiceAccountTokens,
+				DisableHTTP2Serving:             tt.fields.DisableHTTP2Serving,
+			}
+			errs := o.Validate()
+			if (len(errs) > 0) != tt.wantErr {
+				t.Errorf("Validate() errors = %v, wantErr %v", errs, tt.wantErr)
 			}
 		})
 	}

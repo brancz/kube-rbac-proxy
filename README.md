@@ -91,11 +91,12 @@ Delegating authorization flags:
 
 Proxy flags:
 
+      --allow-legacy-serviceaccount-tokens          If true, allow legacy service account tokens (without an audience). Legacy tokens are less secure and are disabled by default.
       --allow-paths strings                         Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the request doesn't match, kube-rbac-proxy responds with a 404 status code. If omitted, the incoming request path isn't checked. Cannot be used with --ignore-paths.
       --auth-header-groups-field-name string        The name of the field inside a http(2) request header to tell the upstream server about the user's groups (default "x-remote-groups")
       --auth-header-groups-field-separator string   The separator string used for concatenating multiple group names in a groups header field's value (default "|")
       --auth-header-user-field-name string          The name of the field inside a http(2) request header to tell the upstream server about the user's name (default "x-remote-user")
-      --auth-token-audiences strings                Comma-separated list of token audiences to accept. By default a token does not have to have any specific audience. It is recommended to set a specific audience.
+      --auth-token-audiences strings                Comma-separated list of token audiences to accept. Tokens must have at least one audience from this list. Must be set unless --allow-legacy-serviceaccount-tokens is true.
       --config-file string                          Configuration file to configure static and rewrites authorization of the kube-rbac-proxy.
       --disable-http2-serving                       If true, HTTP2 serving will be disabled [default=false]
       --ignore-paths strings                        Comma-separated list of paths against which kube-rbac-proxy pattern-matches the incoming request. If the requst matches, it will proxy the request without performing an authentication or authorization check. Cannot be used with --allow-paths.

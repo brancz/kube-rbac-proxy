@@ -22,6 +22,7 @@ spec:
             - "--upstream=http://127.0.0.1:8081/"
             - "--ignore-paths=/metrics,/api/v1/*"
             - "--authentication-skip-lookup"
+            - "--allow-legacy-serviceaccount-tokens=true"
             - "--v=10"
           ports:
             - containerPort: 8443
