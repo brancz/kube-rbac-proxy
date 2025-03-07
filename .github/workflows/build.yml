@@ -116,7 +116,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     name: Publish container image to Quay
-    if: github.event_name == 'push'
+    if: ${{ github.event.repository.fork == false && github.event_name == 'push' }}
     needs:
     - check-license
     - generate
