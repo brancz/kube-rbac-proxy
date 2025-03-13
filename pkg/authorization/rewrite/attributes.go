@@ -30,24 +30,6 @@ type AttributesGenerator interface {
 	Generate(context.Context, authorizer.Attributes) []authorizer.Attributes
 }
 
-// NonResourceAttributesGenerator reduces a given attribute to user and http based
-// attributes.
-type NonResourceAttributesGenerator struct{}
-
-var _ AttributesGenerator = &NonResourceAttributesGenerator{}
-
-// Generate reduces the original attributes to user and http based attributes.
-func (d *NonResourceAttributesGenerator) Generate(ctx context.Context, attr authorizer.Attributes) []authorizer.Attributes {
-	return []authorizer.Attributes{
-		authorizer.AttributesRecord{
-			User:            attr.GetUser(),
-			Verb:            attr.GetVerb(),
-			ResourceRequest: false,
-			Path:            attr.GetPath(),
-		},
-	}
-}
-
 // ResourceAttributesGenerator uses the given attributes' user, http verb and
 // verifies its authorization against a static kubernetes resource. The
 // authorization is bound to that given kubernetes resource.
