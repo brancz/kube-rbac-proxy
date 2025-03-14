@@ -38,13 +38,21 @@ var (
 
 // NewOIDCAuthenticator returns OIDC authenticator
 func NewOIDCAuthenticator(ctx context.Context, config *OIDCConfig) (*OIDCAuthenticator, error) {
-	var dynamicCA *dynamiccertificates.DynamicFileCAContent
+	var (
+		// Assign the [dynamiccertificates.CAContentProvider] interface only if the underlying concrete type is not nil.
+		// Otherwise, the interface will get a type associated with it and will fail a nil check later on.
+		// See https://github.com/brancz/kube-rbac-proxy/pull/361 for more details.
+		dynamicCA         *dynamiccertificates.DynamicFileCAContent
+		caContentProvider dynamiccertificates.CAContentProvider
+	)
+
 	if len(config.CAFile) > 0 { // if unset, the OIDC authenticator defaults to host's trust store
 		var err error
 		dynamicCA, err = dynamiccertificates.NewDynamicCAContentFromFile("oidc-ca", config.CAFile)
 		if err != nil {
 			return nil, err
 		}
+		caContentProvider = dynamicCA
 	}
 
 	tokenAuthenticator, err := oidc.New(ctx, oidc.Options{
@@ -64,7 +72,7 @@ func NewOIDCAuthenticator(ctx context.Context, config *OIDCConfig) (*OIDCAuthent
 				},
 			},
 		},
-		CAContentProvider:    dynamicCA,
+		CAContentProvider:    caContentProvider,
 		SupportedSigningAlgs: config.SupportedSigningAlgs,
 	})
 	if err != nil {
