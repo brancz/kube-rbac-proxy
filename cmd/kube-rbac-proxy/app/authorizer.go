@@ -57,8 +57,6 @@ func setupAuthorizer(krbInfo *server.KubeRBACProxyInfo, delegatedAuthz *serverco
 		attrsGenerator = rewrite.NewTemplatedResourceAttributesGenerator(
 			krbInfo.Authorization.ResourceAttributes,
 		)
-	default:
-		attrsGenerator = &rewrite.NonResourceAttributesGenerator{}
 	}
 
 	if attrsGenerator != nil {
@@ -93,4 +91,3 @@ func setupAuthorizer(krbInfo *server.KubeRBACProxyInfo, delegatedAuthz *serverco
 
 	return authz, nil
 }
-
