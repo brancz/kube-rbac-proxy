@@ -155,7 +155,6 @@ func (opts *completedProxyRunOptions) ProxyConfig() (*server.KubeRBACProxyConfig
 // Complete sets defaults for the ProxyRunOptions.
 // Should be called after the flags are parsed.
 func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
-
 	hostname, err := os.Hostname()
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve hostname for self-signed cert: %w", err)
@@ -265,7 +264,6 @@ func Run(cfg *server.KubeRBACProxyConfig) error {
 
 	return nil
 }
-
 
 func setupProxyHandler(cfg *server.KubeRBACProxyInfo) http.Handler {
 	proxy := &httputil.ReverseProxy{
