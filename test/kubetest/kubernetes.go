@@ -23,6 +23,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"os"
 	"strings"
 	"time"
@@ -300,7 +301,11 @@ func createSecret(client kubernetes.Interface, ctx *ScenarioContext, content []b
 	_, err := client.CoreV1().Secrets(secret.Namespace).Create(context.TODO(), secret, metav1.CreateOptions{})
 
 	ctx.AddCleanUp(func() error {
-		return client.CoreV1().Secrets(secret.Namespace).Delete(context.TODO(), secret.Name, metav1.DeleteOptions{})
+		err = client.CoreV1().Secrets(secret.Namespace).Delete(context.TODO(), secret.Name, metav1.DeleteOptions{})
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
 	})
 
 	return err
@@ -451,6 +456,7 @@ type RunOptions struct {
 	ServiceAccount     string
 	TokenAudience      string
 	ClientCertificates bool
+	LegacyToken        bool
 	OutputStream       io.Writer // Functional Options would be better
 }
 
@@ -538,7 +544,26 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts,
 			corev1.VolumeMount{
 				Name:      "requestedtoken",
-				MountPath: "/var/run/secrets/tokens",
+				MountPath: "/var/run/projected/tokens",
+			},
+		)
+	}
+
+	if opts != nil && opts.LegacyToken {
+		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+			Name: "legacy-sa-secret",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "legacy-sa-secret",
+				},
+			},
+		})
+
+		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts,
+			corev1.VolumeMount{
+				Name:      "legacy-sa-secret",
+				MountPath: "/var/run/legacy/tokens",
+				ReadOnly:  true,
 			},
 		)
 	}

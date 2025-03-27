@@ -24,6 +24,7 @@ spec:
             - "--upstream=http://127.0.0.1:8081/"
             - "--config-file=/etc/kube-rbac-proxy/config-file.yaml"
             - "--authentication-skip-lookup"
+            - "--allow-legacy-serviceaccount-tokens=true"
             - "--v=10"
           ports:
             - containerPort: 8443
