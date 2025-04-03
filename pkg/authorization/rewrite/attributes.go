@@ -25,7 +25,7 @@ import (
 )
 
 // AttributesGenerator is a an interface for generating a list of attributes.
-// Attributes must be adjusted dependant on the configuration and context.
+// Attributes must be adjusted dependent on the configuration and context.
 type AttributesGenerator interface {
 	Generate(context.Context, authorizer.Attributes) []authorizer.Attributes
 }
@@ -86,7 +86,10 @@ func (b *ResourceAttributesGenerator) Generate(ctx context.Context, attr authori
 // and verifies its authorization against a predefined kubernetes resource
 // template. The template is rewritting using client input data, which is VERY
 // DANGEROUS. It should only be used in a narrow use-case, where the upstream
-// is interpreting the input data as well.
+// is interpreting the input data as well. It has the potential for vulnerabilities
+// if the proxy and upstream interpret data differently, which is not uncommon.
+//
+// The known use-case is the prom-label-proxy (https://github.com/prometheus-community/prom-label-proxy).
 type TemplatedResourceAttributesGenerator struct {
 	attributes *ResourceAttributes
 
