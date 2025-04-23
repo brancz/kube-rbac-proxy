@@ -1,3 +1,8 @@
+## 0.19.1 / 2025-04-23
+
+- [ENHANCEMENT] Bump deps
+- [BUGFIX] Fix nil-pointer dereference in OIDC authenticator
+
 ## 0.19.0 / 2025-02-14
 
 - [ENHANCEMENT] Bump deps
