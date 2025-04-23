@@ -144,7 +144,7 @@ func (o *ProxyRunOptions) Flags() k8sapiflag.NamedFlagSets {
 func (o *ProxyRunOptions) Validate() error {
 	var errs []error
 
-	hasCerts := !(o.TLS.CertFile == "") && !(o.TLS.KeyFile == "")
+	hasCerts := (o.TLS.CertFile != "") && (o.TLS.KeyFile != "")
 	hasInsecureListenAddress := o.InsecureListenAddress != ""
 	if !hasCerts || hasInsecureListenAddress {
 		klog.Warning(`
