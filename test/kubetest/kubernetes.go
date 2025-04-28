@@ -268,7 +268,7 @@ func createConfigmap(client kubernetes.Interface, ctx *ScenarioContext, content 
 // Returns a func directly (not Setup or Conditions) as it can be used in Given and When steps
 func PodsAreReady(client kubernetes.Interface, replicas int, labels string) func(*ScenarioContext) error {
 	return func(ctx *ScenarioContext) error {
-		return wait.Poll(time.Second, time.Minute, func() (bool, error) {
+		return wait.Poll(time.Second, time.Minute, func() (bool, error) { // nolint:staticcheck
 			list, err := client.CoreV1().Pods(ctx.Namespace).List(context.TODO(), metav1.ListOptions{
 				LabelSelector: labels,
 			})
@@ -300,7 +300,7 @@ func PodsAreReady(client kubernetes.Interface, replicas int, labels string) func
 // Returns a func directly (not Setup or Conditions) as it can be used in Given and When steps
 func PodsAreGone(client kubernetes.Interface, labels string) func(*ScenarioContext) error {
 	return func(ctx *ScenarioContext) error {
-		return wait.Poll(time.Second, time.Minute, func() (bool, error) {
+		return wait.Poll(time.Second, time.Minute, func() (bool, error) { // nolint:staticcheck
 			list, err := client.CoreV1().Pods(ctx.Namespace).List(context.TODO(), metav1.ListOptions{
 				LabelSelector: labels,
 			})
@@ -318,7 +318,7 @@ func PodsAreGone(client kubernetes.Interface, labels string) func(*ScenarioConte
 // Returns a func directly (not Setup or Conditions) as it can be used in Given and When steps
 func ServiceIsReady(client kubernetes.Interface, service string) func(*ScenarioContext) error {
 	return func(ctx *ScenarioContext) error {
-		return wait.Poll(time.Second, time.Minute, func() (bool, error) {
+		return wait.Poll(time.Second, time.Minute, func() (bool, error) { // nolint:staticcheck
 			_, err := client.CoreV1().Services(ctx.Namespace).Get(context.TODO(), service, metav1.GetOptions{})
 			if err != nil {
 				return false, fmt.Errorf("failed to get service: %v", err)
