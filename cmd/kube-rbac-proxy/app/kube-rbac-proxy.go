@@ -32,8 +32,6 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	waitgroup "k8s.io/apimachinery/pkg/util/waitgroup"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
-	"k8s.io/apiserver/pkg/authorization/authorizer"
-	"k8s.io/apiserver/pkg/authorization/union"
 	kubefilters "k8s.io/apiserver/pkg/endpoints/filters"
 	"k8s.io/apiserver/pkg/endpoints/request"
 	serverconfig "k8s.io/apiserver/pkg/server"
@@ -48,9 +46,7 @@ import (
 	"github.com/brancz/kube-rbac-proxy/cmd/kube-rbac-proxy/app/options"
 	"github.com/brancz/kube-rbac-proxy/pkg/authn"
 	"github.com/brancz/kube-rbac-proxy/pkg/authn/identityheaders"
-	"github.com/brancz/kube-rbac-proxy/pkg/authorization/path"
 	"github.com/brancz/kube-rbac-proxy/pkg/authorization/rewrite"
-	"github.com/brancz/kube-rbac-proxy/pkg/authorization/static"
 	"github.com/brancz/kube-rbac-proxy/pkg/filters"
 	"github.com/brancz/kube-rbac-proxy/pkg/server"
 )
@@ -270,67 +266,6 @@ func Run(cfg *server.KubeRBACProxyConfig) error {
 	return nil
 }
 
-// setupAuthorizer runs different authorization checks based on the configuration.
-func setupAuthorizer(krbInfo *server.KubeRBACProxyInfo, delegatedAuthz *serverconfig.AuthorizationInfo) (authorizer.Authorizer, error) {
-	// pathAuthorizer is running before any other authorizer.
-	// It works outside of the default authorizers.
-	var pathAuthorizer authorizer.Authorizer
-	var err error
-	// AllowPaths are the only paths that are not denied.
-	// IgnorePaths bypass all authorization checks.
-	switch {
-	case len(krbInfo.AllowPaths) > 0:
-		pathAuthorizer, err = path.NewAllowedPathsAuthorizer(krbInfo.AllowPaths)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create allow path authorizer: %w", err)
-		}
-	case len(krbInfo.IgnorePaths) > 0:
-		pathAuthorizer, err = path.NewPassthroughAuthorizer(krbInfo.IgnorePaths)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create ignore path authorizer: %w", err)
-		}
-	}
-
-	// Delegated authorizers are running after the pathAuthorizer
-	// and after the attributes have been rewritten.
-	var delegated []authorizer.Authorizer
-	// Static authorization authorizes against a static file is ran before the SubjectAccessReview.
-	if krbInfo.Authorization.Static != nil {
-		staticAuthorizer, err := static.NewStaticAuthorizer(krbInfo.Authorization.Static)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create static authorizer: %w", err)
-		}
-
-		delegated = append(delegated, staticAuthorizer)
-	}
-	delegated = append(delegated, delegatedAuthz.Authorizer)
-
-	// Rewriting attributes such that they fit the given use-case.
-	var attrsGenerator rewrite.AttributesGenerator
-	switch {
-	case krbInfo.Authorization.ResourceAttributes != nil && krbInfo.Authorization.Rewrites == nil:
-		attrsGenerator = rewrite.NewResourceAttributesGenerator(
-			krbInfo.Authorization.ResourceAttributes,
-		)
-	case krbInfo.Authorization.ResourceAttributes != nil && krbInfo.Authorization.Rewrites != nil:
-		attrsGenerator = rewrite.NewTemplatedResourceAttributesGenerator(
-			krbInfo.Authorization.ResourceAttributes,
-		)
-	default:
-		attrsGenerator = &rewrite.NonResourceAttributesGenerator{}
-	}
-
-	rewritingAuthorizer := rewrite.NewRewritingAuthorizer(
-		union.New(delegated...),
-		attrsGenerator,
-	)
-
-	if pathAuthorizer != nil {
-		return union.New(pathAuthorizer, rewritingAuthorizer), nil
-	}
-
-	return rewritingAuthorizer, nil
-}
 
 func setupProxyHandler(cfg *server.KubeRBACProxyInfo) http.Handler {
 	proxy := &httputil.ReverseProxy{
