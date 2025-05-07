@@ -18,168 +18,187 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
+	userInfo "k8s.io/apiserver/pkg/authentication/user"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	"k8s.io/apiserver/pkg/authorization/authorizerfactory"
-	serverconfig "k8s.io/apiserver/pkg/server"
 
-	authz "github.com/brancz/kube-rbac-proxy/pkg/authorization"
 	"github.com/brancz/kube-rbac-proxy/pkg/authorization/rewrite"
 	"github.com/brancz/kube-rbac-proxy/pkg/authorization/static"
 	"github.com/brancz/kube-rbac-proxy/pkg/server"
 )
 
-type mockAuthorizer struct {
-	decision    authorizer.Decision
-	reason      string
-	err         error
-	lastRequest authorizer.Attributes
-}
-
-func (m *mockAuthorizer) Authorize(ctx context.Context, attrs authorizer.Attributes) (authorizer.Decision, string, error) {
-	m.lastRequest = attrs
-	return m.decision, m.reason, m.err
-}
-
-func TestSetupAuthorizer(t *testing.T) {
-	testCases := []struct {
-		name              string
-		krbInfo           *server.KubeRBACProxyInfo
-		delegatedAuthz    *serverconfig.AuthorizationInfo
-		expectError       bool
-		checkPathAuthz    bool
-		checkStaticAuthz  bool
-		checkRewriteAuthz bool
-	}{
+func TestAuthorizerSetup(t *testing.T) {
+	pathConfigInput := []string{"/metrics"}
+	defaultUserName := "test-user"
+	resourceConfigInput := &rewrite.ResourceAttributes{
+		Namespace:  "resource-attributes-namespace",
+		APIGroup:   "",
+		APIVersion: "v1",
+		Resource:   "pods",
+		Name:       "my-pod",
+	}
+	staticConfigInput := []static.StaticAuthorizationConfig{
 		{
-			name: "with allow paths",
-			krbInfo: &server.KubeRBACProxyInfo{
-				AllowPaths: []string{"/healthz", "/metrics/*"},
-				Authorization: &authz.AuthzConfig{
-					RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{},
-				},
-			},
-			delegatedAuthz: &serverconfig.AuthorizationInfo{
-				Authorizer: &mockAuthorizer{},
-			},
-			checkPathAuthz: true,
-		},
-		{
-			name: "with ignore paths",
-			krbInfo: &server.KubeRBACProxyInfo{
-				IgnorePaths: []string{"/healthz", "/metrics/*"},
-				Authorization: &authz.AuthzConfig{
-					RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{},
-				},
-			},
-			delegatedAuthz: &serverconfig.AuthorizationInfo{
-				Authorizer: &mockAuthorizer{},
-			},
-			checkPathAuthz: true,
-		},
-		{
-			name: "with static authorizer",
-			krbInfo: &server.KubeRBACProxyInfo{
-				Authorization: &authz.AuthzConfig{
-					RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{},
-					Static: []static.StaticAuthorizationConfig{
-						{
-							User: static.UserConfig{
-								Name:   "test-user",
-								Groups: []string{"test-group"},
-							},
-							ResourceRequest: true,
-							Resource:        "pods",
-							Namespace:       "default",
-							Verb:            "get",
-						},
-					},
-				},
-			},
-			delegatedAuthz: &serverconfig.AuthorizationInfo{
-				Authorizer: &mockAuthorizer{},
-			},
-			checkStaticAuthz: true,
-		},
-		{
-			name: "with resource attributes",
-			krbInfo: &server.KubeRBACProxyInfo{
-				Authorization: &authz.AuthzConfig{
-					RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{
-						ResourceAttributes: &rewrite.ResourceAttributes{
-							Namespace:   "default",
-							Resource:    "pods",
-							Subresource: "proxy",
-						},
-					},
-				},
-			},
-			delegatedAuthz: &serverconfig.AuthorizationInfo{
-				Authorizer: authorizerfactory.NewAlwaysAllowAuthorizer(),
-			},
-			checkRewriteAuthz: true,
-		},
-		{
-			name: "with templated resource attributes",
-			krbInfo: &server.KubeRBACProxyInfo{
-				Authorization: &authz.AuthzConfig{
-					RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{
-						ResourceAttributes: &rewrite.ResourceAttributes{
-							Namespace:   "default",
-							Resource:    "pods",
-							Subresource: "proxy",
-						},
-						Rewrites: &rewrite.SubjectAccessReviewRewrites{
-							ByQueryParameter: &rewrite.QueryParameterRewriteConfig{
-								Name: "resource",
-							},
-						},
-					},
-				},
-			},
-			delegatedAuthz: &serverconfig.AuthorizationInfo{
-				Authorizer: authorizerfactory.NewAlwaysAllowAuthorizer(),
-			},
-			checkRewriteAuthz: true,
-		},
-		{
-			name: "with non-resource attributes",
-			krbInfo: &server.KubeRBACProxyInfo{
-				Authorization: &authz.AuthzConfig{
-					RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{},
-				},
-			},
-			delegatedAuthz: &serverconfig.AuthorizationInfo{
-				Authorizer: authorizerfactory.NewAlwaysAllowAuthorizer(),
-			},
-			checkRewriteAuthz: true,
+			User:            static.UserConfig{Name: defaultUserName},
+			ResourceRequest: true,
+			Resource:        "pods",
+			Namespace:       "static-namespace",
+			Verb:            "get",
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := setupAuthorizer(tc.krbInfo, tc.delegatedAuthz)
+	resourceConfigAuthorizer := makeAuthorizer(func(_ context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
+		switch {
+		case a.GetNamespace() != resourceConfigInput.Namespace:
+			return authorizer.DecisionDeny, "", fmt.Errorf("wrong namespace: have %q, want %q", a.GetNamespace(), resourceConfigInput.Namespace)
+		case a.GetAPIGroup() != resourceConfigInput.APIGroup:
+			return authorizer.DecisionDeny, "", fmt.Errorf("wrong API group: have %q, want %q", a.GetAPIGroup(), resourceConfigInput.APIGroup)
+		case a.GetAPIVersion() != resourceConfigInput.APIVersion:
+			return authorizer.DecisionDeny, "", fmt.Errorf("wrong API version: have %q, want %q", a.GetAPIVersion(), resourceConfigInput.APIVersion)
+		case a.GetResource() != resourceConfigInput.Resource:
+			return authorizer.DecisionDeny, "", fmt.Errorf("wrong resource: have %q, want %q", a.GetResource(), resourceConfigInput.Resource)
+		case a.GetName() != resourceConfigInput.Name:
+			return authorizer.DecisionDeny, "", fmt.Errorf("wrong name: have %q, want %q", a.GetName(), resourceConfigInput.Name)
+		case a.GetUser().GetName() != defaultUserName:
+			return authorizer.DecisionDeny, "", fmt.Errorf("wrong user: have %q, want %q", a.GetUser().GetName(), defaultUserName)
+		}
+		return authorizer.DecisionAllow, "", nil
+	})
 
-			if tc.expectError {
-				if err == nil {
-					t.Fatalf("expected error but got none")
+	emptyConfig := NewConfigBuilder().Build()
+	pathOnlyConfig := NewConfigBuilder().WithPaths(pathConfigInput).Build()
+	staticOnlyConfig := NewConfigBuilder().WithStatic(staticConfigInput).Build()
+	resourceOnlyConfig := NewConfigBuilder().
+		WithResourceAttributesRewrite(resourceConfigInput).
+		Build()
+	pathAndStaticConfig := NewConfigBuilder().
+		WithPaths(pathConfigInput).
+		WithStatic(staticConfigInput).
+		Build()
+	rewriteAndStaticConfig := NewConfigBuilder().
+		WithResourceAttributesRewrite(resourceConfigInput).
+		WithStatic(staticConfigInput).
+		Build()
+	pathAndRewriteAndStaticConfig := NewConfigBuilder().
+		WithPaths(pathConfigInput).
+		WithResourceAttributesRewrite(resourceConfigInput).
+		WithStatic(staticConfigInput).
+		Build()
+
+	for _, testCase := range []struct {
+		name       string
+		attributes authorizer.Attributes
+		expected   map[*server.KubeRBACProxyInfo]authorizer.Decision
+	}{
+		{
+			name: "good path attributes",
+			attributes: authorizer.AttributesRecord{
+				Path: "/metrics",
+			},
+			expected: map[*server.KubeRBACProxyInfo]authorizer.Decision{
+				emptyConfig:                   authorizer.DecisionNoOpinion,
+				pathOnlyConfig:                authorizer.DecisionAllow,
+				staticOnlyConfig:              authorizer.DecisionNoOpinion,
+				pathAndStaticConfig:           authorizer.DecisionAllow,
+				rewriteAndStaticConfig:        authorizer.DecisionDeny, // rewrite makes it stricter
+				pathAndRewriteAndStaticConfig: authorizer.DecisionAllow,
+			},
+		},
+		{
+			name: "bad path attributes",
+			attributes: authorizer.AttributesRecord{
+				Path: "/admin",
+			},
+			expected: map[*server.KubeRBACProxyInfo]authorizer.Decision{
+				emptyConfig:                   authorizer.DecisionNoOpinion,
+				pathOnlyConfig:                authorizer.DecisionNoOpinion,
+				staticOnlyConfig:              authorizer.DecisionNoOpinion,
+				pathAndStaticConfig:           authorizer.DecisionNoOpinion,
+				rewriteAndStaticConfig:        authorizer.DecisionDeny, // rewrite makes it stricter
+				pathAndRewriteAndStaticConfig: authorizer.DecisionDeny, // rewrite makes it stricter
+			},
+		},
+		{
+			name: "matches static attributes",
+			attributes: authorizer.AttributesRecord{
+				User:            &userInfo.DefaultInfo{Name: "test-user"},
+				ResourceRequest: true,
+				Resource:        "pods",
+				Namespace:       "static-namespace",
+				Verb:            "get",
+			},
+			expected: map[*server.KubeRBACProxyInfo]authorizer.Decision{
+				emptyConfig:                   authorizer.DecisionNoOpinion,
+				pathOnlyConfig:                authorizer.DecisionNoOpinion,
+				staticOnlyConfig:              authorizer.DecisionAllow,
+				pathAndStaticConfig:           authorizer.DecisionAllow,
+				rewriteAndStaticConfig:        authorizer.DecisionDeny, // rewrite messes with our attributes
+				pathAndRewriteAndStaticConfig: authorizer.DecisionDeny, // rewrite messes with our attributes
+			},
+		},
+	} {
+		for _, testConfig := range []struct {
+			name  string
+			cfg   *server.KubeRBACProxyInfo
+			authz authorizer.Authorizer
+		}{
+			{
+				name: "empty config",
+				cfg:  emptyConfig,
+			},
+			{
+				name: "path only config",
+				cfg:  pathOnlyConfig,
+			},
+			{
+				name: "static only config",
+				cfg:  staticOnlyConfig,
+			},
+			{
+				name:  "rewrite only config",
+				cfg:   resourceOnlyConfig,
+				authz: resourceConfigAuthorizer,
+			},
+			{
+				name: "path and static config",
+				cfg:  pathAndStaticConfig,
+			},
+			{
+				name: "rewrite and static config",
+				cfg:  rewriteAndStaticConfig,
+			},
+			{
+				name: "path and rewrite and static config",
+				cfg:  pathAndRewriteAndStaticConfig,
+			},
+		} {
+			t.Run(testCase.name+" with "+testConfig.name, func(t *testing.T) {
+				if testConfig.authz == nil {
+					testConfig.authz = authorizerfactory.NewAlwaysDenyAuthorizer()
 				}
-				return
-			}
 
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+				decision, _, err := getAuthorizerFunc(
+					t, testConfig.cfg, testConfig.authz,
+				)(context.Background(), testCase.attributes)
 
-			// Basic validation that we got an authorizer back
-			if result == nil {
-				t.Fatalf("expected non-nil authorizer")
-			}
+				if expectedDecision, ok := testCase.expected[testConfig.cfg]; ok {
+					if err != nil {
+						t.Fatalf("expected no error, got %v", err)
+					}
+					if decision != expectedDecision {
+						t.Errorf("expected decision %q, got %q", decisionToString(expectedDecision), decisionToString(decision))
+					}
+					return
+				}
 
-			// We won't actually invoke the authorizer since that would require
-			// setting up more test fixtures. This test just verifies that the
-			// authorizer is properly constructed based on the configuration.
-		})
+				// We expect this to fail.
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+			})
+		}
 	}
 }
