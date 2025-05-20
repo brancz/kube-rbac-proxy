@@ -39,19 +39,48 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
+						"authz-static/serviceAccount-krp.yaml",
+						"authz-static/serviceAccount-client-static.yaml",
+						"authz-static/clusterRole-krp.yaml",
+						"authz-static/clusterRoleBinding-krp.yaml",
 						"authz-static/configmap.yaml",
-						"authz-static/clusterRole.yaml",
-						"authz-static/clusterRoleBinding.yaml",
 						"authz-static/deployment.yaml",
 						"authz-static/service.yaml",
-						"authz-static/serviceAccount.yaml",
 					),
 				),
 				check: kubetest.Actions(
 					kubetest.ClientSucceeds(
 						client,
 						fmt.Sprintf(command, "/metrics"),
-						nil,
+						&kubetest.RunOptions{
+							ServiceAccount: "client-with-static-match",
+						},
+					),
+				),
+			},
+			{
+				name: "static/forbidden -> rbac/granted",
+				given: kubetest.Actions(
+					kubetest.CreatedManifests(
+						client,
+						"authz-static/serviceAccount-krp.yaml",
+						"authz-static/serviceAccount-client-rbac.yaml",
+						"authz-static/clusterRole-krp.yaml",
+						"authz-static/clusterRole-metrics-reader.yaml",
+						"authz-static/clusterRoleBinding-krp.yaml",
+						"authz-static/clusterRoleBinding-client.yaml",
+						"authz-static/configmap.yaml",
+						"authz-static/deployment.yaml",
+						"authz-static/service.yaml",
+					),
+				),
+				check: kubetest.Actions(
+					kubetest.ClientSucceeds(
+						client,
+						fmt.Sprintf(command, "/metrics"),
+						&kubetest.RunOptions{
+							ServiceAccount: "client-with-rbac",
+						},
 					),
 				),
 			},
@@ -60,12 +89,12 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
+						"authz-static/serviceAccount-krp.yaml",
+						"authz-static/clusterRole-krp.yaml",
+						"authz-static/clusterRoleBinding-krp.yaml",
 						"authz-static/configmap.yaml",
-						"authz-static/clusterRole.yaml",
-						"authz-static/clusterRoleBinding.yaml",
 						"authz-static/deployment.yaml",
 						"authz-static/service.yaml",
-						"authz-static/serviceAccount.yaml",
 					),
 				),
 				check: kubetest.Actions(
