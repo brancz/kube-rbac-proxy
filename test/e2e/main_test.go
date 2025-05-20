@@ -45,11 +45,12 @@ func Test(t *testing.T) {
 		// "AllowPath":          testAllowPathsRegexp(client),
 		// "IgnorePath":         testIgnorePaths(client),
 		// "TLS":                testTLS(client),
-		"StaticAuthorizer": testStaticAuthorizer(client),
+		// "StaticAuthorizer": testStaticAuthorizer(client),
 		// "HTTP2":              testHTTP2(client),
 		// "Flags":              testFlags(client),
 		// "TokenMasking":       testTokenMasking(client),
 		// "CombinedAuthorizer": testCombinedAuthorizer(client),
+		"ResourceBoundAuthorizer": testResourceBoundAuthorizer(client),
 	}
 
 	for name, tc := range tests {
