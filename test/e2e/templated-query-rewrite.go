@@ -25,7 +25,7 @@ import (
 	"github.com/brancz/kube-rbac-proxy/test/kubetest"
 )
 
-func testCombinedAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
+func testTemplatedQueryRewrite(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443%v`
 
@@ -35,7 +35,7 @@ func testCombinedAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 			check kubetest.Action
 		}{
 			{
-				name: "templated-query-rewrite-static/granted",
+				name: "templated-query-rewrite-static/granted-by-static",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
@@ -45,13 +45,42 @@ func testCombinedAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 						"authz-templated-query-rewrite-static/deployment.yaml",
 						"authz-templated-query-rewrite-static/service.yaml",
 						"authz-templated-query-rewrite-static/serviceAccount.yaml",
+						"authz-templated-query-rewrite-static/serviceAccount-static.yaml",
 					),
 				),
 				check: kubetest.Actions(
 					kubetest.ClientSucceeds(
 						client,
 						fmt.Sprintf(command, "/metrics?namespace=default"),
-						nil,
+						&kubetest.RunOptions{
+							ServiceAccount: "client-with-static",
+						},
+					),
+				),
+			},
+			{
+				name: "templated-query-rewrite-static/granted-by-rbac",
+				given: kubetest.Actions(
+					kubetest.CreatedManifests(
+						client,
+						"authz-templated-query-rewrite-static/configmap-resource.yaml",
+						"authz-templated-query-rewrite-static/clusterRole.yaml",
+						"authz-templated-query-rewrite-static/clusterRole-client-rbac.yaml",
+						"authz-templated-query-rewrite-static/clusterRoleBinding.yaml",
+						"authz-templated-query-rewrite-static/clusterRoleBinding-client-rbac.yaml",
+						"authz-templated-query-rewrite-static/deployment.yaml",
+						"authz-templated-query-rewrite-static/service.yaml",
+						"authz-templated-query-rewrite-static/serviceAccount.yaml",
+						"authz-templated-query-rewrite-static/serviceAccount-rbac.yaml",
+					),
+				),
+				check: kubetest.Actions(
+					kubetest.ClientSucceeds(
+						client,
+						fmt.Sprintf(command, "/metrics?namespace=unlocking"),
+						&kubetest.RunOptions{
+							ServiceAccount: "client-with-rbac",
+						},
 					),
 				),
 			},

@@ -10,13 +10,11 @@ data:
           name: "namespace"
       resourceAttributes:
         resource: namespaces
-        subresource: metrics
         namespace: "{{ .Value }}"
       static:
         - user:
-            name: system:serviceaccount:default:default
+            name: system:serviceaccount:default:client-with-static
           resourceRequest: true
           resource: namespaces
-          subresource: metrics
           namespace: default
           verb: get
