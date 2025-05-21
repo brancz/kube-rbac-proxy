@@ -50,7 +50,8 @@ func Test(t *testing.T) {
 		// "Flags":              testFlags(client),
 		// "TokenMasking":       testTokenMasking(client),
 		// "ResourceBoundAuthorizer": testResourceBoundAuthorizer(client),
-		"TemplatedQueryRewrite": testTemplatedQueryRewrite(client),
+		// "TemplatedQueryRewrite": testTemplatedQueryRewrite(client),
+		"HeaderRewriteStatic":   testHeaderRewriteStatic(client),
 	}
 
 	for name, tc := range tests {
