@@ -49,6 +49,10 @@ func Test(t *testing.T) {
 		"HTTP2":              testHTTP2(client),
 		"Flags":              testFlags(client),
 		"TokenMasking":       testTokenMasking(client),
+		"ResourceBoundAuthorizer": testResourceBoundAuthorizer(client),
+		"TemplatedQueryRewrite": testTemplatedQueryRewrite(client),
+		"HeaderRewriteStatic":   testHeaderRewriteStatic(client),
+		"ResourceBasedRewriteStatic": testResourceBasedRewriteStatic(client),
 	}
 
 	for name, tc := range tests {

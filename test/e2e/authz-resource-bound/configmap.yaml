@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-rbac-proxy
+data:
+  config-file.yaml: |+
+    authorization:
+      resourceAttributes:
+        resource: pods
+        group: ""
+        namespace: "default"
+

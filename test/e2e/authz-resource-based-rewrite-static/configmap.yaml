@@ -5,18 +5,13 @@ metadata:
 data:
   config-file.yaml: |+
     authorization:
-      rewrites:
-        byQueryParameter:
-          name: "namespace"
       resourceAttributes:
         resource: namespaces
-        subresource: metrics
-        namespace: "{{ .Value }}"
+        namespace: kube-system
       static:
         - user:
-            name: system:serviceaccount:default:default
+            name: system:serviceaccount:default:client-with-static
           resourceRequest: true
           resource: namespaces
-          subresource: metrics
-          namespace: default
+          namespace: kube-system
           verb: get
