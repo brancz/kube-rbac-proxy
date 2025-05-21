@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-rbac-proxy
+data:
+  config-file.yaml: |+
+    authorization:
+      resourceAttributes:
+        resource: namespaces
+        namespace: kube-system
+      static:
+        - user:
+            name: system:serviceaccount:default:client-with-static
+          resourceRequest: true
+          resource: namespaces
+          namespace: kube-system
+          verb: get

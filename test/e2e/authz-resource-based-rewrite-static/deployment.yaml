@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-rbac-proxy
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kube-rbac-proxy
+  template:
+    metadata:
+      labels:
+        app: kube-rbac-proxy
+    spec:
+      serviceAccountName: kube-rbac-proxy
+      containers:
+        - name: kube-rbac-proxy
+          image: quay.io/brancz/kube-rbac-proxy:local
+          args:
+            - "--secure-listen-address=0.0.0.0:8443"
+            - "--proxy-endpoints-port=8643"
+            - "--upstream=http://127.0.0.1:8081/"
+            - "--ignore-paths=/ignored"
+            - "--config-file=/etc/kube-rbac-proxy/config-file.yaml"
+            - "--v=10"
+          ports:
+            - containerPort: 8443
+              name: https
+            - containerPort: 8643
+              name: proxy
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              port: 8643
+              path: healthz
+          volumeMounts:
+            - name: config
+              mountPath: /etc/kube-rbac-proxy
+        - name: prometheus-example-app
+          image: quay.io/brancz/prometheus-example-app:v0.5.0
+          args:
+            - "--bind=127.0.0.1:8081"
+      volumes:
+        - name: config
+          configMap:
+            name: kube-rbac-proxy

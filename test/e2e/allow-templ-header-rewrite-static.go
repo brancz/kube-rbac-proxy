@@ -127,6 +127,27 @@ func testHeaderRewriteStatic(client kubernetes.Interface) kubetest.TestSuite {
 					),
 				),
 			},
+			{
+				name: "allow-header-rewrite-static/forbidden-by-rewrite-for-sa",
+				given: kubetest.Actions(
+					kubetest.CreatedManifests(
+						client,
+						"authz-allow-header-rewrite-static/configmap.yaml",
+						"authz-allow-header-rewrite-static/clusterRole.yaml",
+						"authz-allow-header-rewrite-static/clusterRoleBinding.yaml",
+						"authz-allow-header-rewrite-static/deployment.yaml",
+						"authz-allow-header-rewrite-static/service.yaml",
+						"authz-allow-header-rewrite-static/serviceAccount.yaml",
+					),
+				),
+				check: kubetest.Actions(
+					kubetest.ClientFails(
+						client,
+						fmt.Sprintf(commandWithHeader, "kube-system"),
+						nil,
+					),
+				),
+			},
 		} {
 			kubetest.Scenario{
 				Name:  tc.name,
