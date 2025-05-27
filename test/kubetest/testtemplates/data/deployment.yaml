@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-rbac-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kube-rbac-proxy
+  template:
+    metadata:
+      labels:
+        app: kube-rbac-proxy
+    spec:
+      serviceAccountName: kube-rbac-proxy
+      containers:
+        - name: kube-rbac-proxy
+          image: quay.io/brancz/kube-rbac-proxy:local
+          ports:
+            - containerPort: 8443
+              name: https
+        - name: prometheus-example-app
+          image: quay.io/brancz/prometheus-example-app:v0.5.0
+          args:
+            - "--bind=127.0.0.1:8081"
