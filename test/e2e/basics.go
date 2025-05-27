@@ -184,6 +184,9 @@ func testTokenAudience(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/tokens/requestedtoken)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
 
+		krpWithAudiencesConfig := kubetest.NewBasicKubeRBACProxyTestConfig().
+			UpdateFlags(map[string]string{"auth-token-audiences": "kube-rbac-proxy"})
+
 		kubetest.Scenario{
 			Name: "IncorrectAudience",
 			Description: `
@@ -191,18 +194,7 @@ func testTokenAudience(client kubernetes.Interface) kubetest.TestSuite {
 				I fail with my request
 			`,
 
-			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"tokenrequest/clusterRole.yaml",
-					"tokenrequest/clusterRoleBinding.yaml",
-					"tokenrequest/deployment.yaml",
-					"tokenrequest/service.yaml",
-					"tokenrequest/serviceAccount.yaml",
-					"tokenrequest/clusterRole-client.yaml",
-					"tokenrequest/clusterRoleBinding-client.yaml",
-				),
-			),
+			Given: kubetest.Actions(krpWithAudiencesConfig.Launch(client)),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
 					client,
@@ -230,18 +222,7 @@ func testTokenAudience(client kubernetes.Interface) kubetest.TestSuite {
 				I succeed with my request
 			`,
 
-			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"tokenrequest/clusterRole.yaml",
-					"tokenrequest/clusterRoleBinding.yaml",
-					"tokenrequest/deployment.yaml",
-					"tokenrequest/service.yaml",
-					"tokenrequest/serviceAccount.yaml",
-					"tokenrequest/clusterRole-client.yaml",
-					"tokenrequest/clusterRoleBinding-client.yaml",
-				),
-			),
+			Given: kubetest.Actions(krpWithAudiencesConfig.Launch(client)),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
 					client,
