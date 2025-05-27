@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -27,6 +28,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilerrs "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 
@@ -253,7 +255,19 @@ func (c *KRPTestConfig) Launch(client kubernetes.Interface) Action {
 		_, err = client.AppsV1().Deployments(ctx.Namespace).Create(context.TODO(), finalDeployment, metav1.CreateOptions{})
 		if err == nil {
 			ctx.AddCleanUp(func() error {
-				return client.AppsV1().Deployments(ctx.Namespace).Delete(context.TODO(), finalDeployment.Name, metav1.DeleteOptions{})
+				if err := client.AppsV1().Deployments(ctx.Namespace).Delete(context.TODO(), finalDeployment.Name, metav1.DeleteOptions{}); err != nil {
+					return err
+				}
+				// TODO: wire proper context below
+				return wait.PollUntilContextTimeout(context.TODO(), 1*time.Second, 15*time.Second, true, func(waitCtx context.Context) (bool, error) {
+					podList, err := client.CoreV1().Pods(ctx.Namespace).List(waitCtx, metav1.ListOptions{
+						LabelSelector: "app=kube-rbac-proxy",
+					})
+					if err == nil && len(podList.Items) == 0 {
+						return true, nil
+					}
+					return false, err
+				})
 			})
 		}
 
