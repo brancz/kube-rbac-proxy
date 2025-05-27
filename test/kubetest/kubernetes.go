@@ -38,63 +38,85 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func CreateServerCerts(client kubernetes.Interface, name string) Action {
-	return createCerts(client, name, createSignedServerCert)
+func CreateServerCerts(client kubernetes.Interface, hostBase string) Action {
+	return createCertsAction(client, fmt.Sprintf("%s.default.svc.cluster.local", hostBase), createSignedServerCert)
 }
 
-func CreateClientCerts(client kubernetes.Interface, name string) Action {
-	return createCerts(client, name, createSignedClientCert)
+func CreateClientCerts(client kubernetes.Interface, commonName string) Action {
+	return createCertsAction(client, commonName, createSignedClientCert)
 }
 
-func createCerts(client kubernetes.Interface, name string, createSignedCert createCertsFunc) Action {
+func createCertsAction(client kubernetes.Interface, commonName string, createSignedCert createCertsFunc) Action {
 	return func(ctx *ScenarioContext) error {
-		caCert, caKey, err := createSelfSignedCA(fmt.Sprintf("%s-ca", name))
+		trustCM, certsSecret, err := createCerts(commonName, createSignedCert)
 		if err != nil {
-			return err
-		}
-		cert, key, err := createSignedCert(caCert, caKey, fmt.Sprintf("%s.default.svc.cluster.local", name))
-		if err != nil {
-			return err
+			return fmt.Errorf("failed to create certs: %v", err)
 		}
 
-		configMapName := fmt.Sprintf("%s-trust", name)
-		_, err = client.CoreV1().ConfigMaps(ctx.Namespace).Create(context.TODO(), &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: configMapName,
-			},
-			Data: map[string]string{
-				"ca.crt": string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCert.Raw})),
-			},
-		}, metav1.CreateOptions{})
+		_, err = client.CoreV1().ConfigMaps(ctx.Namespace).Create(context.TODO(), trustCM, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}
 		ctx.AddCleanUp(func() error {
-			return client.CoreV1().ConfigMaps(ctx.Namespace).Delete(context.TODO(), configMapName, metav1.DeleteOptions{})
+			return client.CoreV1().ConfigMaps(ctx.Namespace).Delete(context.TODO(), trustCM.Name, metav1.DeleteOptions{})
 		})
 
-		secretName := fmt.Sprintf("%s-certs", name)
-		_, err = client.CoreV1().Secrets(ctx.Namespace).Create(context.TODO(), &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: secretName,
-			},
-			Data: map[string][]byte{
-				"tls.crt": pem.EncodeToMemory(&pem.Block{
-					Type:  "CERTIFICATE",
-					Bytes: cert.Raw,
-				}),
-				"tls.key": []byte(pem.EncodeToMemory(&pem.Block{
-					Type:  "RSA PRIVATE KEY",
-					Bytes: x509.MarshalPKCS1PrivateKey(key),
-				})),
-			},
-		}, metav1.CreateOptions{})
+		_, err = client.CoreV1().Secrets(ctx.Namespace).Create(context.TODO(), certsSecret, metav1.CreateOptions{})
+		if err != nil {
+			return err
+		}
 		ctx.AddCleanUp(func() error {
-			return client.CoreV1().Secrets(ctx.Namespace).Delete(context.TODO(), secretName, metav1.DeleteOptions{})
+			return client.CoreV1().Secrets(ctx.Namespace).Delete(context.TODO(), certsSecret.Name, metav1.DeleteOptions{})
 		})
 
-		return err
+		return nil
 	}
+}
+
+// createCerts creates a self-signed CA and a cert/key pair where the cert is signed by the CA.
+// It returns a CM with the CA and a secret with the cert/key pair.
+//
+// Naming convention:
+// - ConfigMap: <certCommonName>-trust
+// - Secret: <certCommonName>-certs
+func createCerts(certCommonName string, createSignedCert createCertsFunc) (*corev1.ConfigMap, *corev1.Secret, error) {
+	caCert, caKey, err := createSelfSignedCA(fmt.Sprintf("%s-ca", certCommonName))
+	if err != nil {
+		return nil, nil, err
+	}
+	cert, key, err := createSignedCert(caCert, caKey, certCommonName)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	configMapName := fmt.Sprintf("%s-trust", certCommonName)
+	trustCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: configMapName,
+		},
+		Data: map[string]string{
+			"ca.crt": string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCert.Raw})),
+		},
+	}
+
+	secretName := fmt.Sprintf("%s-certs", certCommonName)
+	certsSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: secretName,
+		},
+		Data: map[string][]byte{
+			"tls.crt": pem.EncodeToMemory(&pem.Block{
+				Type:  "CERTIFICATE",
+				Bytes: cert.Raw,
+			}),
+			"tls.key": []byte(pem.EncodeToMemory(&pem.Block{
+				Type:  "RSA PRIVATE KEY",
+				Bytes: x509.MarshalPKCS1PrivateKey(key),
+			})),
+		},
+	}
+
+	return trustCM, certsSecret, nil
 }
 
 func CreatedManifests(client kubernetes.Interface, paths ...string) Action {
@@ -448,10 +470,10 @@ func podRunningAndReady(pod corev1.Pod) (bool, error) {
 }
 
 type RunOptions struct {
-	ServiceAccount     string
-	TokenAudience      string
-	ClientCertificates bool
-	OutputStream       io.Writer // Functional Options would be better
+	ServiceAccount               string
+	TokenAudience                string
+	ClientCertificatesSecretName string    // the name of the secret containing client certificates
+	OutputStream                 io.Writer // Functional Options would be better
 }
 
 func RunSucceeds(client kubernetes.Interface, image string, name string, command []string, opts *RunOptions) Action {
@@ -543,12 +565,12 @@ func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name s
 		)
 	}
 
-	if opts != nil && opts.ClientCertificates {
+	if opts != nil && len(opts.ClientCertificatesSecretName) > 0 {
 		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
 			Name: "clientcertificates",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: "kube-rbac-proxy-client-certificates",
+					SecretName: opts.ClientCertificatesSecretName,
 				},
 			},
 		})
