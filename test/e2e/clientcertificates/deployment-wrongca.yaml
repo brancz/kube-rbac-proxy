@@ -21,6 +21,7 @@ spec:
             - "--secure-port=8443"
             - "--upstream=http://127.0.0.1:8081/"
             - "--client-ca-file=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+            - "--allow-legacy-serviceaccount-tokens=true"
             - "--authentication-skip-lookup"
             - "--v=10"
           ports:

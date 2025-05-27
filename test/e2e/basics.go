@@ -110,7 +110,7 @@ func testBasics(client kubernetes.Interface) kubetest.TestSuite {
 
 func testTokenAudience(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
-		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/tokens/requestedtoken)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
+		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/projected/tokens/requestedtoken)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
 
 		kubetest.Scenario{
 			Name: "IncorrectAudience",
@@ -513,6 +513,132 @@ func testIgnorePaths(client kubernetes.Interface) kubetest.TestSuite {
 				kubetest.ClientSucceeds(
 					client,
 					fmt.Sprintf(commandWithoutAuth, "/api/v12", 403, 403),
+					nil,
+				),
+			),
+		}.Run(t)
+	}
+}
+
+func testLegacyTokenFlag(client kubernetes.Interface) kubetest.TestSuite {
+	return func(t *testing.T) {
+		legacyCommand := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/legacy/tokens/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
+		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
+
+		kubetest.Scenario{
+			Name: "LegacyAllowedAudienceSet",
+			Description: `
+				As a client with --allow-legacy-serviceaccount-tokens=true and a valid audience,
+				I succeed with my request
+			`,
+
+			Given: kubetest.Actions(
+				kubetest.CreatedManifests(
+					client,
+					"legacy/audience/serviceAccount.yaml",
+					"legacy/audience/secret-legacy.yaml",
+					"legacy/audience/clusterRole.yaml",
+					"legacy/audience/clusterRoleBinding.yaml",
+					"legacy/audience/deployment-allowed.yaml",
+					"legacy/audience/service.yaml",
+					"legacy/audience/clusterRole-client.yaml",
+					"legacy/audience/clusterRoleBinding-client.yaml",
+				),
+			),
+			When: kubetest.Actions(
+				kubetest.PodsAreReady(
+					client,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					client,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Actions(
+				kubetest.ClientSucceeds(
+					client,
+					legacyCommand,
+					&kubetest.RunOptions{LegacyToken: true},
+				),
+			),
+		}.Run(t)
+
+		kubetest.Scenario{
+			Name: "LegacyDisallowedAudienceSet",
+			Description: `
+				As a client with --allow-legacy-serviceaccount-tokens=false and a valid audience,
+				I fail with my request
+			`,
+
+			Given: kubetest.Actions(
+				kubetest.CreatedManifests(
+					client,
+					"legacy/audience/serviceAccount.yaml",
+					"legacy/audience/secret-legacy.yaml",
+					"legacy/audience/clusterRole.yaml",
+					"legacy/audience/clusterRoleBinding.yaml",
+					"legacy/audience/deployment-disallowed.yaml",
+					"legacy/audience/service.yaml",
+					"legacy/audience/clusterRole-client.yaml",
+					"legacy/audience/clusterRoleBinding-client.yaml",
+				),
+			),
+			When: kubetest.Actions(
+				kubetest.PodsAreReady(
+					client,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					client,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Actions(
+				kubetest.ClientFails(
+					client,
+					legacyCommand,
+					&kubetest.RunOptions{LegacyToken: true},
+				),
+			),
+		}.Run(t)
+
+		kubetest.Scenario{
+			Name: "LegacyAllowedNoAudience",
+			Description: `
+				As a client with --allow-legacy-serviceaccount-tokens=true and no audience set,
+				I succeed with my request
+			`,
+
+			Given: kubetest.Actions(
+				kubetest.CreatedManifests(
+					client,
+					"legacy/noaud/clusterRole.yaml",
+					"legacy/noaud/clusterRoleBinding.yaml",
+					"legacy/noaud/deployment.yaml",
+					"legacy/noaud/service.yaml",
+					"legacy/noaud/serviceAccount.yaml",
+					"legacy/noaud/clusterRole-client.yaml",
+					"legacy/noaud/clusterRoleBinding-client.yaml",
+				),
+			),
+			When: kubetest.Actions(
+				kubetest.PodsAreReady(
+					client,
+					1,
+					"app=kube-rbac-proxy",
+				),
+				kubetest.ServiceIsReady(
+					client,
+					"kube-rbac-proxy",
+				),
+			),
+			Then: kubetest.Actions(
+				kubetest.ClientSucceeds(
+					client,
+					command,
 					nil,
 				),
 			),
