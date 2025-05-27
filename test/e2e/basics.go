@@ -273,6 +273,9 @@ func testAllowPathsRegexp(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `STATUS_CODE=$(curl --connect-timeout 5 -o /dev/null -v -s -k --write-out "%%{http_code}" -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443%s); if [[ "$STATUS_CODE" != %d ]]; then echo "expecting %d status code, got $STATUS_CODE instead" > /proc/self/fd/2; exit 1; fi`
 
+		allowPathsSetup := kubetest.NewBasicKubeRBACProxyTestConfig().
+			UpdateFlags(map[string]string{"allow-paths": "/metrics,/api/v1/label/*"})
+
 		kubetest.Scenario{
 			Name: "WithPathNotAllowed",
 			Description: `
@@ -280,18 +283,7 @@ func testAllowPathsRegexp(client kubernetes.Interface) kubetest.TestSuite {
 				I get a 403 response when requesting a path which isn't allowed by kube-rbac-proxy
 			`,
 
-			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"allowpaths/clusterRole.yaml",
-					"allowpaths/clusterRoleBinding.yaml",
-					"allowpaths/deployment.yaml",
-					"allowpaths/service.yaml",
-					"allowpaths/serviceAccount.yaml",
-					"allowpaths/clusterRole-client.yaml",
-					"allowpaths/clusterRoleBinding-client.yaml",
-				),
-			),
+			Given: kubetest.Actions(allowPathsSetup.Launch(client)),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
 					client,
@@ -324,18 +316,7 @@ func testAllowPathsRegexp(client kubernetes.Interface) kubetest.TestSuite {
 				I succeed with my request for a path that is allowed
 			`,
 
-			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"allowpaths/clusterRole.yaml",
-					"allowpaths/clusterRoleBinding.yaml",
-					"allowpaths/deployment.yaml",
-					"allowpaths/service.yaml",
-					"allowpaths/serviceAccount.yaml",
-					"allowpaths/clusterRole-client.yaml",
-					"allowpaths/clusterRoleBinding-client.yaml",
-				),
-			),
+			Given: kubetest.Actions(allowPathsSetup.Launch(client)),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
 					client,
