@@ -32,17 +32,9 @@ func testHTTP2(client kubernetes.Interface) kubetest.TestSuite {
 				Expecting http/2 capable client to succeed to connect with http/2.
 			`,
 
-			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"http2/clusterRole.yaml",
-					"http2/clusterRoleBinding.yaml",
-					"http2/deployment.yaml",
-					"http2/service.yaml",
-					"http2/serviceAccount.yaml",
-					"http2/clusterRole-client.yaml",
-					"http2/clusterRoleBinding-client.yaml",
-				),
+			Given: kubetest.Actions(kubetest.NewBasicKubeRBACProxyTestConfig().
+				UpdateFlags(map[string]string{"ignore-paths": "/metrics,/api/v1/*"}).
+				Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
@@ -70,17 +62,12 @@ func testHTTP2(client kubernetes.Interface) kubetest.TestSuite {
 				Expecting http/2 capable client to fail to connect with http/2.
 			`,
 
-			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"http2/clusterRole.yaml",
-					"http2/clusterRoleBinding.yaml",
-					"http2/deployment-no-http2.yaml",
-					"http2/service.yaml",
-					"http2/serviceAccount.yaml",
-					"http2/clusterRole-client.yaml",
-					"http2/clusterRoleBinding-client.yaml",
-				),
+			Given: kubetest.Actions(kubetest.NewBasicKubeRBACProxyTestConfig().
+				UpdateFlags(map[string]string{
+					"ignore-paths":  "/metrics,/api/v1/*",
+					"http2-disable": "true",
+				}).
+				Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
