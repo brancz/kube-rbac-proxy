@@ -39,7 +39,7 @@ import (
 )
 
 func CreateServerCerts(client kubernetes.Interface, hostBase string) Action {
-	return createCertsAction(client, fmt.Sprintf("%s.default.svc.cluster.local", hostBase), createSignedServerCert)
+	return createCertsAction(client, hostBase, createSignedServerCert)
 }
 
 func CreateClientCerts(client kubernetes.Interface, commonName string) Action {
