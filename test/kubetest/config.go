@@ -34,8 +34,10 @@ import (
 )
 
 type KRPTestConfig struct {
-	Flags                   map[string]string
-	UpstreamFlags           map[string]string
+	Flags               map[string]string
+	UpstreamFlags       map[string]string
+	UpstreamReplacement *corev1.Container
+
 	MountedSecrets          map[string]*corev1.Secret      // mounts to /var/run/secrets/<key>
 	MountedConfigMaps       map[string]*corev1.ConfigMap   // mounts to /var/run/configMaps/<key>
 	SAClusterRoleBindings   map[string]*rbacv1.ClusterRole // maps local SA name to ClusterRole
@@ -75,6 +77,11 @@ func (c *KRPTestConfig) UpdateUserClusterRoleBindings(bindings map[string]*rbacv
 
 func (c *KRPTestConfig) WithoutMetricsEndpointAllowClusterRole() *KRPTestConfig {
 	delete(c.SAClusterRoleBindings, "default")
+	return c
+}
+
+func (c *KRPTestConfig) WithConfigMap(mountDir string, cm *corev1.ConfigMap) *KRPTestConfig {
+	c.MountedConfigMaps[mountDir] = cm
 	return c
 }
 
@@ -122,6 +129,22 @@ func (c *KRPTestConfig) WithClientCerts(commonNameBase string) *KRPTestConfig {
 	return c
 }
 
+func (c *KRPTestConfig) WithServerCerts(hostBase string) *KRPTestConfig {
+	trustCM, secret, err := createCerts(hostBase, createSignedServerCert)
+	if err != nil {
+		c.setupErrors = append(c.setupErrors, fmt.Errorf("failed to create server certs: %w", err))
+		return c
+	}
+	c.MountedConfigMaps[hostBase+"-trust"] = trustCM
+	c.MountedSecrets[hostBase] = secret
+	return c
+}
+
+func (c *KRPTestConfig) ReplaceUpstream(upstream *corev1.Container) *KRPTestConfig {
+	c.UpstreamReplacement = upstream
+	return c
+}
+
 func (c *KRPTestConfig) Launch(client kubernetes.Interface) Action {
 	if len(c.setupErrors) > 0 {
 		return func(ctx *ScenarioContext) error {
@@ -140,6 +163,14 @@ func (c *KRPTestConfig) Launch(client kubernetes.Interface) Action {
 				finalDeployment.Spec.Template.Spec.Containers[0].Args,
 				fmt.Sprintf("--%s=%s", flag, value),
 			)
+		}
+
+		if len(c.UpstreamFlags) > 0 && c.UpstreamReplacement != nil {
+			return fmt.Errorf("cannot use both UpstreamFlags and UpstreamReplacement at the same time")
+		}
+
+		if c.UpstreamReplacement != nil {
+			finalDeployment.Spec.Template.Spec.Containers[1] = *c.UpstreamReplacement
 		}
 
 		for flag, value := range c.UpstreamFlags {

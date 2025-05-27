@@ -18,8 +18,26 @@ package e2e
 import (
 	"testing"
 
-	"github.com/brancz/kube-rbac-proxy/test/kubetest"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/brancz/kube-rbac-proxy/test/kubetest"
+)
+
+const (
+	nginxNoTLSEchoHeaderConfig = `
+server {
+    listen 8081;
+    server_name upstream_nginx;
+
+    location /metrics {
+        add_header Content-Type text/plain;
+        add_header x-remote-user $http_x_remote_user;
+        return 200 'metrics endpoint reached\n';
+    }
+}
+`
 )
 
 func testIdentityHeaders(client kubernetes.Interface) kubetest.TestSuite {
@@ -34,17 +52,31 @@ func testIdentityHeaders(client kubernetes.Interface) kubetest.TestSuite {
 			`,
 
 			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"identityheaders/default/clusterRole-client.yaml",
-					"identityheaders/default/clusterRole.yaml",
-					"identityheaders/default/clusterRoleBinding-client.yaml",
-					"identityheaders/default/clusterRoleBinding.yaml",
-					"identityheaders/default/configmap-nginx.yaml",
-					"identityheaders/default/deployment.yaml",
-					"identityheaders/default/service.yaml",
-					"identityheaders/default/serviceAccount.yaml",
-				),
+				kubetest.NewBasicKubeRBACProxyTestConfig().
+					UpdateFlags(map[string]string{
+						"auth-header-user-field-name":        "x-remote-user",
+						"auth-header-groups-field-name":      "x-remote-groups",
+						"auth-header-groups-field-separator": "|",
+					}).
+					WithConfigMap("nginx-config", &corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{Name: "nginx-config"},
+						Data: map[string]string{
+							"server.conf": nginxNoTLSEchoHeaderConfig,
+						},
+					}).
+					ReplaceUpstream(&corev1.Container{
+						Name:  "nginx",
+						Image: "nginx:latest",
+						Ports: []corev1.ContainerPort{{
+							ContainerPort: 8081, // the proxy flag expects this port
+						}},
+						VolumeMounts: []corev1.VolumeMount{{
+							Name:      "nginx-config",
+							MountPath: "/etc/nginx/conf.d/server.conf",
+							SubPath:   "server.conf",
+						}},
+					}).
+					Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
@@ -77,16 +109,16 @@ func testIdentityHeaders(client kubernetes.Interface) kubetest.TestSuite {
 			Given: kubetest.Actions(
 				kubetest.CreatedManifests(
 					client,
-					"identityheaders/insecure/clusterRole-client.yaml",
-					"identityheaders/insecure/clusterRole.yaml",
-					"identityheaders/insecure/clusterRoleBinding-client.yaml",
-					"identityheaders/insecure/clusterRoleBinding.yaml",
 					"identityheaders/insecure/deployment-upstream.yaml",
 					"identityheaders/insecure/service-upstream.yaml",
-					"identityheaders/insecure/deployment-proxy.yaml",
-					"identityheaders/insecure/service-proxy.yaml",
-					"identityheaders/insecure/serviceAccount.yaml",
 				),
+				kubetest.NewBasicKubeRBACProxyTestConfig().
+					UpdateFlags(map[string]string{
+						"upstream":                           "http://nginx.default.svc.cluster.local:80/",
+						"auth-header-user-field-name":        "x-remote-user",
+						"auth-header-groups-field-name":      "x-remote-groups",
+						"auth-header-groups-field-separator": "|",
+					}).Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
@@ -114,21 +146,27 @@ func testIdentityHeaders(client kubernetes.Interface) kubetest.TestSuite {
 					through a mTLS connection, when providing identity headers.
 				`,
 			Given: kubetest.Actions(
-				kubetest.CreateServerCerts(client, "nginx"),
-				kubetest.CreateClientCerts(client, "kube-rbac-proxy-client"),
-				kubetest.CreateServerCerts(client, "kube-rbac-proxy"),
+				kubetest.NewBasicKubeRBACProxyTestConfig().
+					UpdateFlags(map[string]string{
+						"upstream":                           "https://nginx.default.svc.cluster.local:8443/",
+						"auth-header-user-field-name":        "x-remote-user",
+						"auth-header-groups-field-name":      "x-remote-groups",
+						"auth-header-groups-field-separator": "|",
+						"tls-cert-file":                      "/var/run/secrets/kube-rbac-proxy/tls.crt",
+						"tls-private-key-file":               "/var/run/secrets/kube-rbac-proxy/tls.key",
+						"upstream-ca-file":                   "/var/run/configMaps/nginx-trust/ca.crt",
+						"upstream-client-cert-file":          "/var/run/secrets/kube-rbac-proxy-client/tls.crt",
+						"upstream-client-key-file":           "/var/run/secrets/kube-rbac-proxy-client/tls.key",
+					}).
+					WithServerCerts("nginx").
+					WithServerCerts("kube-rbac-proxy").
+					WithClientCerts("kube-rbac-proxy-client").
+					Launch(client),
 				kubetest.CreatedManifests(
 					client,
-					"identityheaders/secure/clusterRole-client.yaml",
-					"identityheaders/secure/clusterRole.yaml",
-					"identityheaders/secure/clusterRoleBinding-client.yaml",
-					"identityheaders/secure/clusterRoleBinding.yaml",
 					"identityheaders/secure/configmap-nginx.yaml",
 					"identityheaders/secure/deployment-upstream.yaml",
 					"identityheaders/secure/service-upstream.yaml",
-					"identityheaders/secure/deployment-proxy.yaml",
-					"identityheaders/secure/service-proxy.yaml",
-					"identityheaders/secure/serviceAccount.yaml",
 				),
 			),
 			When: kubetest.Actions(
