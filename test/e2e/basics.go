@@ -20,9 +20,11 @@ import (
 	"fmt"
 	"testing"
 
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/brancz/kube-rbac-proxy/test/kubetest"
+	"github.com/brancz/kube-rbac-proxy/test/kubetest/testtemplates"
 )
 
 func testBasics(client kubernetes.Interface) kubetest.TestSuite {
@@ -249,6 +251,13 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `curl --connect-timeout 5 -v -s -k --fail --cert /certs/tls.crt --key /certs/tls.key https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
 
+		clientCertSetup := func() *kubetest.KRPTestConfig {
+			return kubetest.NewBasicKubeRBACProxyTestConfig().
+				AddUserClusterRoleBinding("test-client", testtemplates.GetMetricsRoleForClient()).
+				WithClientCerts("test-client").
+				UpdateFlags(map[string]string{"client-ca-file": "/var/run/configMaps/test-client-trust/ca.crt"})
+		}
+
 		kubetest.Scenario{
 			Name: "NoRBAC",
 			Description: `
@@ -257,15 +266,9 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 			`,
 
 			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"clientcertificates/certificate.yaml",
-					"clientcertificates/clusterRole.yaml",
-					"clientcertificates/clusterRoleBinding.yaml",
-					"clientcertificates/deployment.yaml",
-					"clientcertificates/service.yaml",
-					"clientcertificates/serviceAccount.yaml",
-				),
+				clientCertSetup().
+					UpdateUserClusterRoleBindings(map[string]*rbacv1.ClusterRole{"test-client": nil}).
+					Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
@@ -282,7 +285,7 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 				kubetest.ClientFails(
 					client,
 					command,
-					&kubetest.RunOptions{ClientCertificates: true},
+					&kubetest.RunOptions{ClientCertificatesSecretName: "test-client-certs"},
 				),
 			),
 		}.Run(t)
@@ -295,17 +298,8 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 			`,
 
 			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"clientcertificates/certificate.yaml",
-					"clientcertificates/clusterRole.yaml",
-					"clientcertificates/clusterRoleBinding.yaml",
-					"clientcertificates/deployment.yaml",
-					"clientcertificates/service.yaml",
-					"clientcertificates/serviceAccount.yaml",
-					"clientcertificates/clusterRole-client.yaml",
-					"clientcertificates/clusterRoleBinding-client.yaml",
-				),
+				clientCertSetup().
+					Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
@@ -322,7 +316,7 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 				kubetest.ClientSucceeds(
 					client,
 					command,
-					&kubetest.RunOptions{ClientCertificates: true},
+					&kubetest.RunOptions{ClientCertificatesSecretName: "test-client-certs"},
 				),
 			),
 		}.Run(t)
@@ -335,17 +329,9 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 			`,
 
 			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"clientcertificates/certificate.yaml",
-					"clientcertificates/clusterRole.yaml",
-					"clientcertificates/clusterRoleBinding.yaml",
-					"clientcertificates/deployment-wrongca.yaml",
-					"clientcertificates/service.yaml",
-					"clientcertificates/serviceAccount.yaml",
-					"clientcertificates/clusterRole-client.yaml",
-					"clientcertificates/clusterRoleBinding-client.yaml",
-				),
+				clientCertSetup().
+					UpdateFlags(map[string]string{"client-ca-file": "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"}).
+					Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
@@ -362,7 +348,7 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 				kubetest.ClientFails(
 					client,
 					command,
-					&kubetest.RunOptions{ClientCertificates: true},
+					&kubetest.RunOptions{ClientCertificatesSecretName: "test-client-certs"},
 				),
 			),
 		}.Run(t)
