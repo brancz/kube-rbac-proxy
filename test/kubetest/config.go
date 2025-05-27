@@ -80,6 +80,19 @@ func (c *KRPTestConfig) UpdateFlags(flags map[string]string) *KRPTestConfig {
 	return c
 }
 
+func (c *KRPTestConfig) WithAuthorizationConfigYAML(configYAML string) *KRPTestConfig {
+	c.MountedConfigMaps["authorization-config"] = &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "authorization-config",
+		},
+		Data: map[string]string{
+			"authorization.yaml": configYAML,
+		},
+	}
+	c.Flags["config-file"] = "/var/run/configMaps/authorization-config/authorization.yaml"
+	return c
+}
+
 func (c *KRPTestConfig) AddSAClusterRoleBinding(saName string, clusterRole *rbacv1.ClusterRole) *KRPTestConfig {
 	c.SAClusterRoleBindings[saName] = clusterRole
 	return c
