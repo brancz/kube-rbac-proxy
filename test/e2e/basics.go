@@ -37,14 +37,9 @@ func testBasics(client kubernetes.Interface) kubetest.TestSuite {
 			`,
 
 			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"basics/clusterRole.yaml",
-					"basics/clusterRoleBinding.yaml",
-					"basics/deployment.yaml",
-					"basics/service.yaml",
-					"basics/serviceAccount.yaml",
-				),
+				kubetest.NewBasicKubeRBACProxyTestConfig().
+					WithoutMetricsEndpointAllowClusterRole().
+					Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
@@ -74,17 +69,8 @@ func testBasics(client kubernetes.Interface) kubetest.TestSuite {
 			`,
 
 			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"basics/clusterRole.yaml",
-					"basics/clusterRoleBinding.yaml",
-					"basics/deployment.yaml",
-					"basics/service.yaml",
-					"basics/serviceAccount.yaml",
-					// This adds the clients cluster role to succeed
-					"basics/clusterRole-client.yaml",
-					"basics/clusterRoleBinding-client.yaml",
-				),
+				kubetest.NewBasicKubeRBACProxyTestConfig().
+					Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
