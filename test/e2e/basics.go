@@ -348,6 +348,9 @@ func testIgnorePaths(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		commandWithoutAuth := `STATUS_CODE=$(curl --connect-timeout 5 -o /dev/null -v -s -k --write-out "%%{http_code}" https://kube-rbac-proxy.default.svc.cluster.local:8443%s); if [[ "$STATUS_CODE" != %d ]]; then echo "expecting %d status code, got $STATUS_CODE instead" > /proc/self/fd/2; exit 1; fi`
 
+		ignorePathsSetup := kubetest.NewBasicKubeRBACProxyTestConfig().
+			UpdateFlags(map[string]string{"ignore-paths": "/metrics,/api/v1/*"})
+
 		kubetest.Scenario{
 			Name: "WithIgnorePathMatch",
 			Description: `
@@ -355,18 +358,7 @@ func testIgnorePaths(client kubernetes.Interface) kubetest.TestSuite {
 				I get a 200 response when requesting a path included in ignorePaths
 			`,
 
-			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"ignorepaths/clusterRole.yaml",
-					"ignorepaths/clusterRoleBinding.yaml",
-					"ignorepaths/deployment.yaml",
-					"ignorepaths/service.yaml",
-					"ignorepaths/serviceAccount.yaml",
-					"ignorepaths/clusterRole-client.yaml",
-					"ignorepaths/clusterRoleBinding-client.yaml",
-				),
-			),
+			Given: kubetest.Actions(ignorePathsSetup.Launch(client)),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
 					client,
@@ -410,18 +402,7 @@ func testIgnorePaths(client kubernetes.Interface) kubetest.TestSuite {
 				because I end up being system:anonymous to the proxy
 			`,
 
-			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"ignorepaths/clusterRole.yaml",
-					"ignorepaths/clusterRoleBinding.yaml",
-					"ignorepaths/deployment.yaml",
-					"ignorepaths/service.yaml",
-					"ignorepaths/serviceAccount.yaml",
-					"ignorepaths/clusterRole-client.yaml",
-					"ignorepaths/clusterRoleBinding-client.yaml",
-				),
-			),
+			Given: kubetest.Actions(ignorePathsSetup.Launch(client)),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
 					client,
