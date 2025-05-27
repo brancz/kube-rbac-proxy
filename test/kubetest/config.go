@@ -35,6 +35,7 @@ import (
 
 type KRPTestConfig struct {
 	Flags                   map[string]string
+	UpstreamFlags           map[string]string
 	MountedSecrets          map[string]*corev1.Secret      // mounts to /var/run/secrets/<key>
 	MountedConfigMaps       map[string]*corev1.ConfigMap   // mounts to /var/run/configMaps/<key>
 	SAClusterRoleBindings   map[string]*rbacv1.ClusterRole // maps local SA name to ClusterRole
@@ -50,6 +51,7 @@ func NewBasicKubeRBACProxyTestConfig() *KRPTestConfig {
 			"upstream":              "http://127.0.0.1:8081/",
 			"v":                     "10",
 		},
+		UpstreamFlags: map[string]string{},
 		SAClusterRoleBindings: map[string]*rbacv1.ClusterRole{
 			"kube-rbac-proxy": testtemplates.GetKRPAuthDelegatorRole(),
 			"default":         testtemplates.GetMetricsRoleForClient(),
@@ -77,6 +79,11 @@ func (c *KRPTestConfig) WithoutMetricsEndpointAllowClusterRole() *KRPTestConfig 
 
 func (c *KRPTestConfig) UpdateFlags(flags map[string]string) *KRPTestConfig {
 	maps.Copy(c.Flags, flags)
+	return c
+}
+
+func (c *KRPTestConfig) UpdateUpstreamFlags(flags map[string]string) *KRPTestConfig {
+	maps.Copy(c.UpstreamFlags, flags)
 	return c
 }
 
@@ -130,6 +137,16 @@ func (c *KRPTestConfig) Launch(client kubernetes.Interface) Action {
 			}
 			finalDeployment.Spec.Template.Spec.Containers[0].Args = append(
 				finalDeployment.Spec.Template.Spec.Containers[0].Args,
+				fmt.Sprintf("--%s=%s", flag, value),
+			)
+		}
+
+		for flag, value := range c.UpstreamFlags {
+			if len(value) == 0 {
+				continue
+			}
+			finalDeployment.Spec.Template.Spec.Containers[1].Args = append(
+				finalDeployment.Spec.Template.Spec.Containers[1].Args,
 				fmt.Sprintf("--%s=%s", flag, value),
 			)
 		}
