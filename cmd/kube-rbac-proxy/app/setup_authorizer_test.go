@@ -22,13 +22,14 @@ import (
 	"net/http"
 	"testing"
 
+	"k8s.io/apiserver/pkg/authentication/user"
+	"k8s.io/apiserver/pkg/authorization/authorizer"
+	serverconfig "k8s.io/apiserver/pkg/server"
+
 	"github.com/brancz/kube-rbac-proxy/pkg/authorization"
 	"github.com/brancz/kube-rbac-proxy/pkg/authorization/rewrite"
 	"github.com/brancz/kube-rbac-proxy/pkg/authorization/static"
 	"github.com/brancz/kube-rbac-proxy/pkg/server"
-	"k8s.io/apiserver/pkg/authentication/user"
-	"k8s.io/apiserver/pkg/authorization/authorizer"
-	serverconfig "k8s.io/apiserver/pkg/server"
 )
 
 type mockAuthorizer func(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error)
@@ -37,104 +38,60 @@ func (m mockAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) 
 	return m(ctx, a)
 }
 
-func TestSetupAuthorizer_AllowPathsWithRewriteAndStaticAuth(t *testing.T) {
-	mockDelegated := mockAuthorizer(
+func newMockDelegatedAuthorizer() authorizer.Authorizer {
+	return mockAuthorizer(
 		func(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
 			if a.GetUser().GetName() == "system:serviceaccount:default:client-with-rbac" {
 				return authorizer.DecisionAllow, "delegated allow", nil
 			}
+			if a.GetUser().GetName() == "system:serviceaccount:default:client-with-errbac" {
+				return authorizer.DecisionDeny, "delegated deny", fmt.Errorf("delegated error")
+			}
 			return authorizer.DecisionNoOpinion, "i don't care", nil
 		},
 	)
+}
 
-	mockErr := mockAuthorizer(
-		func(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
-			return authorizer.DecisionDeny, "delegated deny", fmt.Errorf("delegated error")
-		},
-	)
-
-	krbInfo := &server.KubeRBACProxyInfo{
-		AllowPaths: []string{"/metrics"},
-		Authorization: &authorization.AuthzConfig{
-			RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{
-				Rewrites: &rewrite.SubjectAccessReviewRewrites{
-					ByHTTPHeader: &rewrite.HTTPHeaderRewriteConfig{
-						Name: "x-namespace",
+func TestSetupAuthorizer_AllowPathsWithRewriteAndStaticAuth(t *testing.T) {
+	defaultKubeRBACProxyInfo := func() *server.KubeRBACProxyInfo {
+		return &server.KubeRBACProxyInfo{
+			AllowPaths: []string{"/metrics"},
+			Authorization: &authorization.AuthzConfig{
+				RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{
+					Rewrites: &rewrite.SubjectAccessReviewRewrites{
+						ByHTTPHeader: &rewrite.HTTPHeaderRewriteConfig{
+							Name: "x-namespace",
+						},
+					},
+					ResourceAttributes: &rewrite.ResourceAttributes{
+						Resource:  "namespaces",
+						Namespace: "{{ .Value }}",
 					},
 				},
-				ResourceAttributes: &rewrite.ResourceAttributes{
-					Resource:  "namespaces",
-					Namespace: "{{ .Value }}",
-				},
-			},
-			Static: []static.StaticAuthorizationConfig{
-				{
-					User: static.UserConfig{
-						Name: "system:serviceaccount:default:client-with-static",
+				Static: []static.StaticAuthorizationConfig{
+					{
+						User: static.UserConfig{
+							Name: "system:serviceaccount:default:client-with-static",
+						},
+						ResourceRequest: true,
+						Resource:        "namespaces",
+						Namespace:       "kube-system",
+						Verb:            "get",
 					},
-					ResourceRequest: true,
-					Resource:        "namespaces",
-					Namespace:       "kube-system",
-					Verb:            "get",
 				},
 			},
-		},
+		}
 	}
+	mockDelegated := newMockDelegatedAuthorizer()
 
-	errStatic := &server.KubeRBACProxyInfo{
-		AllowPaths: []string{"/metrics"},
-		Authorization: &authorization.AuthzConfig{
-			RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{
-				Rewrites: &rewrite.SubjectAccessReviewRewrites{
-					ByHTTPHeader: &rewrite.HTTPHeaderRewriteConfig{
-						Name: "x-namespace",
-					},
-				},
-				ResourceAttributes: &rewrite.ResourceAttributes{
-					Resource:  "namespaces",
-					Namespace: "{{ .Value }}",
-				},
-			},
-			Static: []static.StaticAuthorizationConfig{
-				{
-					User: static.UserConfig{
-						Name: "system:serviceaccount:default:client-with-static",
-					},
-					ResourceRequest: false,
-					Resource:        "namespaces",
-					Namespace:       "kube-system",
-					Verb:            "get",
-				},
-			},
-		},
-	}
+	krbInfo := defaultKubeRBACProxyInfo()
 
-	errPath := &server.KubeRBACProxyInfo{
-		AllowPaths: []string{"/foo/*/metrics"},
-		Authorization: &authorization.AuthzConfig{
-			RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{
-				Rewrites: &rewrite.SubjectAccessReviewRewrites{
-					ByHTTPHeader: &rewrite.HTTPHeaderRewriteConfig{
-						Name: "x-namespace",
-					},
-				},
-				ResourceAttributes: &rewrite.ResourceAttributes{
-					Resource:  "namespaces",
-					Namespace: "{{ .Value }}",
-				},
-			},
-			Static: []static.StaticAuthorizationConfig{
-				{
-					User: static.UserConfig{
-						Name: "system:serviceaccount:default:client-with-static",
-					},
-					Resource:  "namespaces",
-					Namespace: "kube-system",
-					Verb:      "get",
-				},
-			},
-		},
-	}
+	errStatic := defaultKubeRBACProxyInfo()
+	errStatic.Authorization.Static[0].ResourceRequest = false
+
+	errPath := defaultKubeRBACProxyInfo()
+	errPath.AllowPaths = []string{"/foo/*/metrics"}
+	errPath.Authorization.Static[0].ResourceRequest = false
 
 	for _, tt := range []struct {
 		name             string
@@ -142,7 +99,6 @@ func TestSetupAuthorizer_AllowPathsWithRewriteAndStaticAuth(t *testing.T) {
 		verb             string
 		path             string
 		headerValue      string
-		mockAuthz        authorizer.Authorizer
 		krbInfo          *server.KubeRBACProxyInfo
 		expectDecision   authorizer.Decision
 		expectAuthzError bool
@@ -181,11 +137,10 @@ func TestSetupAuthorizer_AllowPathsWithRewriteAndStaticAuth(t *testing.T) {
 		},
 		{
 			name:             "everything looks fine, except that we receive an error from the delegated authz",
-			user:             "system:serviceaccount:default:client-with-rbac",
+			user:             "system:serviceaccount:default:client-with-errbac",
 			verb:             "get",
 			path:             "/metrics",
 			headerValue:      "default",
-			mockAuthz:        mockErr,
 			expectDecision:   authorizer.DecisionDeny,
 			expectAuthzError: true,
 		},
@@ -213,12 +168,9 @@ func TestSetupAuthorizer_AllowPathsWithRewriteAndStaticAuth(t *testing.T) {
 			if tt.krbInfo == nil {
 				tt.krbInfo = krbInfo
 			}
-			if tt.mockAuthz == nil {
-				tt.mockAuthz = mockDelegated
-			}
 
 			authz, err := setupAuthorizer(tt.krbInfo, &serverconfig.AuthorizationInfo{
-				Authorizer: tt.mockAuthz,
+				Authorizer: mockDelegated,
 			})
 			if err != nil && !tt.expectSetupError {
 				t.Fatalf("setupAuthorizer failed: %v", err)
@@ -263,77 +215,51 @@ func TestSetupAuthorizer_AllowPathsWithRewriteAndStaticAuth(t *testing.T) {
 }
 
 func TestSetupAuthorizer_IgnorePathsWithResourceAttributes(t *testing.T) {
-	mockDelegated := mockAuthorizer(
-		func(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
-			if a.GetUser().GetName() == "system:serviceaccount:default:client-with-rbac" {
-				return authorizer.DecisionAllow, "delegated allow", nil
-			}
-			return authorizer.DecisionNoOpinion, "i don't care", nil
-		},
-	)
-
-	mockErr := mockAuthorizer(
-		func(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
-			return authorizer.DecisionDeny, "delegated deny", fmt.Errorf("delegated error")
-		},
-	)
-
-	krbInfo := &server.KubeRBACProxyInfo{
-		IgnorePaths: []string{"/healthz"},
-		Authorization: &authorization.AuthzConfig{
-			RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{
-				ResourceAttributes: &rewrite.ResourceAttributes{
-					Resource:  "namespaces",
-					Namespace: "kube-system",
-				},
-			},
-			Static: []static.StaticAuthorizationConfig{
-				{
-					User: static.UserConfig{
-						Name: "system:serviceaccount:default:client-with-static",
+	defaultKubeRBACProxyInfo := func() *server.KubeRBACProxyInfo {
+		return &server.KubeRBACProxyInfo{
+			IgnorePaths: []string{"/healthz"},
+			Authorization: &authorization.AuthzConfig{
+				RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{
+					ResourceAttributes: &rewrite.ResourceAttributes{
+						Resource:  "namespaces",
+						Namespace: "kube-system",
 					},
-					ResourceRequest: true,
-					Resource:        "namespaces",
-					Namespace:       "kube-system",
-					Verb:            "get",
+				},
+				Static: []static.StaticAuthorizationConfig{
+					{
+						User: static.UserConfig{
+							Name: "system:serviceaccount:default:client-with-static",
+						},
+						ResourceRequest: true,
+						Resource:        "namespaces",
+						Namespace:       "kube-system",
+						Verb:            "get",
+					},
 				},
 			},
-		},
+		}
 	}
 
-	errPath := &server.KubeRBACProxyInfo{
-		AllowPaths: []string{"/foo/*/metrics"},
-		Authorization: &authorization.AuthzConfig{
-			RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{
-				Rewrites: &rewrite.SubjectAccessReviewRewrites{
-					ByHTTPHeader: &rewrite.HTTPHeaderRewriteConfig{
-						Name: "x-namespace",
-					},
-				},
-				ResourceAttributes: &rewrite.ResourceAttributes{
-					Resource:  "namespaces",
-					Namespace: "{{ .Value }}",
-				},
-			},
-			Static: []static.StaticAuthorizationConfig{
-				{
-					User: static.UserConfig{
-						Name: "system:serviceaccount:default:client-with-static",
-					},
-					Resource:  "namespaces",
-					Namespace: "kube-system",
-					Verb:      "get",
-				},
-			},
+	mockDelegated := newMockDelegatedAuthorizer()
+
+	krbInfo := defaultKubeRBACProxyInfo()
+
+	errPath := defaultKubeRBACProxyInfo()
+	errPath.AllowPaths = []string{"/foo/*/metrics"}
+	errPath.IgnorePaths = nil
+	errPath.Authorization.RewriteAttributesConfig.Rewrites = &rewrite.SubjectAccessReviewRewrites{
+		ByHTTPHeader: &rewrite.HTTPHeaderRewriteConfig{
+			Name: "x-namespace",
 		},
 	}
+	errPath.Authorization.RewriteAttributesConfig.ResourceAttributes.Namespace = "{{ .Value }}"
+	errPath.Authorization.Static[0].ResourceRequest = false
 
 	for _, tt := range []struct {
 		name             string
 		user             string
 		verb             string
 		path             string
-		mockAuthz        authorizer.Authorizer
 		krbInfo          *server.KubeRBACProxyInfo
 		expectDecision   authorizer.Decision
 		expectAuthzError bool
@@ -369,10 +295,9 @@ func TestSetupAuthorizer_IgnorePathsWithResourceAttributes(t *testing.T) {
 		},
 		{
 			name:             "everything looks fine, except that we receive an error from the delegated authz",
-			user:             "system:serviceaccount:default:client-with-rbac",
+			user:             "system:serviceaccount:default:client-with-errbac",
 			verb:             "get",
 			path:             "/metrics",
-			mockAuthz:        mockErr,
 			expectDecision:   authorizer.DecisionDeny,
 			expectAuthzError: true,
 		},
@@ -392,11 +317,8 @@ func TestSetupAuthorizer_IgnorePathsWithResourceAttributes(t *testing.T) {
 			if tt.krbInfo == nil {
 				tt.krbInfo = krbInfo
 			}
-			if tt.mockAuthz == nil {
-				tt.mockAuthz = mockDelegated
-			}
 			authz, err := setupAuthorizer(tt.krbInfo, &serverconfig.AuthorizationInfo{
-				Authorizer: tt.mockAuthz,
+				Authorizer: mockDelegated,
 			})
 			if err != nil && !tt.expectSetupError {
 				t.Fatalf("setupAuthorizer failed: %v", err)
