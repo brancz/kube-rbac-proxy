@@ -38,7 +38,7 @@ import (
 )
 
 func TestInitTransportWithDefault(t *testing.T) {
-	roundTripper, err := initTransport(nil, "", "")
+	roundTripper, err := initTransport(nil, "", "", false)
 	if err != nil {
 		t.Errorf("want err to be nil, but got %v", err)
 		return
@@ -57,13 +57,24 @@ func TestInitTransportWithCustomCA(t *testing.T) {
 	upstreamCAPool := x509.NewCertPool()
 	upstreamCAPool.AppendCertsFromPEM(upstreamCAPEM)
 
-	roundTripper, err := initTransport(upstreamCAPool, "", "")
+	roundTripper, err := initTransport(upstreamCAPool, "", "", false)
 	if err != nil {
 		t.Fatalf("want err to be nil, but got %v", err)
 	}
 	transport := roundTripper.(*http.Transport)
 	if transport.TLSClientConfig.RootCAs == nil {
 		t.Error("expected root CA to be set, got nil")
+	}
+}
+
+func TestInitTransportWithInsecureSkipVerify(t *testing.T) {
+	roundTripper, err := initTransport(nil, "", "", true)
+	if err != nil {
+		t.Fatalf("want err to be nil, but got %v", err)
+	}
+	transport := roundTripper.(*http.Transport)
+	if transport.TLSClientConfig.InsecureSkipVerify == false {
+		t.Error("expected InsecureSkipVerify to be true, got false")
 	}
 }
 
@@ -131,7 +142,7 @@ func TestInitTransportWithClientCertAuth(t *testing.T) {
 
 	serverCA := x509.NewCertPool()
 	serverCA.AppendCertsFromPEM(cert)
-	roundTripper, err := initTransport(serverCA, clientCertPath, clientKeyPath)
+	roundTripper, err := initTransport(serverCA, clientCertPath, clientKeyPath, false)
 	if err != nil {
 		t.Errorf("want err to be nil, but got %v", err)
 		return

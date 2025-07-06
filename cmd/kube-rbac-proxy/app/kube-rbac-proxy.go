@@ -130,9 +130,10 @@ type completedProxyRunOptions struct {
 	secureListenAddress   string
 	proxyEndpointsPort    int
 
-	upstreamURL      *url.URL
-	upstreamForceH2C bool
-	upstreamCABundle *x509.CertPool
+	upstreamURL                *url.URL
+	upstreamForceH2C           bool
+	upstreamCABundle           *x509.CertPool
+	upstreamInsecureSkipVerify bool
 
 	http2Disable bool
 	http2Options *http2.Server
@@ -149,10 +150,11 @@ type completedProxyRunOptions struct {
 func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
 	var err error
 	completed := &completedProxyRunOptions{
-		insecureListenAddress: o.InsecureListenAddress,
-		secureListenAddress:   o.SecureListenAddress,
-		proxyEndpointsPort:    o.ProxyEndpointsPort,
-		upstreamForceH2C:      o.UpstreamForceH2C,
+		insecureListenAddress:      o.InsecureListenAddress,
+		secureListenAddress:        o.SecureListenAddress,
+		proxyEndpointsPort:         o.ProxyEndpointsPort,
+		upstreamForceH2C:           o.UpstreamForceH2C,
+		upstreamInsecureSkipVerify: o.UpstreamInsecureSkipVerify,
 
 		allowPaths:  o.AllowPaths,
 		ignorePaths: o.IgnorePaths,
@@ -259,7 +261,7 @@ func Run(cfg *completedProxyRunOptions) error {
 		sarAuthorizer,
 	)
 
-	upstreamTransport, err := initTransport(cfg.upstreamCABundle, cfg.tls.UpstreamClientCertFile, cfg.tls.UpstreamClientKeyFile)
+	upstreamTransport, err := initTransport(cfg.upstreamCABundle, cfg.tls.UpstreamClientCertFile, cfg.tls.UpstreamClientKeyFile, cfg.upstreamInsecureSkipVerify)
 	if err != nil {
 		return fmt.Errorf("failed to set up upstream TLS connection: %w", err)
 	}

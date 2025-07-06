@@ -20,16 +20,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"net"
 	"net/http"
-	"time"
 )
 
-func initTransport(upstreamCAPool *x509.CertPool, upstreamClientCertPath, upstreamClientKeyPath string) (http.RoundTripper, error) {
-	if upstreamCAPool == nil {
-		return http.DefaultTransport, nil
-	}
-
+func initTransport(upstreamCAPool *x509.CertPool, upstreamClientCertPath, upstreamClientKeyPath string, upstreamInsecureSkipVerify bool) (http.RoundTripper, error) {
 	var certKeyPair tls.Certificate
 	if len(upstreamClientCertPath) > 0 {
 		var err error
@@ -39,22 +33,15 @@ func initTransport(upstreamCAPool *x509.CertPool, upstreamClientCertPath, upstre
 		}
 	}
 
-	// http.Transport sourced from go 1.10.7
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig: &tls.Config{
-			RootCAs: upstreamCAPool,
-		},
+	transport, ok := http.DefaultTransport.(*http.Transport)
+	if ok {
+		transport = transport.Clone()
+	} else {
+		return nil, fmt.Errorf("default transport is not of type *http.Transport")
 	}
+
+	transport.TLSClientConfig.RootCAs = upstreamCAPool
+	transport.TLSClientConfig.InsecureSkipVerify = upstreamInsecureSkipVerify
 
 	if certKeyPair.Certificate != nil {
 		transport.TLSClientConfig.Certificates = []tls.Certificate{certKeyPair}
