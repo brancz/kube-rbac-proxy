@@ -468,6 +468,128 @@ func TestSetupAuthorizer_IgnorePathsWithResourceAttributes(t *testing.T) {
 	}
 }
 
+func TestSetupAuthorizer_NonResourceAttributesGenerator(t *testing.T) {
+	defaultKubeRBACProxyInfo := func() *server.KubeRBACProxyInfo {
+		return &server.KubeRBACProxyInfo{
+			Authorization: &authorization.AuthzConfig{
+				RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{},
+			},
+		}
+	}
+
+	staticUser := defaultKubeRBACProxyInfo()
+	staticUser.Authorization.Static = []static.StaticAuthorizationConfig{
+		{
+			User: static.UserConfig{
+				Name: "system:serviceaccount:default:static-user",
+			},
+			Verb: "get",
+			Path: "/static-path",
+		},
+	}
+
+	mockDelegated := newMockDelegatedAuthorizer()
+
+	tests := []struct {
+		name             string
+		krbInfo          *server.KubeRBACProxyInfo
+		user             user.Info
+		verb             string
+		path             string
+		expectDecision   authorizer.Decision
+		expectReason     string
+		expectAuthzError bool
+	}{
+		{
+			name:           "non-resource path with allowed user",
+			krbInfo:        defaultKubeRBACProxyInfo(),
+			user:           &user.DefaultInfo{Name: "system:serviceaccount:default:client-with-rbac"},
+			verb:           "get",
+			path:           "/metrics",
+			expectDecision: authorizer.DecisionAllow,
+			expectReason:   "delegated allow",
+		},
+		{
+			name:             "non-resource path with denied user",
+			krbInfo:          defaultKubeRBACProxyInfo(),
+			user:             &user.DefaultInfo{Name: "system:serviceaccount:default:client-always-fails"},
+			verb:             "get",
+			path:             "/healthz",
+			expectDecision:   authorizer.DecisionDeny,
+			expectReason:     "delegated deny",
+			expectAuthzError: true,
+		},
+		{
+			name:           "non-resource path with no opinion user",
+			krbInfo:        defaultKubeRBACProxyInfo(),
+			user:           &user.DefaultInfo{Name: "system:serviceaccount:default:unknown-user"},
+			verb:           "post",
+			path:           "/api/v1/proxy",
+			expectDecision: authorizer.DecisionDeny,
+			expectReason:   "Forbidden (user=, verb=post, resource=, subresource=): someone else should decide",
+		},
+		{
+			name: "non-resource with static authorization configured",
+			krbInfo: &server.KubeRBACProxyInfo{
+				Authorization: &authorization.AuthzConfig{
+					RewriteAttributesConfig: &rewrite.RewriteAttributesConfig{
+						// No ResourceAttributes or Rewrites - should use NonResourceAttributesGenerator
+					},
+					Static: []static.StaticAuthorizationConfig{
+						{
+							User: static.UserConfig{
+								Name: "system:serviceaccount:default:static-user",
+							},
+							Verb: "get",
+							Path: "/static-path",
+						},
+					},
+				},
+			},
+			user:           &user.DefaultInfo{Name: "system:serviceaccount:default:static-user"},
+			verb:           "get",
+			path:           "/static-path",
+			expectDecision: authorizer.DecisionAllow,
+			expectReason:   "static authorizer decision",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			delegatedAuthz := &serverconfig.AuthorizationInfo{
+				Authorizer: mockDelegated,
+			}
+
+			authz, err := setupAuthorizer(tt.krbInfo, delegatedAuthz)
+			if err != nil {
+				t.Fatalf("setupAuthorizer() error = %v", err)
+			}
+
+			// Create attributes for non-resource request
+			attrs := authorizer.AttributesRecord{
+				User:            tt.user,
+				Verb:            tt.verb,
+				Path:            tt.path,
+				ResourceRequest: false,
+			}
+
+			decision, reason, err := authz.Authorize(ctx, attrs)
+
+			if err != nil && !tt.expectAuthzError {
+				t.Errorf("Authorization failed unexpectedly: %v", err)
+			}
+			if err == nil && tt.expectAuthzError {
+				t.Fatalf("Authorization should have failed, but didn't")
+			}
+			if decision != tt.expectDecision {
+				t.Errorf("Expected decision %v, got %v (reason: %s)", tt.expectDecision, decision, reason)
+			}
+		})
+	}
+}
+
 type mockAuthorizer func(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error)
 
 var _ authorizer.Authorizer = newMockDelegatedAuthorizer()
