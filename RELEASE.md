@@ -6,8 +6,9 @@ Release shepherds are chosen on a voluntary basis.
 ## Release schedule
 
 | release series | date of release (year-month-day) | release shepherd                        |
-|----------------|----------------------------------|-----------------------------------------|
+| -------------- | -------------------------------- | --------------------------------------- |
 | v0.20.0        | TBD                              | Krzysztof Ostrowski (GitHub: @ibihim)   |
+| v0.20.0        | 2025-09-18                       | Krzysztof Ostrowski (GitHub: @ibihim)   |
 | v0.19.1        | 2025-04-23                       | Krzysztof Ostrowski (GitHub: @ibihim)   |
 | v0.19.0        | 2025-02-14                       | Krzysztof Ostrowski (GitHub: @ibihim)   |
 | v0.18.2        | 2024-11-29                       | Anya Kramar (GitHub: @kramaranya)       |
@@ -104,21 +105,21 @@ asked to refer to the git history.
 
 Entries in the `CHANGELOG.md` are meant to be in this order:
 
-* `[CHANGE]`
-* `[FEATURE]`
-* `[ENHANCEMENT]`
-* `[BUGFIX]`
+- `[CHANGE]`
+- `[FEATURE]`
+- `[ENHANCEMENT]`
+- `[BUGFIX]`
 
-Submit a PR against the master branch titled "*: cut vx.y.z release ".
+Submit a PR against the master branch titled "\*: cut vx.y.z release ".
 
 ### 3. Draft the new release
 
 Tag the new release via the following commands:
 
 ```bash
-$ tag="v$(< VERSION)"
-$ git tag -s "${tag}" -m "${tag}"
-$ git push origin "${tag}"
+tag="v$(< VERSION)"
+git tag -s "${tag}" -m "${tag}"
+git push origin "${tag}"
 ```
 
 Optionally, you can use this handy `.gitconfig` alias.
