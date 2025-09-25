@@ -245,6 +245,14 @@ func TestSetupAuthorizer_AllowPathsWithRewriteAndStaticAuth(t *testing.T) {
 			expectDecision: authorizer.DecisionAllow,
 		},
 		{
+			name:           "allow-path with no static match and delegated deny should be denied",
+			user:           "system:serviceaccount:default:client-explicitly-denied",
+			verb:           "get",
+			path:           "/metrics",
+			headerValue:    "default",
+			expectDecision: authorizer.DecisionDeny,
+		},
+		{
 			name:           "allow-path with no static match and no delegated match should be denied",
 			user:           "other-user",
 			verb:           "get",
@@ -404,6 +412,13 @@ func TestSetupAuthorizer_IgnorePathsWithResourceAttributes(t *testing.T) {
 			expectDecision: authorizer.DecisionAllow,
 		},
 		{
+			name:           "non-ignore-path with no static match and delegated denies should be denied",
+			user:           "system:serviceaccount:default:client-explicitly-denied",
+			verb:           "get",
+			path:           "/metrics",
+			expectDecision: authorizer.DecisionDeny,
+		},
+		{
 			name:           "non-ignore-path with no static and no delegated match should be denied",
 			user:           "unknown-user",
 			verb:           "get",
@@ -516,7 +531,7 @@ func TestSetupAuthorizer_NonResourceAttributesGenerator(t *testing.T) {
 			verb:             "get",
 			path:             "/healthz",
 			expectDecision:   authorizer.DecisionDeny,
-			expectReason:     "delegated deny",
+			expectReason:     "delegated deny with error",
 			expectAuthzError: true,
 		},
 		{
@@ -551,6 +566,16 @@ func TestSetupAuthorizer_NonResourceAttributesGenerator(t *testing.T) {
 			path:           "/static-path",
 			expectDecision: authorizer.DecisionAllow,
 			expectReason:   "static authorizer decision",
+		},
+		{
+			name:             "non-resource path with denied user",
+			krbInfo:          defaultKubeRBACProxyInfo(),
+			user:             &user.DefaultInfo{Name: "system:serviceaccount:default:client-explicitly-denied"},
+			verb:             "get",
+			path:             "/metrics",
+			expectDecision:   authorizer.DecisionDeny,
+			expectReason:     "delegated deny without error",
+			expectAuthzError: false,
 		},
 	}
 
@@ -605,8 +630,12 @@ func newMockDelegatedAuthorizer() mockAuthorizer {
 				return authorizer.DecisionAllow, "delegated allow", nil
 			}
 			if a.GetUser().GetName() == "system:serviceaccount:default:client-always-fails" {
-				return authorizer.DecisionDeny, "delegated deny", fmt.Errorf("delegated error")
+				return authorizer.DecisionDeny, "delegated deny with error", fmt.Errorf("delegated error")
 			}
+			if a.GetUser().GetName() == "system:serviceaccount:default:client-explicitly-denied" {
+				return authorizer.DecisionDeny, "delegated deny without error", nil
+			}
+
 			return authorizer.DecisionNoOpinion, "someone else should decide", nil
 		},
 	)
