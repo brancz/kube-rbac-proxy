@@ -17,8 +17,9 @@ concurrency:
 
 jobs:
   check-license:
-    runs-on: ubuntu-latest
     name: Check license
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
     steps:
     - name: Checkout repository
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -27,8 +28,9 @@ jobs:
       run: make check-license
 
   generate:
-    runs-on: ubuntu-latest
     name: Generate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
     - name: Checkout repository
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -42,8 +44,9 @@ jobs:
       run: make generate && git diff --exit-code
 
   lint:
-    runs-on: ubuntu-latest
     name: Lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
     - name: Checkout repository
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -54,8 +57,9 @@ jobs:
         version: latest
 
   build:
-    runs-on: ubuntu-latest
     name: Build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
     - name: Checkout repository
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -69,8 +73,9 @@ jobs:
       run: make build
 
   unit-tests:
-    runs-on: ubuntu-latest
     name: Unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
     - name: Checkout repository
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -84,8 +89,9 @@ jobs:
       run: make test-unit
 
   e2e-tests:
-    runs-on: ubuntu-latest
     name: E2E tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
     - name: Checkout repository
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -117,8 +123,9 @@ jobs:
         make test-e2e
 
   publish:
-    runs-on: ubuntu-latest
     name: Publish container image to Quay
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     if: ${{ github.event.repository.fork == false && github.event_name == 'push' }}
     needs:
     - check-license
