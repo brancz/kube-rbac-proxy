@@ -12,7 +12,7 @@ defaults:
     shell: bash
 
 concurrency:
-  group: ${{ github.ref_name }}-go
+  group: ${{ github.ref_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
