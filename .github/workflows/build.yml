@@ -4,7 +4,8 @@ on: [push, pull_request]
 
 env:
   QUAY_PATH: quay.io/brancz/kube-rbac-proxy
-  kind-version: v0.30.0
+  kind-version: v0.27.0
+  go-version: 1.25
 
 defaults:
   run:
@@ -35,7 +36,7 @@ jobs:
     - name: Setup Golang Environment
       uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
       with:
-        go-version: stable
+        go-version: ${{ env.go-version }}
 
     - name: Generate
       run: make generate && git diff --exit-code
@@ -62,7 +63,7 @@ jobs:
     - name: Setup Golang Environment
       uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
       with:
-        go-version: stable
+        go-version: ${{ env.go-version }}
 
     - name: Build
       run: make build
@@ -77,7 +78,7 @@ jobs:
     - name: Setup Golang Environment
       uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
       with:
-        go-version: stable
+        go-version: ${{ env.go-version }}
 
     - name: Run unit tests
       run: make test-unit
@@ -92,7 +93,7 @@ jobs:
     - name: Setup Golang Environment
       uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
       with:
-        go-version: stable
+        go-version: ${{ env.go-version }}
 
     - name: Start kind & create cluster
       uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
@@ -132,7 +133,7 @@ jobs:
     - name: Setup Golang Environment
       uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
       with:
-        go-version: stable
+        go-version: ${{ env.go-version }}
 
     - name: Login to Quay.io
       uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
