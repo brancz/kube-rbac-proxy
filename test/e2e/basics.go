@@ -20,9 +20,11 @@ import (
 	"fmt"
 	"testing"
 
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/brancz/kube-rbac-proxy/test/kubetest"
+	"github.com/brancz/kube-rbac-proxy/test/kubetest/testtemplates"
 )
 
 func testBasics(client kubernetes.Interface) kubetest.TestSuite {
@@ -37,14 +39,9 @@ func testBasics(client kubernetes.Interface) kubetest.TestSuite {
 			`,
 
 			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"basics/clusterRole.yaml",
-					"basics/clusterRoleBinding.yaml",
-					"basics/deployment.yaml",
-					"basics/service.yaml",
-					"basics/serviceAccount.yaml",
-				),
+				kubetest.NewBasicKubeRBACProxyTestConfig().
+					WithoutMetricsEndpointAllowClusterRole().
+					Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
@@ -74,17 +71,8 @@ func testBasics(client kubernetes.Interface) kubetest.TestSuite {
 			`,
 
 			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"basics/clusterRole.yaml",
-					"basics/clusterRoleBinding.yaml",
-					"basics/deployment.yaml",
-					"basics/service.yaml",
-					"basics/serviceAccount.yaml",
-					// This adds the clients cluster role to succeed
-					"basics/clusterRole-client.yaml",
-					"basics/clusterRoleBinding-client.yaml",
-				),
+				kubetest.NewBasicKubeRBACProxyTestConfig().
+					Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
@@ -112,6 +100,9 @@ func testTokenAudience(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/tokens/requestedtoken)" https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
 
+		krpWithAudiencesConfig := kubetest.NewBasicKubeRBACProxyTestConfig().
+			UpdateFlags(map[string]string{"auth-token-audiences": "kube-rbac-proxy"})
+
 		kubetest.Scenario{
 			Name: "IncorrectAudience",
 			Description: `
@@ -119,18 +110,7 @@ func testTokenAudience(client kubernetes.Interface) kubetest.TestSuite {
 				I fail with my request
 			`,
 
-			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"tokenrequest/clusterRole.yaml",
-					"tokenrequest/clusterRoleBinding.yaml",
-					"tokenrequest/deployment.yaml",
-					"tokenrequest/service.yaml",
-					"tokenrequest/serviceAccount.yaml",
-					"tokenrequest/clusterRole-client.yaml",
-					"tokenrequest/clusterRoleBinding-client.yaml",
-				),
-			),
+			Given: kubetest.Actions(krpWithAudiencesConfig.Launch(client)),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
 					client,
@@ -158,18 +138,7 @@ func testTokenAudience(client kubernetes.Interface) kubetest.TestSuite {
 				I succeed with my request
 			`,
 
-			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"tokenrequest/clusterRole.yaml",
-					"tokenrequest/clusterRoleBinding.yaml",
-					"tokenrequest/deployment.yaml",
-					"tokenrequest/service.yaml",
-					"tokenrequest/serviceAccount.yaml",
-					"tokenrequest/clusterRole-client.yaml",
-					"tokenrequest/clusterRoleBinding-client.yaml",
-				),
-			),
+			Given: kubetest.Actions(krpWithAudiencesConfig.Launch(client)),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
 					client,
@@ -196,6 +165,13 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `curl --connect-timeout 5 -v -s -k --fail --cert /certs/tls.crt --key /certs/tls.key https://kube-rbac-proxy.default.svc.cluster.local:8443/metrics`
 
+		clientCertSetup := func() *kubetest.KRPTestConfig {
+			return kubetest.NewBasicKubeRBACProxyTestConfig().
+				AddUserClusterRoleBinding("test-client", testtemplates.GetMetricsRoleForClient()).
+				WithClientCerts("test-client").
+				UpdateFlags(map[string]string{"client-ca-file": "/var/run/configMaps/test-client-trust/ca.crt"})
+		}
+
 		kubetest.Scenario{
 			Name: "NoRBAC",
 			Description: `
@@ -204,15 +180,9 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 			`,
 
 			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"clientcertificates/certificate.yaml",
-					"clientcertificates/clusterRole.yaml",
-					"clientcertificates/clusterRoleBinding.yaml",
-					"clientcertificates/deployment.yaml",
-					"clientcertificates/service.yaml",
-					"clientcertificates/serviceAccount.yaml",
-				),
+				clientCertSetup().
+					UpdateUserClusterRoleBindings(map[string]*rbacv1.ClusterRole{"test-client": nil}).
+					Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
@@ -229,7 +199,7 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 				kubetest.ClientFails(
 					client,
 					command,
-					&kubetest.RunOptions{ClientCertificates: true},
+					&kubetest.RunOptions{ClientCertificatesSecretName: "test-client-certs"},
 				),
 			),
 		}.Run(t)
@@ -242,17 +212,8 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 			`,
 
 			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"clientcertificates/certificate.yaml",
-					"clientcertificates/clusterRole.yaml",
-					"clientcertificates/clusterRoleBinding.yaml",
-					"clientcertificates/deployment.yaml",
-					"clientcertificates/service.yaml",
-					"clientcertificates/serviceAccount.yaml",
-					"clientcertificates/clusterRole-client.yaml",
-					"clientcertificates/clusterRoleBinding-client.yaml",
-				),
+				clientCertSetup().
+					Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
@@ -269,7 +230,7 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 				kubetest.ClientSucceeds(
 					client,
 					command,
-					&kubetest.RunOptions{ClientCertificates: true},
+					&kubetest.RunOptions{ClientCertificatesSecretName: "test-client-certs"},
 				),
 			),
 		}.Run(t)
@@ -282,17 +243,9 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 			`,
 
 			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"clientcertificates/certificate.yaml",
-					"clientcertificates/clusterRole.yaml",
-					"clientcertificates/clusterRoleBinding.yaml",
-					"clientcertificates/deployment-wrongca.yaml",
-					"clientcertificates/service.yaml",
-					"clientcertificates/serviceAccount.yaml",
-					"clientcertificates/clusterRole-client.yaml",
-					"clientcertificates/clusterRoleBinding-client.yaml",
-				),
+				clientCertSetup().
+					UpdateFlags(map[string]string{"client-ca-file": "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"}).
+					Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
@@ -309,7 +262,7 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 				kubetest.ClientFails(
 					client,
 					command,
-					&kubetest.RunOptions{ClientCertificates: true},
+					&kubetest.RunOptions{ClientCertificatesSecretName: "test-client-certs"},
 				),
 			),
 		}.Run(t)
@@ -320,6 +273,9 @@ func testAllowPathsRegexp(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `STATUS_CODE=$(curl --connect-timeout 5 -o /dev/null -v -s -k --write-out "%%{http_code}" -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443%s); if [[ "$STATUS_CODE" != %d ]]; then echo "expecting %d status code, got $STATUS_CODE instead" > /proc/self/fd/2; exit 1; fi`
 
+		allowPathsSetup := kubetest.NewBasicKubeRBACProxyTestConfig().
+			UpdateFlags(map[string]string{"allow-paths": "/metrics,/api/v1/label/*"})
+
 		kubetest.Scenario{
 			Name: "WithPathNotAllowed",
 			Description: `
@@ -327,18 +283,7 @@ func testAllowPathsRegexp(client kubernetes.Interface) kubetest.TestSuite {
 				I get a 403 response when requesting a path which isn't allowed by kube-rbac-proxy
 			`,
 
-			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"allowpaths/clusterRole.yaml",
-					"allowpaths/clusterRoleBinding.yaml",
-					"allowpaths/deployment.yaml",
-					"allowpaths/service.yaml",
-					"allowpaths/serviceAccount.yaml",
-					"allowpaths/clusterRole-client.yaml",
-					"allowpaths/clusterRoleBinding-client.yaml",
-				),
-			),
+			Given: kubetest.Actions(allowPathsSetup.Launch(client)),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
 					client,
@@ -371,18 +316,7 @@ func testAllowPathsRegexp(client kubernetes.Interface) kubetest.TestSuite {
 				I succeed with my request for a path that is allowed
 			`,
 
-			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"allowpaths/clusterRole.yaml",
-					"allowpaths/clusterRoleBinding.yaml",
-					"allowpaths/deployment.yaml",
-					"allowpaths/service.yaml",
-					"allowpaths/serviceAccount.yaml",
-					"allowpaths/clusterRole-client.yaml",
-					"allowpaths/clusterRoleBinding-client.yaml",
-				),
-			),
+			Given: kubetest.Actions(allowPathsSetup.Launch(client)),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
 					client,
@@ -414,6 +348,9 @@ func testIgnorePaths(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		commandWithoutAuth := `STATUS_CODE=$(curl --connect-timeout 5 -o /dev/null -v -s -k --write-out "%%{http_code}" https://kube-rbac-proxy.default.svc.cluster.local:8443%s); if [[ "$STATUS_CODE" != %d ]]; then echo "expecting %d status code, got $STATUS_CODE instead" > /proc/self/fd/2; exit 1; fi`
 
+		ignorePathsSetup := kubetest.NewBasicKubeRBACProxyTestConfig().
+			UpdateFlags(map[string]string{"ignore-paths": "/metrics,/api/v1/*"})
+
 		kubetest.Scenario{
 			Name: "WithIgnorePathMatch",
 			Description: `
@@ -421,18 +358,7 @@ func testIgnorePaths(client kubernetes.Interface) kubetest.TestSuite {
 				I get a 200 response when requesting a path included in ignorePaths
 			`,
 
-			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"ignorepaths/clusterRole.yaml",
-					"ignorepaths/clusterRoleBinding.yaml",
-					"ignorepaths/deployment.yaml",
-					"ignorepaths/service.yaml",
-					"ignorepaths/serviceAccount.yaml",
-					"ignorepaths/clusterRole-client.yaml",
-					"ignorepaths/clusterRoleBinding-client.yaml",
-				),
-			),
+			Given: kubetest.Actions(ignorePathsSetup.Launch(client)),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
 					client,
@@ -476,18 +402,7 @@ func testIgnorePaths(client kubernetes.Interface) kubetest.TestSuite {
 				because I end up being system:anonymous to the proxy
 			`,
 
-			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"ignorepaths/clusterRole.yaml",
-					"ignorepaths/clusterRoleBinding.yaml",
-					"ignorepaths/deployment.yaml",
-					"ignorepaths/service.yaml",
-					"ignorepaths/serviceAccount.yaml",
-					"ignorepaths/clusterRole-client.yaml",
-					"ignorepaths/clusterRoleBinding-client.yaml",
-				),
-			),
+			Given: kubetest.Actions(ignorePathsSetup.Launch(client)),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
 					client,

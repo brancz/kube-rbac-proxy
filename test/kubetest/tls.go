@@ -72,7 +72,7 @@ func createSignedClientCert(cacert *x509.Certificate, caPrivateKey *rsa.PrivateK
 	return certs[0], privateKey, nil
 }
 
-func createSignedServerCert(caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey, dnsName string) (*x509.Certificate, *rsa.PrivateKey, error) {
+func createSignedServerCert(caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey, hostBase string) (*x509.Certificate, *rsa.PrivateKey, error) {
 	// Generate a private key.
 	privateKey, err := rsa.GenerateKey(rand.Reader, minimalRSAKeySize)
 	if err != nil {
@@ -83,6 +83,8 @@ func createSignedServerCert(caCert *x509.Certificate, caPrivateKey *rsa.PrivateK
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate cert template: %v", err)
 	}
+
+	dnsName := fmt.Sprintf("%s.default.svc.cluster.local", hostBase)
 	template.Subject = pkix.Name{CommonName: dnsName}
 	template.DNSNames = []string{dnsName}
 	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}

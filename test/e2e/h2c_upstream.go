@@ -34,12 +34,26 @@ func testH2CUpstream(client kubernetes.Interface) kubetest.TestSuite {
 			Given: kubetest.Actions(
 				kubetest.CreatedManifests(
 					client,
-					"h2c-upstream/clusterRole.yaml",
-					"h2c-upstream/clusterRoleBinding.yaml",
-					"h2c-upstream/deployment-proxy-non-loopback.yaml",
 					"h2c-upstream/deployment-upstream-non-loopback.yaml",
-					"h2c-upstream/service.yaml",
-					"h2c-upstream/serviceAccount.yaml",
+					"h2c-upstream/upstream-svc.yaml",
+				),
+				kubetest.NewBasicKubeRBACProxyTestConfig().
+					UpdateFlags(map[string]string{
+						"upstream-force-h2c": "true",
+						"upstream":           "http://http-echo-service.default.svc.cluster.local:80/",
+					}).
+					UpdateUpstreamFlags(map[string]string{"h2c": "true"}).
+					Launch(client),
+			),
+			When: kubetest.Actions(
+				kubetest.PodsAreReady(
+					client,
+					1,
+					"app=http-echo",
+				),
+				kubetest.ServiceIsReady(
+					client,
+					"http-echo-service",
 				),
 			),
 			Then: kubetest.Actions(
@@ -54,16 +68,10 @@ func testH2CUpstream(client kubernetes.Interface) kubetest.TestSuite {
 			Name: "With H2C local upstream",
 
 			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"h2c-upstream/clusterRole.yaml",
-					"h2c-upstream/clusterRoleBinding.yaml",
-					"h2c-upstream/deployment.yaml",
-					"h2c-upstream/service.yaml",
-					"h2c-upstream/serviceAccount.yaml",
-					"h2c-upstream/clusterRole-client.yaml",
-					"h2c-upstream/clusterRoleBinding-client.yaml",
-				),
+				kubetest.NewBasicKubeRBACProxyTestConfig().
+					UpdateFlags(map[string]string{"upstream-force-h2c": "true"}).
+					UpdateUpstreamFlags(map[string]string{"h2c": "true"}).
+					Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
