@@ -1,0 +1,8 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: phantom-resource-access
+rules:
+  - apiGroups: ["ai.example.com"]
+    resources: ["aicapabilities"]
+    verbs: ["get", "create", "update", "patch", "delete"]
