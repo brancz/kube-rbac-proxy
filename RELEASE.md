@@ -7,7 +7,7 @@ Release shepherds are chosen on a voluntary basis.
 
 | release series | date of release (year-month-day) | release shepherd                        |
 | -------------- | -------------------------------- | --------------------------------------- |
-| v0.20.0        | TBD                              | Krzysztof Ostrowski (GitHub: @ibihim)   |
+| v0.20.1        | 2025-11-25                       | Krzysztof Ostrowski (GitHub: @ibihim)   |
 | v0.20.0        | 2025-09-18                       | Krzysztof Ostrowski (GitHub: @ibihim)   |
 | v0.19.1        | 2025-04-23                       | Krzysztof Ostrowski (GitHub: @ibihim)   |
 | v0.19.0        | 2025-02-14                       | Krzysztof Ostrowski (GitHub: @ibihim)   |

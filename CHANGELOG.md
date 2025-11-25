@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.1 / 2025-11-25
+
+- [ENHANCEMENT] Bump dependencies
+
 ## 0.20.0 / 2025-09-18
 
 - ENHANCEMENT Major Kubernetes bump
