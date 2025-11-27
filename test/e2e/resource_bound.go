@@ -1,12 +1,9 @@
 /*
-Copyright 2017 Frederic Branczyk All rights reserved.
-
+Copyright 2025 The kube-rbac-proxy maintainers. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-
     http://www.apache.org/licenses/LICENSE-2.0
-
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -25,7 +22,7 @@ import (
 	"github.com/brancz/kube-rbac-proxy/test/kubetest"
 )
 
-func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
+func testResourceBoundAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443%v`
 
@@ -35,17 +32,19 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 			check kubetest.Action
 		}{
 			{
-				name: "static/granted",
+				name: "resource-bound/granted",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
-						"authz-static/serviceAccount-krp.yaml",
-						"authz-static/serviceAccount-client-static.yaml",
-						"authz-static/clusterRole-krp.yaml",
-						"authz-static/clusterRoleBinding-krp.yaml",
-						"authz-static/configmap.yaml",
-						"authz-static/deployment.yaml",
-						"authz-static/service.yaml",
+						"authz-resource-bound/serviceAccount-krp.yaml",
+						"authz-resource-bound/serviceAccount-client.yaml",
+						"authz-resource-bound/clusterRole-krp.yaml",
+						"authz-resource-bound/clusterRole-client.yaml",
+						"authz-resource-bound/clusterRoleBinding-krp.yaml",
+						"authz-resource-bound/clusterRoleBinding-client.yaml",
+						"authz-resource-bound/configmap.yaml",
+						"authz-resource-bound/deployment.yaml",
+						"authz-resource-bound/service.yaml",
 					),
 				),
 				check: kubetest.Actions(
@@ -53,48 +52,25 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 						client,
 						fmt.Sprintf(command, "/metrics"),
 						&kubetest.RunOptions{
-							ServiceAccount: "client-with-static-match",
+							ServiceAccount: "client-with-resource-bound",
 						},
 					),
 				),
 			},
 			{
-				name: "static/forbidden -> rbac/granted",
+				name: "resource-bound/forbidden",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
-						"authz-static/serviceAccount-krp.yaml",
-						"authz-static/serviceAccount-client-rbac.yaml",
-						"authz-static/clusterRole-krp.yaml",
-						"authz-static/clusterRole-metrics-reader.yaml",
-						"authz-static/clusterRoleBinding-krp.yaml",
-						"authz-static/clusterRoleBinding-client.yaml",
-						"authz-static/configmap.yaml",
-						"authz-static/deployment.yaml",
-						"authz-static/service.yaml",
-					),
-				),
-				check: kubetest.Actions(
-					kubetest.ClientSucceeds(
-						client,
-						fmt.Sprintf(command, "/metrics"),
-						&kubetest.RunOptions{
-							ServiceAccount: "client-with-rbac",
-						},
-					),
-				),
-			},
-			{
-				name: "static/forbidden",
-				given: kubetest.Actions(
-					kubetest.CreatedManifests(
-						client,
-						"authz-static/serviceAccount-krp.yaml",
-						"authz-static/clusterRole-krp.yaml",
-						"authz-static/clusterRoleBinding-krp.yaml",
-						"authz-static/configmap.yaml",
-						"authz-static/deployment.yaml",
-						"authz-static/service.yaml",
+						"authz-resource-bound/serviceAccount-krp.yaml",
+						"authz-resource-bound/serviceAccount-client.yaml",
+						"authz-resource-bound/clusterRole-krp.yaml",
+						"authz-resource-bound/clusterRole-client.yaml",
+						"authz-resource-bound/clusterRoleBinding-krp.yaml",
+						"authz-resource-bound/clusterRoleBinding-client.yaml",
+						"authz-resource-bound/configmap.yaml",
+						"authz-resource-bound/deployment.yaml",
+						"authz-resource-bound/service.yaml",
 					),
 				),
 				check: kubetest.Actions(

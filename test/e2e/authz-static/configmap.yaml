@@ -7,7 +7,7 @@ data:
     authorization:
       static:
         - user:
-            name: system:serviceaccount:default:default
+            name: system:serviceaccount:default:client-with-static-match
           resourceRequest: false
           verb: get
           path: /metrics

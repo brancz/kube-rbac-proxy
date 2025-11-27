@@ -1,5 +1,5 @@
 /*
-Copyright 2017 Frederic Branczyk All rights reserved.
+Copyright 2025 The kube-rbac-proxy maintainers. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import (
 	"github.com/brancz/kube-rbac-proxy/test/kubetest"
 )
 
-func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
+func testTemplatedQueryRewrite(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443%v`
 
@@ -35,49 +35,49 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 			check kubetest.Action
 		}{
 			{
-				name: "static/granted",
+				name: "templated-query-rewrite-static/granted-by-static",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
-						"authz-static/serviceAccount-krp.yaml",
-						"authz-static/serviceAccount-client-static.yaml",
-						"authz-static/clusterRole-krp.yaml",
-						"authz-static/clusterRoleBinding-krp.yaml",
-						"authz-static/configmap.yaml",
-						"authz-static/deployment.yaml",
-						"authz-static/service.yaml",
+						"authz-templated-query-rewrite-static/configmap-resource.yaml",
+						"authz-templated-query-rewrite-static/clusterRole.yaml",
+						"authz-templated-query-rewrite-static/clusterRoleBinding.yaml",
+						"authz-templated-query-rewrite-static/deployment.yaml",
+						"authz-templated-query-rewrite-static/service.yaml",
+						"authz-templated-query-rewrite-static/serviceAccount.yaml",
+						"authz-templated-query-rewrite-static/serviceAccount-static.yaml",
 					),
 				),
 				check: kubetest.Actions(
 					kubetest.ClientSucceeds(
 						client,
-						fmt.Sprintf(command, "/metrics"),
+						fmt.Sprintf(command, "/metrics?namespace=default"),
 						&kubetest.RunOptions{
-							ServiceAccount: "client-with-static-match",
+							ServiceAccount: "client-with-static",
 						},
 					),
 				),
 			},
 			{
-				name: "static/forbidden -> rbac/granted",
+				name: "templated-query-rewrite-static/granted-by-rbac",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
-						"authz-static/serviceAccount-krp.yaml",
-						"authz-static/serviceAccount-client-rbac.yaml",
-						"authz-static/clusterRole-krp.yaml",
-						"authz-static/clusterRole-metrics-reader.yaml",
-						"authz-static/clusterRoleBinding-krp.yaml",
-						"authz-static/clusterRoleBinding-client.yaml",
-						"authz-static/configmap.yaml",
-						"authz-static/deployment.yaml",
-						"authz-static/service.yaml",
+						"authz-templated-query-rewrite-static/configmap-resource.yaml",
+						"authz-templated-query-rewrite-static/clusterRole.yaml",
+						"authz-templated-query-rewrite-static/clusterRole-client-rbac.yaml",
+						"authz-templated-query-rewrite-static/clusterRoleBinding.yaml",
+						"authz-templated-query-rewrite-static/clusterRoleBinding-client-rbac.yaml",
+						"authz-templated-query-rewrite-static/deployment.yaml",
+						"authz-templated-query-rewrite-static/service.yaml",
+						"authz-templated-query-rewrite-static/serviceAccount.yaml",
+						"authz-templated-query-rewrite-static/serviceAccount-rbac.yaml",
 					),
 				),
 				check: kubetest.Actions(
 					kubetest.ClientSucceeds(
 						client,
-						fmt.Sprintf(command, "/metrics"),
+						fmt.Sprintf(command, "/metrics?namespace=unlocking"),
 						&kubetest.RunOptions{
 							ServiceAccount: "client-with-rbac",
 						},
@@ -85,22 +85,22 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			},
 			{
-				name: "static/forbidden",
+				name: "templated-query-rewrite-static/forbidden",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
-						"authz-static/serviceAccount-krp.yaml",
-						"authz-static/clusterRole-krp.yaml",
-						"authz-static/clusterRoleBinding-krp.yaml",
-						"authz-static/configmap.yaml",
-						"authz-static/deployment.yaml",
-						"authz-static/service.yaml",
+						"authz-templated-query-rewrite-static/configmap-resource.yaml",
+						"authz-templated-query-rewrite-static/clusterRole.yaml",
+						"authz-templated-query-rewrite-static/clusterRoleBinding.yaml",
+						"authz-templated-query-rewrite-static/deployment.yaml",
+						"authz-templated-query-rewrite-static/service.yaml",
+						"authz-templated-query-rewrite-static/serviceAccount.yaml",
 					),
 				),
 				check: kubetest.Actions(
 					kubetest.ClientFails(
 						client,
-						fmt.Sprintf(command, "/forbidden"),
+						fmt.Sprintf(command, "/metrics?namespace=forbidden"),
 						nil,
 					),
 				),
