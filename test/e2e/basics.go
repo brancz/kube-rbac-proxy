@@ -108,16 +108,20 @@ func testFlags(client kubernetes.Interface) kubetest.TestSuite {
 			`,
 
 			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"flags/clusterRole.yaml",
-					"flags/clusterRoleBinding.yaml",
-					"flags/deployment-other-flags.yaml",
-					"flags/service.yaml",
-					"flags/serviceAccount.yaml",
-					"flags/clusterRole-client.yaml",
-					"flags/clusterRoleBinding-client.yaml",
-				),
+				kubetest.NewBasicKubeRBACProxyTestConfig().
+					UpdateFlags(map[string]string{
+						"add-dir-header":    "true",
+						"alsologtostderr":   "true",
+						"log-backtrace-at":  "0",
+						"log-dir":           "mustnotexist",
+						"log-file":          "mustnotexist",
+						"log-file-max-size": "1800",
+						"one-output":        "true",
+						"skip-headers":      "true",
+						"skip-log-headers":  "true",
+						"stderrthreshold":   "2",
+					}).
+					Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
@@ -148,17 +152,9 @@ func testFlags(client kubernetes.Interface) kubetest.TestSuite {
 			`,
 
 			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"flags/clusterRole.yaml",
-					"flags/clusterRoleBinding.yaml",
-					"flags/deployment-logtostderr.yaml",
-					"flags/service.yaml",
-					"flags/serviceAccount.yaml",
-					// This adds the clients cluster role to succeed
-					"flags/clusterRole-client.yaml",
-					"flags/clusterRoleBinding-client.yaml",
-				),
+				kubetest.NewBasicKubeRBACProxyTestConfig().
+					UpdateFlags(map[string]string{"logtostderr": "true"}).
+					Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
