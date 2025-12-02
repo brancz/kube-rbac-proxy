@@ -20,12 +20,13 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"strings"
+	"testing"
+
 	"github.com/brancz/kube-rbac-proxy/test/kubetest"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"strings"
-	"testing"
 )
 
 func testTokenMasking(client kubernetes.Interface) kubetest.TestSuite {
@@ -40,16 +41,9 @@ func testTokenMasking(client kubernetes.Interface) kubetest.TestSuite {
             `,
 
 			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"tokenmasking/clusterRole.yaml",
-					"tokenmasking/clusterRoleBinding.yaml",
-					"tokenmasking/deployment.yaml",
-					"tokenmasking/service.yaml",
-					"tokenmasking/serviceAccount.yaml",
-					"tokenmasking/clusterRole-client.yaml",
-					"tokenmasking/clusterRoleBinding-client.yaml",
-				),
+				kubetest.NewBasicKubeRBACProxyTestConfig().
+					UpdateFlags(map[string]string{"logtostderr": "true"}).
+					Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(

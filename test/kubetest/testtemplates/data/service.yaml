@@ -4,11 +4,10 @@ metadata:
   labels:
     app: kube-rbac-proxy
   name: kube-rbac-proxy
-  namespace: default
 spec:
   ports:
-  - name: https
-    port: 8443
-    targetPort: https
+    - name: https
+      port: 8443
+      targetPort: https
   selector:
     app: kube-rbac-proxy

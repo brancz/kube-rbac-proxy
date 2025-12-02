@@ -29,6 +29,35 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443%v`
 
+		resourceReqsConfig := `
+authorization:
+  rewrites:
+    byQueryParameter:
+      name: "namespace"
+  resourceAttributes:
+    resource: namespaces
+    subresource: metrics
+    namespace: "{{ .Value }}"
+  static:
+    - user:
+        name: system:serviceaccount:default:default
+      resourceRequest: true
+      resource: namespaces
+      subresource: metrics
+      namespace: default
+      verb: get
+`
+
+		nonResourceReqsConfig := `
+authorization:
+  static:
+    - user:
+        name: system:serviceaccount:default:default
+      resourceRequest: false
+      verb: get
+      path: /metrics
+`
+
 		for _, tc := range []struct {
 			name  string
 			given kubetest.Action
@@ -37,15 +66,10 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 			{
 				name: "resource/namespace/metrics/query rewrite/granted",
 				given: kubetest.Actions(
-					kubetest.CreatedManifests(
-						client,
-						"static-auth/configmap-resource.yaml",
-						"static-auth/clusterRole.yaml",
-						"static-auth/clusterRoleBinding.yaml",
-						"static-auth/deployment.yaml",
-						"static-auth/service.yaml",
-						"static-auth/serviceAccount.yaml",
-					),
+					kubetest.NewBasicKubeRBACProxyTestConfig().
+						WithAuthorizationConfigYAML(resourceReqsConfig).
+						WithoutMetricsEndpointAllowClusterRole().
+						Launch(client),
 				),
 				check: kubetest.Actions(
 					kubetest.ClientSucceeds(
@@ -58,15 +82,10 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 			{
 				name: "resource/namespace/metrics/query rewrite/forbidden",
 				given: kubetest.Actions(
-					kubetest.CreatedManifests(
-						client,
-						"static-auth/configmap-resource.yaml",
-						"static-auth/clusterRole.yaml",
-						"static-auth/clusterRoleBinding.yaml",
-						"static-auth/deployment.yaml",
-						"static-auth/service.yaml",
-						"static-auth/serviceAccount.yaml",
-					),
+					kubetest.NewBasicKubeRBACProxyTestConfig().
+						WithAuthorizationConfigYAML(resourceReqsConfig).
+						WithoutMetricsEndpointAllowClusterRole().
+						Launch(client),
 				),
 				check: kubetest.Actions(
 					kubetest.ClientFails(
@@ -79,15 +98,10 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 			{
 				name: "non-resource/get/metrics/granted",
 				given: kubetest.Actions(
-					kubetest.CreatedManifests(
-						client,
-						"static-auth/configmap-non-resource.yaml",
-						"static-auth/clusterRole.yaml",
-						"static-auth/clusterRoleBinding.yaml",
-						"static-auth/deployment.yaml",
-						"static-auth/service.yaml",
-						"static-auth/serviceAccount.yaml",
-					),
+					kubetest.NewBasicKubeRBACProxyTestConfig().
+						WithAuthorizationConfigYAML(nonResourceReqsConfig).
+						WithoutMetricsEndpointAllowClusterRole().
+						Launch(client),
 				),
 				check: kubetest.Actions(
 					kubetest.ClientSucceeds(
@@ -100,15 +114,10 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 			{
 				name: "non-resource/get/metrics/forbidden",
 				given: kubetest.Actions(
-					kubetest.CreatedManifests(
-						client,
-						"static-auth/configmap-non-resource.yaml",
-						"static-auth/clusterRole.yaml",
-						"static-auth/clusterRoleBinding.yaml",
-						"static-auth/deployment.yaml",
-						"static-auth/service.yaml",
-						"static-auth/serviceAccount.yaml",
-					),
+					kubetest.NewBasicKubeRBACProxyTestConfig().
+						WithAuthorizationConfigYAML(nonResourceReqsConfig).
+						WithoutMetricsEndpointAllowClusterRole().
+						Launch(client),
 				),
 				check: kubetest.Actions(
 					kubetest.ClientFails(
