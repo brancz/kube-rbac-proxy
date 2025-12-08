@@ -53,19 +53,7 @@ func testTLS(client kubernetes.Interface) kubetest.TestSuite {
 			kubetest.Scenario{
 				Name: tc.name,
 
-				Given: kubetest.Actions(
-					kubetest.CreatedManifests(
-						client,
-						"basics/clusterRole.yaml",
-						"basics/clusterRoleBinding.yaml",
-						"basics/deployment.yaml",
-						"basics/service.yaml",
-						"basics/serviceAccount.yaml",
-						// This adds the clients cluster role to succeed
-						"basics/clusterRole-client.yaml",
-						"basics/clusterRoleBinding-client.yaml",
-					),
-				),
+				Given: kubetest.Actions(kubetest.NewBasicKubeRBACProxyTestConfig().Launch(client)),
 				When: kubetest.Actions(
 					kubetest.PodsAreReady(
 						client,

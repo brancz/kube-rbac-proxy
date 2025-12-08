@@ -32,16 +32,10 @@ func testH2CUpstream(client kubernetes.Interface) kubetest.TestSuite {
 			Name: "With H2C Upstream",
 
 			Given: kubetest.Actions(
-				kubetest.CreatedManifests(
-					client,
-					"h2c-upstream/clusterRole.yaml",
-					"h2c-upstream/clusterRoleBinding.yaml",
-					"h2c-upstream/deployment.yaml",
-					"h2c-upstream/service.yaml",
-					"h2c-upstream/serviceAccount.yaml",
-					"h2c-upstream/clusterRole-client.yaml",
-					"h2c-upstream/clusterRoleBinding-client.yaml",
-				),
+				kubetest.NewBasicKubeRBACProxyTestConfig().
+					UpdateFlags(map[string]string{"upstream-force-h2c": "true"}).
+					UpdateUpstreamFlags(map[string]string{"h2c": "true"}).
+					Launch(client),
 			),
 			When: kubetest.Actions(
 				kubetest.PodsAreReady(
