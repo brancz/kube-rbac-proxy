@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.21.1 / 2026-03-15
+
+- [ENHANCEMENT] Bump dependencies
+- [BUGFIX] Update Go to 1.25.8 (fixes GO-2026-4601 net/url IPv6 parsing, GO-2026-4602 os FileInfo escape)
+- [BUGFIX] Update golang.org/x/net to v0.52.0 (fixes GO-2026-4559 HTTP/2 server panic)
+
 ## 0.21.0 / 2026-02-26
 
 - [ENHANCEMENT] Bump dependencies
