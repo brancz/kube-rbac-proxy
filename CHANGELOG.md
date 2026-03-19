@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21.2 / 2026-03-19
+
+- [ENHANCEMENT] Bump dependencies
+
 ## 0.21.1 / 2026-03-15
 
 - [ENHANCEMENT] Bump dependencies
