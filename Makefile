@@ -110,9 +110,9 @@ test-local: test-local-setup test
 kind-delete-cluster:
 	kind delete cluster
 
-kind-create-cluster: kind-delete-cluster
+kind-create-cluster: curl-container kind-delete-cluster
 	kind create cluster --config ./test/e2e/kind-config/kind-config.yaml
-	kind load docker-image $(CONTAINER_NAME)
+	kind load docker-image $(CONTAINER_NAME) quay.io/brancz/krp-curl:v0.0.2
 
 generate: build $(EMBEDMD_BINARY)
 	@echo ">> generating examples"
