@@ -35,7 +35,7 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 			check kubetest.Action
 		}{
 			{
-				name: "static/granted",
+				name: "static/granted by static authorizer",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
@@ -59,7 +59,7 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			},
 			{
-				name: "static/forbidden -> rbac/granted",
+				name: "static/no opinion by static authorizer and granted by SAR request",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
@@ -85,7 +85,7 @@ func testStaticAuthorizer(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			},
 			{
-				name: "static/forbidden",
+				name: "static/rejected by static authorizer and SAR request",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,

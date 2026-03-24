@@ -27,7 +27,7 @@ import (
 
 func testTemplatedQueryRewrite(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
-		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443%v`
+		command := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443%s`
 
 		for _, tc := range []struct {
 			name  string
@@ -35,7 +35,7 @@ func testTemplatedQueryRewrite(client kubernetes.Interface) kubetest.TestSuite {
 			check kubetest.Action
 		}{
 			{
-				name: "templated-query-rewrite-static/granted-by-static",
+				name: "templated-query-rewrite-static/granted by static authorizer",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
@@ -59,7 +59,7 @@ func testTemplatedQueryRewrite(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			},
 			{
-				name: "templated-query-rewrite-static/granted-by-rbac",
+				name: "templated-query-rewrite-static/granted by SAR request",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
@@ -85,7 +85,7 @@ func testTemplatedQueryRewrite(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			},
 			{
-				name: "templated-query-rewrite-static/forbidden",
+				name: "templated-query-rewrite-static/rejected by static authorizer and SAR request",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,

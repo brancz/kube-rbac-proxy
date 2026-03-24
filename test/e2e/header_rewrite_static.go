@@ -36,7 +36,7 @@ func testHeaderRewriteStatic(client kubernetes.Interface) kubetest.TestSuite {
 			check kubetest.Action
 		}{
 			{
-				name: "allow-header-rewrite-static/granted-by-static",
+				name: "allow-header-rewrite-static/granted by static authorizer",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
@@ -60,7 +60,7 @@ func testHeaderRewriteStatic(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			},
 			{
-				name: "allow-header-rewrite-static/granted-by-rbac",
+				name: "allow-header-rewrite-static/no opinion by static authorizer and granted by SAR request",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
@@ -86,7 +86,7 @@ func testHeaderRewriteStatic(client kubernetes.Interface) kubetest.TestSuite {
 				),
 			},
 			{
-				name: "allow-header-rewrite-static/forbidden-path",
+				name: "allow-header-rewrite-static/rejected on path that is not an allowed path",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
@@ -102,12 +102,14 @@ func testHeaderRewriteStatic(client kubernetes.Interface) kubetest.TestSuite {
 					kubetest.ClientFails(
 						client,
 						fmt.Sprintf(commandWithoutHeader, "/forbidden"),
-						nil,
+						&kubetest.RunOptions{
+							ServiceAccount: "client-with-rbac",
+						},
 					),
 				),
 			},
 			{
-				name: "allow-header-rewrite-static/forbidden-by-rewrite",
+				name: "allow-header-rewrite-static/rejected on rewritten path if not allowed by static and rbac authz",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
@@ -123,28 +125,9 @@ func testHeaderRewriteStatic(client kubernetes.Interface) kubetest.TestSuite {
 					kubetest.ClientFails(
 						client,
 						fmt.Sprintf(commandWithHeader, "forbidden"),
-						nil,
-					),
-				),
-			},
-			{
-				name: "allow-header-rewrite-static/forbidden-by-rewrite-for-sa",
-				given: kubetest.Actions(
-					kubetest.CreatedManifests(
-						client,
-						"authz-allow-header-rewrite-static/configmap.yaml",
-						"authz-allow-header-rewrite-static/clusterRole.yaml",
-						"authz-allow-header-rewrite-static/clusterRoleBinding.yaml",
-						"authz-allow-header-rewrite-static/deployment.yaml",
-						"authz-allow-header-rewrite-static/service.yaml",
-						"authz-allow-header-rewrite-static/serviceAccount.yaml",
-					),
-				),
-				check: kubetest.Actions(
-					kubetest.ClientFails(
-						client,
-						fmt.Sprintf(commandWithHeader, "kube-system"),
-						nil,
+						&kubetest.RunOptions{
+							ServiceAccount: "client-with-static",
+						},
 					),
 				),
 			},

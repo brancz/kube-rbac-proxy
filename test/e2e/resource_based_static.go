@@ -25,7 +25,7 @@ import (
 	"github.com/brancz/kube-rbac-proxy/test/kubetest"
 )
 
-func testResourceBasedRewriteStatic(client kubernetes.Interface) kubetest.TestSuite {
+func testResourceBasedStatic(client kubernetes.Interface) kubetest.TestSuite {
 	return func(t *testing.T) {
 		commandWithToken := `curl --connect-timeout 5 -v -s -k --fail -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kube-rbac-proxy.default.svc.cluster.local:8443%s`
 
@@ -35,16 +35,16 @@ func testResourceBasedRewriteStatic(client kubernetes.Interface) kubetest.TestSu
 			check kubetest.Action
 		}{
 			{
-				name: "resource-based-rewrite-static/success-on-ignore-path",
+				name: "resource-based-static/granted on ignored path",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
-						"authz-resource-based-rewrite-static/configmap.yaml",
-						"authz-resource-based-rewrite-static/clusterRole.yaml",
-						"authz-resource-based-rewrite-static/clusterRoleBinding.yaml",
-						"authz-resource-based-rewrite-static/deployment.yaml",
-						"authz-resource-based-rewrite-static/service.yaml",
-						"authz-resource-based-rewrite-static/serviceAccount.yaml",
+						"authz-resource-based-static/configmap.yaml",
+						"authz-resource-based-static/clusterRole.yaml",
+						"authz-resource-based-static/clusterRoleBinding.yaml",
+						"authz-resource-based-static/deployment.yaml",
+						"authz-resource-based-static/service.yaml",
+						"authz-resource-based-static/serviceAccount.yaml",
 					),
 				),
 				check: kubetest.Actions(
@@ -56,38 +56,17 @@ func testResourceBasedRewriteStatic(client kubernetes.Interface) kubetest.TestSu
 				),
 			},
 			{
-				name: "resource-based-rewrite-static/default-sa-fails",
+				name: "resource-based-static/granted by static authorizer",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
-						"authz-resource-based-rewrite-static/configmap.yaml",
-						"authz-resource-based-rewrite-static/clusterRole.yaml",
-						"authz-resource-based-rewrite-static/clusterRoleBinding.yaml",
-						"authz-resource-based-rewrite-static/deployment.yaml",
-						"authz-resource-based-rewrite-static/service.yaml",
-						"authz-resource-based-rewrite-static/serviceAccount.yaml",
-					),
-				),
-				check: kubetest.Actions(
-					kubetest.ClientFails(
-						client,
-						fmt.Sprintf(commandWithToken, "/metrics"),
-						nil,
-					),
-				),
-			},
-			{
-				name: "resource-based-rewrite-static/succeeds-static-authorization",
-				given: kubetest.Actions(
-					kubetest.CreatedManifests(
-						client,
-						"authz-resource-based-rewrite-static/configmap.yaml",
-						"authz-resource-based-rewrite-static/clusterRole.yaml",
-						"authz-resource-based-rewrite-static/clusterRoleBinding.yaml",
-						"authz-resource-based-rewrite-static/deployment.yaml",
-						"authz-resource-based-rewrite-static/service.yaml",
-						"authz-resource-based-rewrite-static/serviceAccount.yaml",
-						"authz-resource-based-rewrite-static/serviceAccount-static.yaml",
+						"authz-resource-based-static/configmap.yaml",
+						"authz-resource-based-static/clusterRole.yaml",
+						"authz-resource-based-static/clusterRoleBinding.yaml",
+						"authz-resource-based-static/deployment.yaml",
+						"authz-resource-based-static/service.yaml",
+						"authz-resource-based-static/serviceAccount.yaml",
+						"authz-resource-based-static/serviceAccount-static.yaml",
 					),
 				),
 				check: kubetest.Actions(
@@ -101,19 +80,19 @@ func testResourceBasedRewriteStatic(client kubernetes.Interface) kubetest.TestSu
 				),
 			},
 			{
-				name: "resource-based-rewrite-static/succeeds-rbac-authorization",
+				name: "resource-based-static/granted by SAR request",
 				given: kubetest.Actions(
 					kubetest.CreatedManifests(
 						client,
-						"authz-resource-based-rewrite-static/configmap.yaml",
-						"authz-resource-based-rewrite-static/clusterRole.yaml",
-						"authz-resource-based-rewrite-static/clusterRoleBinding.yaml",
-						"authz-resource-based-rewrite-static/clusterRole-client-rbac.yaml",
-						"authz-resource-based-rewrite-static/clusterRoleBinding-client-rbac.yaml",
-						"authz-resource-based-rewrite-static/deployment.yaml",
-						"authz-resource-based-rewrite-static/service.yaml",
-						"authz-resource-based-rewrite-static/serviceAccount.yaml",
-						"authz-resource-based-rewrite-static/serviceAccount-rbac.yaml",
+						"authz-resource-based-static/configmap.yaml",
+						"authz-resource-based-static/clusterRole.yaml",
+						"authz-resource-based-static/clusterRoleBinding.yaml",
+						"authz-resource-based-static/clusterRole-client-rbac.yaml",
+						"authz-resource-based-static/clusterRoleBinding-client-rbac.yaml",
+						"authz-resource-based-static/deployment.yaml",
+						"authz-resource-based-static/service.yaml",
+						"authz-resource-based-static/serviceAccount.yaml",
+						"authz-resource-based-static/serviceAccount-rbac.yaml",
 					),
 				),
 				check: kubetest.Actions(
@@ -123,6 +102,27 @@ func testResourceBasedRewriteStatic(client kubernetes.Interface) kubetest.TestSu
 						&kubetest.RunOptions{
 							ServiceAccount: "client-with-rbac",
 						},
+					),
+				),
+			},
+			{
+				name: "resource-based-static/rejected default serivce account by static and rbac",
+				given: kubetest.Actions(
+					kubetest.CreatedManifests(
+						client,
+						"authz-resource-based-static/configmap.yaml",
+						"authz-resource-based-static/clusterRole.yaml",
+						"authz-resource-based-static/clusterRoleBinding.yaml",
+						"authz-resource-based-static/deployment.yaml",
+						"authz-resource-based-static/service.yaml",
+						"authz-resource-based-static/serviceAccount.yaml",
+					),
+				),
+				check: kubetest.Actions(
+					kubetest.ClientFails(
+						client,
+						fmt.Sprintf(commandWithToken, "/metrics"),
+						nil,
 					),
 				),
 			},

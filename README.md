@@ -120,6 +120,47 @@ On an incoming request, kube-rbac-proxy first figures out which user is performi
 
 Once a user has been authenticated, again the `authentication.k8s.io` is used to perform a `SubjectAccessReview`, in order to authorize the respective request, to ensure the authenticated user has the required RBAC roles.
 
+### Authorization in Detail
+
+Authorization happens in three stages:
+
+#### 1. Path Checks
+
+If `--ignore-paths` is configured, matching requests bypass authentication and authorization entirely and are proxied directly to the upstream. This is useful for health checks or readiness probes. Conversely, `--allow-paths` restricts which paths the proxy will serve at all — non-matching requests get a 404 before any auth happens. These two flags are mutually exclusive.
+
+#### 2. Building the Authorization Question
+
+Every request is turned into an authorization question: *"Is user X allowed to do verb Y on thing Z?"* The `--config-file` controls what "thing Z" is. There are three modes:
+
+* **Non-resource URL (default, no config file):** The HTTP request path (e.g. `/metrics`) is used directly. The question becomes: *"Is user X allowed to `get` the non-resource URL `/metrics`?"* This requires a `nonResourceURLs` RBAC rule on the cluster side.
+
+* **Fixed resource attributes:** When `resourceAttributes` is configured, requests are authorized against a virtual Kubernetes resource instead of the URL path. For example, with `resource: pods` and `namespace: default`, every request asks: *"Is user X allowed to `get` pods in namespace default?"* The actual HTTP path is irrelevant in this mode.
+
+* **Resource attributes with rewrites:** When `rewrites` is configured alongside `resourceAttributes`, a value is extracted from the request (via query parameter or HTTP header) and templated into the resource attributes using `{{ .Value }}`. For example, with `byQueryParameter: {name: "namespace"}` and `namespace: "{{ .Value }}"`, a request to `/metrics?namespace=production` asks: *"Is user X allowed to `get` the resource in namespace production?"* If no value can be extracted, the request cannot be authorized.
+
+The HTTP method is mapped to a Kubernetes API verb: `GET` becomes `get`, `POST` becomes `create`, `PUT` becomes `update`, `PATCH` becomes `patch`, and `DELETE` becomes `delete`.
+
+#### 3. Answering the Question
+
+The authorization question is evaluated by a chain of two authorizers, tried in order:
+
+1. **Static authorizer:** If `static` rules are defined in the config file, they are checked first. Each rule specifies a combination of user, verb, resource, namespace, path, etc. Empty fields act as wildcards. If a rule matches, the request is allowed immediately with no API server call. If no rule matches, the static authorizer expresses *no opinion* (it never denies) and the next authorizer is tried.
+
+2. **SubjectAccessReview (SAR) authorizer:** Sends a `SubjectAccessReview` request to the Kubernetes API server, which evaluates the request against the cluster's actual RBAC policies. This is the final decision — the request is either allowed or denied.
+
+```
+Request
+  │
+  ├─ Path check (--ignore-paths / --allow-paths)
+  │
+  ├─ Build question (non-resource URL / resource attributes / rewrite)
+  │
+  └─ Answer question
+      ├─ Static rules: match? → Allow
+      └─ No match → SAR (API server RBAC) → Allow or Deny
+```
+
+
 ## Notes on ServiceAccount token security
 
 Note that when using tokens for authentication, the receiving side can use the token to impersonate the client. Only use token authentication, when the receiving side is already higher privileged or the token itself is super low privileged, such as when the only roles bound to it are for authorization purposes with this project. Passing around highly privileged tokens is a security risk, and is not recommended.
