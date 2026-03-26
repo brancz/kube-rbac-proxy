@@ -130,9 +130,11 @@ type completedProxyRunOptions struct {
 	secureListenAddress   string
 	proxyEndpointsPort    int
 
-	upstreamURL      *url.URL
-	upstreamForceH2C bool
-	upstreamCABundle *x509.CertPool
+	upstreamURL        *url.URL
+	upstreamForceH2C   bool
+	upstreamCABundle   *x509.CertPool
+	upstreamSocketPath string
+	upstreamHTTPPath   string
 
 	http2Disable bool
 	http2Options *http2.Server
@@ -158,9 +160,21 @@ func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
 		ignorePaths: o.IgnorePaths,
 	}
 
-	completed.upstreamURL, err = url.Parse(o.Upstream)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse upstream URL: %w", err)
+	if strings.HasPrefix(o.Upstream, "unix://") {
+		socketPath, httpPath := options.ParseUnixUpstream(o.Upstream)
+		completed.upstreamSocketPath = socketPath
+		completed.upstreamHTTPPath = httpPath
+		// Use root path for the target URL; the httpPath is applied
+		// by the Director to avoid double-joining with the request path.
+		completed.upstreamURL, err = url.Parse("http://unix/")
+		if err != nil {
+			return nil, fmt.Errorf("failed to construct upstream URL for unix socket: %w", err)
+		}
+	} else {
+		completed.upstreamURL, err = url.Parse(o.Upstream)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse upstream URL: %w", err)
+		}
 	}
 
 	if upstreamCAPath := o.UpstreamCAFile; len(upstreamCAPath) > 0 {
@@ -259,13 +273,31 @@ func Run(cfg *completedProxyRunOptions) error {
 		sarAuthorizer,
 	)
 
-	upstreamTransport, err := initTransport(cfg.upstreamCABundle, cfg.tls.UpstreamClientCertFile, cfg.tls.UpstreamClientKeyFile)
-	if err != nil {
-		return fmt.Errorf("failed to set up upstream TLS connection: %w", err)
+	var upstreamTransport http.RoundTripper
+	if cfg.upstreamSocketPath != "" {
+		upstreamTransport = initUnixTransport(cfg.upstreamSocketPath)
+	} else {
+		var err2 error
+		upstreamTransport, err2 = initTransport(cfg.upstreamCABundle, cfg.tls.UpstreamClientCertFile, cfg.tls.UpstreamClientKeyFile)
+		if err2 != nil {
+			return fmt.Errorf("failed to set up upstream TLS connection: %w", err2)
+		}
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(cfg.upstreamURL)
 	proxy.Transport = upstreamTransport
+
+	// When an explicit http-path is configured for a unix socket upstream,
+	// override the request path so it is sent to the upstream as-is rather
+	// than being joined with the client's request path.
+	if cfg.upstreamHTTPPath != "" && cfg.upstreamHTTPPath != "/" {
+		defaultDirector := proxy.Director
+		proxy.Director = func(req *http.Request) {
+			defaultDirector(req)
+			req.URL.Path = cfg.upstreamHTTPPath
+			req.URL.RawPath = ""
+		}
+	}
 
 	if cfg.upstreamForceH2C {
 		// Force http/2 for connections to the upstream i.e. do not start with HTTP1.1 UPGRADE req to

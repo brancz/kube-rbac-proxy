@@ -35,6 +35,13 @@ import (
 	"github.com/brancz/kube-rbac-proxy/test/kubetest/testtemplates"
 )
 
+// EmptyDirVolume describes an emptyDir volume to be shared between containers.
+type EmptyDirVolume struct {
+	Name       string
+	MountPath  string
+	Containers []int // indices of containers to mount into (e.g., []int{0, 1})
+}
+
 type KRPTestConfig struct {
 	Flags               map[string]string
 	UpstreamFlags       map[string]string
@@ -42,6 +49,7 @@ type KRPTestConfig struct {
 
 	MountedSecrets          map[string]*corev1.Secret      // mounts to /var/run/secrets/<key>
 	MountedConfigMaps       map[string]*corev1.ConfigMap   // mounts to /var/run/configMaps/<key>
+	EmptyDirVolumes         []EmptyDirVolume               // emptyDir volumes shared between containers
 	SAClusterRoleBindings   map[string]*rbacv1.ClusterRole // maps local SA name to ClusterRole
 	UserClusterRoleBindings map[string]*rbacv1.ClusterRole // maps user name to ClusterRole
 
@@ -141,6 +149,15 @@ func (c *KRPTestConfig) WithServerCerts(hostBase string) *KRPTestConfig {
 	return c
 }
 
+func (c *KRPTestConfig) WithEmptyDirVolume(name, mountPath string, containers ...int) *KRPTestConfig {
+	c.EmptyDirVolumes = append(c.EmptyDirVolumes, EmptyDirVolume{
+		Name:       name,
+		MountPath:  mountPath,
+		Containers: containers,
+	})
+	return c
+}
+
 func (c *KRPTestConfig) ReplaceUpstream(upstream *corev1.Container) *KRPTestConfig {
 	c.UpstreamReplacement = upstream
 	return c
@@ -204,6 +221,25 @@ func (c *KRPTestConfig) Launch(client kubernetes.Interface) Action {
 				return err
 			}
 			ctx.CleanUp = append(ctx.CleanUp, cmCleanup)
+		}
+
+		for _, edv := range c.EmptyDirVolumes {
+			podSpec := &finalDeployment.Spec.Template.Spec
+			podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+				Name: edv.Name,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			})
+			for _, idx := range edv.Containers {
+				podSpec.Containers[idx].VolumeMounts = append(
+					podSpec.Containers[idx].VolumeMounts,
+					corev1.VolumeMount{
+						Name:      edv.Name,
+						MountPath: edv.MountPath,
+					},
+				)
+			}
 		}
 
 		// the service account name is currently hardcoded in the KRP deployment template
