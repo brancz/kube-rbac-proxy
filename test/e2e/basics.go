@@ -61,7 +61,7 @@ func testBasics(client kubernetes.Interface) kubetest.TestSuite {
 					nil,
 				),
 			),
-		}.Run(t)
+		}.Run(t, client)
 
 		kubetest.Scenario{
 			Name: "WithRBAC",
@@ -92,7 +92,7 @@ func testBasics(client kubernetes.Interface) kubetest.TestSuite {
 					nil,
 				),
 			),
-		}.Run(t)
+		}.Run(t, client)
 	}
 }
 
@@ -141,7 +141,7 @@ func testFlags(client kubernetes.Interface) kubetest.TestSuite {
 					nil,
 				),
 			),
-		}.Run(t)
+		}.Run(t, client)
 
 		kubetest.Scenario{
 			Name: "WithDisabledLogToStdErr",
@@ -174,7 +174,7 @@ func testFlags(client kubernetes.Interface) kubetest.TestSuite {
 					nil,
 				),
 			),
-		}.Run(t)
+		}.Run(t, client)
 	}
 }
 
@@ -211,7 +211,7 @@ func testTokenAudience(client kubernetes.Interface) kubetest.TestSuite {
 					&kubetest.RunOptions{TokenAudience: "wrong-audience"},
 				),
 			),
-		}.Run(t)
+		}.Run(t, client)
 
 		kubetest.Scenario{
 			Name: "CorrectAudience",
@@ -239,7 +239,7 @@ func testTokenAudience(client kubernetes.Interface) kubetest.TestSuite {
 					&kubetest.RunOptions{TokenAudience: "kube-rbac-proxy"},
 				),
 			),
-		}.Run(t)
+		}.Run(t, client)
 	}
 }
 
@@ -284,7 +284,7 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 					&kubetest.RunOptions{ClientCertificatesSecretName: "test-client-certs"},
 				),
 			),
-		}.Run(t)
+		}.Run(t, client)
 
 		kubetest.Scenario{
 			Name: "WithRBAC",
@@ -315,7 +315,7 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 					&kubetest.RunOptions{ClientCertificatesSecretName: "test-client-certs"},
 				),
 			),
-		}.Run(t)
+		}.Run(t, client)
 
 		kubetest.Scenario{
 			Name: "WrongCA",
@@ -347,7 +347,7 @@ func testClientCertificates(client kubernetes.Interface) kubetest.TestSuite {
 					&kubetest.RunOptions{ClientCertificatesSecretName: "test-client-certs"},
 				),
 			),
-		}.Run(t)
+		}.Run(t, client)
 	}
 }
 
@@ -389,7 +389,7 @@ func testAllowPathsRegexp(client kubernetes.Interface) kubetest.TestSuite {
 					nil,
 				),
 			),
-		}.Run(t)
+		}.Run(t, client)
 
 		kubetest.Scenario{
 			Name: "WithPathAllowed",
@@ -422,7 +422,7 @@ func testAllowPathsRegexp(client kubernetes.Interface) kubetest.TestSuite {
 					nil,
 				),
 			),
-		}.Run(t)
+		}.Run(t, client)
 	}
 }
 
@@ -464,7 +464,7 @@ func testIgnorePaths(client kubernetes.Interface) kubetest.TestSuite {
 					nil,
 				),
 			),
-		}.Run(t)
+		}.Run(t, client)
 
 		kubetest.Scenario{
 			Name: "WithIgnorePathNoMatch",
@@ -497,6 +497,6 @@ func testIgnorePaths(client kubernetes.Interface) kubetest.TestSuite {
 					nil,
 				),
 			),
-		}.Run(t)
+		}.Run(t, client)
 	}
 }

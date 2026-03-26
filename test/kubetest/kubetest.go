@@ -17,8 +17,14 @@ limitations under the License.
 package kubetest
 
 import (
+	"context"
+	"fmt"
+	"math/rand"
+	"strings"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -50,20 +56,21 @@ type Scenario struct {
 	Then  Action
 }
 
-func (s Scenario) Run(t *testing.T) bool {
-	ctx := &ScenarioContext{
-		Namespace: "default",
-	}
-
-	defer func(ctx *ScenarioContext) {
-		for _, f := range ctx.CleanUp {
-			if err := f(); err != nil {
-				panic(err)
-			}
-		}
-	}(ctx)
-
+func (s Scenario) Run(t *testing.T, client kubernetes.Interface) bool {
 	return t.Run(s.Name, func(t *testing.T) {
+		t.Parallel()
+
+		ns := setupTestNamespace(t, client, s.Name)
+		ctx := &ScenarioContext{Namespace: ns}
+
+		t.Cleanup(func() {
+			for _, f := range ctx.CleanUp {
+				if err := f(); err != nil {
+					t.Errorf("cleanup failed: %v", err)
+				}
+			}
+		})
+
 		if s.Given != nil {
 			if err := s.Given(ctx); err != nil {
 				t.Fatalf("failed to create given setup: %v", err)
@@ -82,6 +89,40 @@ func (s Scenario) Run(t *testing.T) bool {
 			}
 		}
 	})
+}
+
+func setupTestNamespace(t *testing.T, client kubernetes.Interface, testName string) string {
+	t.Helper()
+
+	name := fmt.Sprintf("e2e-%s", randomSuffix(8))
+	// Ensure the name is a valid Kubernetes namespace (lowercase, alphanumeric, hyphens).
+	name = strings.ToLower(name)
+
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+	}
+
+	_, err := client.CoreV1().Namespaces().Create(context.TODO(), ns, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("failed to create test namespace %s: %v", name, err)
+	}
+
+	t.Cleanup(func() {
+		_ = client.CoreV1().Namespaces().Delete(context.TODO(), name, metav1.DeleteOptions{})
+	})
+
+	return name
+}
+
+func randomSuffix(n int) string {
+	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
 }
 
 type ScenarioContext struct {

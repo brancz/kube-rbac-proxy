@@ -64,7 +64,7 @@ func testTokenMasking(client kubernetes.Interface) kubetest.TestSuite {
 				),
 				checkLogsForMaskedToken(client),
 			),
-		}.Run(t)
+		}.Run(t, client)
 	}
 }
 

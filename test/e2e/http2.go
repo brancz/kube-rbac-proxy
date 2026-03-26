@@ -54,7 +54,7 @@ func testHTTP2(client kubernetes.Interface) kubetest.TestSuite {
 					nil,
 				),
 			),
-		}.Run(t)
+		}.Run(t, client)
 
 		kubetest.Scenario{
 			Name: "With failing HTTP2-client",
@@ -87,6 +87,6 @@ func testHTTP2(client kubernetes.Interface) kubetest.TestSuite {
 					nil,
 				),
 			),
-		}.Run(t)
+		}.Run(t, client)
 	}
 }

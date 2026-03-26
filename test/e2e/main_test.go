@@ -52,7 +52,10 @@ func Test(t *testing.T) {
 	}
 
 	for name, tc := range tests {
-		t.Run(name, tc)
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			tc(t)
+		})
 	}
 }
 

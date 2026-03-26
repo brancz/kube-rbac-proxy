@@ -143,7 +143,7 @@ authorization:
 					),
 				),
 				Then: kubetest.Actions(tc.check),
-			}.Run(t)
+			}.Run(t, client)
 		}
 	}
 }

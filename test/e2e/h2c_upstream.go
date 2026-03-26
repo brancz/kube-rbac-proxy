@@ -55,6 +55,6 @@ func testH2CUpstream(client kubernetes.Interface) kubetest.TestSuite {
 					nil,
 				),
 			),
-		}.Run(t)
+		}.Run(t, client)
 	}
 }

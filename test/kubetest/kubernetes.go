@@ -522,6 +522,11 @@ var errRun = fmt.Errorf("failed to run")
 
 // run the command and return the Check with the container's logs
 func run(client kubernetes.Interface, ctx *ScenarioContext, image string, name string, command []string, opts *RunOptions) error {
+	// Rewrite service DNS from default namespace to the actual test namespace.
+	for i, arg := range command {
+		command[i] = strings.ReplaceAll(arg, ".default.svc.cluster.local", fmt.Sprintf(".%s.svc.cluster.local", ctx.Namespace))
+	}
+
 	labels := map[string]string{
 		"app": name,
 	}

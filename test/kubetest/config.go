@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -44,6 +45,8 @@ type KRPTestConfig struct {
 	MountedConfigMaps       map[string]*corev1.ConfigMap   // mounts to /var/run/configMaps/<key>
 	SAClusterRoleBindings   map[string]*rbacv1.ClusterRole // maps local SA name to ClusterRole
 	UserClusterRoleBindings map[string]*rbacv1.ClusterRole // maps user name to ClusterRole
+
+	pendingClientCerts string // deferred: cert CN will be namespace-prefixed at Launch time
 
 	setupErrors []error
 }
@@ -120,13 +123,7 @@ func (c *KRPTestConfig) AddUserClusterRoleBinding(userName string, clusterRole *
 }
 
 func (c *KRPTestConfig) WithClientCerts(commonNameBase string) *KRPTestConfig {
-	trustCM, secret, err := createCerts(commonNameBase, createSignedClientCert)
-	if err != nil {
-		c.setupErrors = append(c.setupErrors, fmt.Errorf("failed to create client certs: %w", err))
-		return c
-	}
-	c.MountedConfigMaps[commonNameBase+"-trust"] = trustCM
-	c.MountedSecrets[commonNameBase] = secret
+	c.pendingClientCerts = commonNameBase
 	return c
 }
 
@@ -154,6 +151,20 @@ func (c *KRPTestConfig) Launch(client kubernetes.Interface) Action {
 	}
 
 	return func(ctx *ScenarioContext) error {
+		// Create deferred client certs with namespace-prefixed CN for isolation.
+		if c.pendingClientCerts != "" {
+			certCN := fmt.Sprintf("%s-%s", ctx.Namespace, c.pendingClientCerts)
+			trustCM, secret, err := createCerts(certCN, createSignedClientCert)
+			if err != nil {
+				return fmt.Errorf("failed to create client certs: %w", err)
+			}
+			// Keep resource names matching test references (they're namespaced, so no collision).
+			trustCM.Name = c.pendingClientCerts + "-trust"
+			secret.Name = c.pendingClientCerts + "-certs"
+			c.MountedConfigMaps[c.pendingClientCerts+"-trust"] = trustCM
+			c.MountedSecrets[c.pendingClientCerts] = secret
+		}
+
 		finalDeployment := testtemplates.GetKRPDeploymentTemplate()
 
 		for flag, value := range c.Flags {
@@ -199,6 +210,12 @@ func (c *KRPTestConfig) Launch(client kubernetes.Interface) Action {
 			if configMap == nil {
 				continue
 			}
+			// Rewrite SA namespace references in config data for test isolation.
+			for key, value := range configMap.Data {
+				configMap.Data[key] = strings.ReplaceAll(value,
+					"system:serviceaccount:default:",
+					fmt.Sprintf("system:serviceaccount:%s:", ctx.Namespace))
+			}
 			cmCleanup, err := attachConfigMap(context.TODO(), client.CoreV1().ConfigMaps(ctx.Namespace), configMap, finalDeployment, mountDir)
 			if err != nil {
 				return err
@@ -225,7 +242,7 @@ func (c *KRPTestConfig) Launch(client kubernetes.Interface) Action {
 			if clusterrole == nil {
 				continue
 			}
-			cleanup, err := bindToClusterRole(context.TODO(), client, ctx.Namespace, saName, addSAToClusterRoleBinding, clusterrole)
+			cleanup, err := bindToClusterRole(context.TODO(), client, ctx.Namespace, saName, addSAToClusterRoleBinding, clusterrole.DeepCopy())
 			ctx.AddCleanUp(cleanup)
 			if err != nil {
 				return err
@@ -236,7 +253,10 @@ func (c *KRPTestConfig) Launch(client kubernetes.Interface) Action {
 			if clusterrole == nil {
 				continue
 			}
-			cleanup, err := bindToClusterRole(context.TODO(), client, ctx.Namespace, userName, addUserToClusterRoleBinding, clusterrole)
+			// Namespace-prefix user name so parallel scenarios using the same
+			// user identity (e.g. "test-client") don't interfere via ClusterRoleBindings.
+			namespacedUser := fmt.Sprintf("%s-%s", ctx.Namespace, userName)
+			cleanup, err := bindToClusterRole(context.TODO(), client, ctx.Namespace, namespacedUser, addUserToClusterRoleBinding, clusterrole.DeepCopy())
 			ctx.AddCleanUp(cleanup)
 			if err != nil {
 				return err
@@ -292,6 +312,11 @@ func addUserToClusterRoleBinding(crb *rbacv1.ClusterRoleBinding, _, userName str
 type addSubjectToCRBFunc func(crb *rbacv1.ClusterRoleBinding, namespace, subjectName string)
 
 func bindToClusterRole(ctx context.Context, client kubernetes.Interface, namespace, subjectName string, addSubjectToCRB addSubjectToCRBFunc, clusterRole *rbacv1.ClusterRole) (func() error, error) {
+	// Namespace-prefix cluster-scoped resource names to avoid collisions
+	// when test suites run in parallel. Each call receives a fresh object,
+	// so mutation is safe.
+	clusterRole.Name = fmt.Sprintf("%s-%s", namespace, clusterRole.Name)
+
 	cleanups := []func() error{}
 	cleanUp := func() error {
 		errs := []error{}

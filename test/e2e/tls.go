@@ -72,7 +72,7 @@ func testTLS(client kubernetes.Interface) kubetest.TestSuite {
 						nil,
 					),
 				),
-			}.Run(t)
+			}.Run(t, client)
 		}
 	}
 }
