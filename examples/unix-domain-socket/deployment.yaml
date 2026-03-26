@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-rbac-proxy
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-rbac-proxy
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-rbac-proxy
+subjects:
+- kind: ServiceAccount
+  name: kube-rbac-proxy
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-rbac-proxy
+rules:
+- apiGroups: ["authentication.k8s.io"]
+  resources:
+  - tokenreviews
+  verbs: ["create"]
+- apiGroups: ["authorization.k8s.io"]
+  resources:
+  - subjectaccessreviews
+  verbs: ["create"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: kube-rbac-proxy
+  name: kube-rbac-proxy
+spec:
+  ports:
+  - name: https
+    port: 8443
+    targetPort: https
+  selector:
+    app: kube-rbac-proxy
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-rbac-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kube-rbac-proxy
+  template:
+    metadata:
+      labels:
+        app: kube-rbac-proxy
+    spec:
+      serviceAccountName: kube-rbac-proxy
+      containers:
+      - name: kube-rbac-proxy
+        image: localhost/kube-rbac-proxy:local
+        imagePullPolicy: IfNotPresent
+        args:
+        - "--secure-listen-address=0.0.0.0:8443"
+        - "--upstream=unix:///sockets/app.sock:/metrics"
+        - "--v=10"
+        ports:
+        - containerPort: 8443
+          name: https
+        securityContext:
+          allowPrivilegeEscalation: false
+        volumeMounts:
+        - name: socket
+          mountPath: /sockets
+      - name: upstream
+        image: localhost/unix-upstream:local
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+        volumeMounts:
+        - name: socket
+          mountPath: /sockets
+      volumes:
+      - name: socket
+        emptyDir: {}

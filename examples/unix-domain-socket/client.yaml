@@ -1,0 +1,14 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: krp-curl
+spec:
+  template:
+    metadata:
+      name: krp-curl
+    spec:
+      containers:
+      - name: krp-curl
+        image: quay.io/brancz/krp-curl:v0.0.2
+      restartPolicy: Never
+  backoffLimit: 4
