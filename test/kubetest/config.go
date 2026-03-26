@@ -112,6 +112,13 @@ func (c *KRPTestConfig) WithAuthorizationConfigYAML(configYAML string) *KRPTestC
 }
 
 func (c *KRPTestConfig) AddSAClusterRoleBinding(saName string, clusterRole *rbacv1.ClusterRole) *KRPTestConfig {
+	if existing, ok := c.SAClusterRoleBindings[saName]; ok {
+		c.setupErrors = append(c.setupErrors, fmt.Errorf(
+			"SA %q already bound to cluster role %q, cannot also bind to %q",
+			saName, existing.Name, clusterRole.Name,
+		))
+		return c
+	}
 	c.SAClusterRoleBindings[saName] = clusterRole
 	return c
 }
@@ -122,6 +129,13 @@ func (c *KRPTestConfig) AddUserClusterRoleBinding(userName string, clusterRole *
 }
 
 func (c *KRPTestConfig) AddSARoleBinding(saName string, role *rbacv1.Role) *KRPTestConfig {
+	if existing, ok := c.SARoleBindings[saName]; ok {
+		c.setupErrors = append(c.setupErrors, fmt.Errorf(
+			"SA %q already bound to role %q, cannot also bind to %q",
+			saName, existing.Name, role.Name,
+		))
+		return c
+	}
 	c.SARoleBindings[saName] = role
 	return c
 }
