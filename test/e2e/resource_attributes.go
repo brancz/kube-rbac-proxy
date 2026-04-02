@@ -71,10 +71,10 @@ authorization:
 			{
 				name: "WithResourceRBAC",
 				given: kubetest.Actions(
+					kubetest.CreateServiceAccount(client, serviceAccountName),
 					kubetest.NewBasicKubeRBACProxyTestConfig().
 						WithAuthorizationConfigYAML(resourceAttributesConfig).
 						WithoutMetricsEndpointAllowClusterRole().
-						AddServiceAccount(serviceAccountName).
 						AddSAClusterRoleBinding(serviceAccountName, podsRole).
 						Launch(client),
 				),

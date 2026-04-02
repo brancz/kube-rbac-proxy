@@ -45,8 +45,7 @@ type KRPTestConfig struct {
 	SAClusterRoleBindings   map[string]*rbacv1.ClusterRole // maps local SA name to ClusterRole
 	UserClusterRoleBindings map[string]*rbacv1.ClusterRole // maps user name to ClusterRole
 
-	serviceAccounts []string
-	setupErrors     []error
+	setupErrors []error
 }
 
 func NewBasicKubeRBACProxyTestConfig() *KRPTestConfig {
@@ -56,8 +55,7 @@ func NewBasicKubeRBACProxyTestConfig() *KRPTestConfig {
 			"upstream":              "http://127.0.0.1:8081/",
 			"v":                     "10",
 		},
-		UpstreamFlags:   map[string]string{},
-		serviceAccounts: []string{"kube-rbac-proxy"},
+		UpstreamFlags: map[string]string{},
 		SAClusterRoleBindings: map[string]*rbacv1.ClusterRole{
 			"kube-rbac-proxy": testtemplates.GetKRPAuthDelegatorRole(),
 			"default":         testtemplates.GetMetricsRoleForClient(),
@@ -143,11 +141,6 @@ func (c *KRPTestConfig) WithServerCerts(hostBase string) *KRPTestConfig {
 	return c
 }
 
-func (c *KRPTestConfig) AddServiceAccount(name string) *KRPTestConfig {
-	c.serviceAccounts = append(c.serviceAccounts, name)
-	return c
-}
-
 func (c *KRPTestConfig) ReplaceUpstream(upstream *corev1.Container) *KRPTestConfig {
 	c.UpstreamReplacement = upstream
 	return c
@@ -213,21 +206,20 @@ func (c *KRPTestConfig) Launch(client kubernetes.Interface) Action {
 			ctx.CleanUp = append(ctx.CleanUp, cmCleanup)
 		}
 
-		for _, saName := range c.serviceAccounts {
-			name := saName
-			_, err := client.CoreV1().ServiceAccounts(ctx.Namespace).Create(context.TODO(),
-				&corev1.ServiceAccount{
-					ObjectMeta: metav1.ObjectMeta{Name: name},
-				},
-				metav1.CreateOptions{},
-			)
-			if err != nil {
-				return err
-			}
-			ctx.AddCleanUp(func() error {
-				return client.CoreV1().ServiceAccounts(ctx.Namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
-			})
+		// the service account name is currently hardcoded in the KRP deployment template
+		const krpServiceAccountName = "kube-rbac-proxy"
+		_, err := client.CoreV1().ServiceAccounts(ctx.Namespace).Create(context.TODO(),
+			&corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{Name: krpServiceAccountName},
+			},
+			metav1.CreateOptions{},
+		)
+		if err != nil {
+			return err
 		}
+		ctx.AddCleanUp(func() error {
+			return client.CoreV1().ServiceAccounts(ctx.Namespace).Delete(context.TODO(), krpServiceAccountName, metav1.DeleteOptions{})
+		})
 
 		for saName, clusterrole := range c.SAClusterRoleBindings {
 			if clusterrole == nil {
@@ -251,7 +243,7 @@ func (c *KRPTestConfig) Launch(client kubernetes.Interface) Action {
 			}
 		}
 
-		_, err := client.CoreV1().Services(ctx.Namespace).Create(context.TODO(), testtemplates.GetKRPService(), metav1.CreateOptions{})
+		_, err = client.CoreV1().Services(ctx.Namespace).Create(context.TODO(), testtemplates.GetKRPService(), metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}
