@@ -88,6 +88,9 @@ git add go.mod go.sum
 git commit -m "Update dependencies"
 ```
 
+Remember to also replace the golang dependencies in the GitHub workflow
+configurations in `.github/workflows`.
+
 ### 2. Prepare your release
 
 At the start of a new major or minor release cycle create the corresponding
