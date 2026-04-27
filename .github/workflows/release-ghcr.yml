@@ -1,15 +1,15 @@
-name: Create release
+name: Create release (GHCR)
 
 on:
   push:
     tags:
       - 'v*'
 
-permissions:
-  contents: read
+permissions: {}
 
 env:
-  REGISTRY_PATH: quay.io/brancz/kube-rbac-proxy
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
   go-version: 1.26.2
 
 defaults:
@@ -18,9 +18,13 @@ defaults:
 
 jobs:
   publish:
-    name: Publish container image to Quay
+    name: Publish container image to ghcr.io
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # 5.0.0
@@ -35,12 +39,14 @@ jobs:
         go-version: ${{ env.go-version }}
         cache: false
 
-    - name: Login to Quay.io
+    - name: Login to ghcr.io
       uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
       with:
-        registry: quay.io
-        username: ${{ secrets.QUAY_USERNAME }}
-        password: ${{ secrets.QUAY_PASSWORD }}
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build images and push
+      env:
+        REGISTRY_PATH: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
       run: ./scripts/publish.sh
