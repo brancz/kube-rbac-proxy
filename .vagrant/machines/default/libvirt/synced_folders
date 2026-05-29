@@ -1,0 +1,1 @@
+{"virtiofs":{"/workspace":{"type":"virtiofs","guestpath":"/workspace","hostpath":"/home/ibihim/go/src/github.com/brancz/kube-rbac-proxy","disabled":false,"__vagrantfile":true,"target":"/workspace","mount":true,"readonly":null,"mount_tag":"399ff6da9bea742211989612085c053"}}}

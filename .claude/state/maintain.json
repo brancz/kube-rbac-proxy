@@ -1,0 +1,43 @@
+{
+  "last_run": "2026-03-16T13:10:00Z",
+  "issues": {
+    "414": { "classification": "feature-request", "priority": "low", "status": "responded", "note": "Waiting for upstream K8s TLS curve preferences to land in component-base" },
+    "407": { "classification": "bug", "priority": "medium", "status": "open" },
+    "400": { "classification": "bug", "priority": "medium", "status": "open" },
+    "313": { "classification": "not-a-cve", "priority": "low", "status": "open" }
+  },
+  "vulns": {
+    "GO-2026-4601": { "package": "net/url", "severity": "high", "fixed_in": "go1.25.8", "description": "Incorrect parsing of IPv6 host literals", "status": "released" },
+    "GO-2026-4559": { "package": "golang.org/x/net", "severity": "high", "fixed_in": "v0.51.0", "description": "HTTP/2 frames can cause server panic", "status": "released" },
+    "GO-2026-4603": { "package": "html/template", "severity": "medium", "fixed_in": "go1.25.8", "description": "URLs in meta content attribute not escaped", "status": "released" },
+    "GO-2026-4602": { "package": "os", "severity": "medium", "fixed_in": "go1.25.8", "description": "FileInfo can escape from a Root", "status": "released" }
+  },
+  "prs": {},
+  "release": {
+    "active": true,
+    "version": "v0.21.2",
+    "type": "patch",
+    "phase": "awaiting_merge",
+    "pr_number": 419,
+    "pr_url": "https://github.com/brancz/kube-rbac-proxy/pull/419",
+    "branch": "rc-0.21.2",
+    "trigger_issue": null,
+    "started_at": "2026-03-19T00:00:00Z",
+    "note": "CVE dep bump for scanner users (not reachable via govulncheck)"
+  },
+  "pending_decisions": [
+    {
+      "type": "feature-request",
+      "issue": 414,
+      "summary": "Add --tls-curve-preferences flag for PQC compliance",
+      "status": "resolved",
+      "resolution": "Responded: upstream K8s is adding this to SecureServingOptions, will inherit via dep bump"
+    },
+    {
+      "type": "release",
+      "summary": "govulncheck found 2 high-severity vulns relevant to a proxy (net/url IPv6 parsing, x/net HTTP/2 panic). Fixes available via Go 1.25.8 + x/net v0.51.0.",
+      "status": "resolved",
+      "resolution": "Released in v0.21.1"
+    }
+  ]
+}
