@@ -37,7 +37,7 @@ var disabledFlagsType = map[string]string{
 	"stderrthreshold":   "string",
 }
 
-func (o *ProxyRunOptions) addDisabledFlags(flagset *pflag.FlagSet) {
+func (o *ProxyOptions) addDisabledFlags(flagset *pflag.FlagSet) {
 	// disabled flags
 	o.flagSet = flagset // reference used for validation
 
@@ -59,7 +59,7 @@ func (o *ProxyRunOptions) addDisabledFlags(flagset *pflag.FlagSet) {
 	}
 }
 
-func (o *ProxyRunOptions) validateDisabledFlags() error {
+func (o *ProxyOptions) validateDisabledFlags() error {
 	// Removed upstream flags shouldn't be use
 	for disabledOpt := range disabledFlagsType {
 		if flag := o.flagSet.Lookup(disabledOpt); flag.Changed {

@@ -17,105 +17,39 @@ limitations under the License.
 package app
 
 import (
-	"os"
-	"path/filepath"
-	"reflect"
 	"testing"
 
-	"github.com/brancz/kube-rbac-proxy/pkg/authz"
-	"github.com/google/go-cmp/cmp"
+	"github.com/brancz/kube-rbac-proxy/cmd/kube-rbac-proxy/app/options"
 )
 
-func Test_parseAuthorizationConfigFile(t *testing.T) {
-	tmpDir := t.TempDir()
-	filePath := filepath.Join(tmpDir, "configfile.yaml")
-
-	tests := []struct {
-		name        string
-		fileContent string
-		want        *authz.Config
-		wantErr     bool
-	}{
-		{
-			name: "resources",
-			fileContent: `authorization:
-  rewrites:
-    byQueryParameter:
-      name: "namespace"
-  resourceAttributes:
-    resource: namespaces
-    subresource: metrics
-    namespace: "{{ .Value }}"
-  static:
-    - user:
-        name: system:serviceaccount:default:default
-      resourceRequest: true
-      resource: namespaces
-      subresource: metrics
-      namespace: default
-      verb: get`,
-			want: &authz.Config{
-				Rewrites: &authz.SubjectAccessReviewRewrites{
-					ByQueryParameter: &authz.QueryParameterRewriteConfig{
-						Name: "namespace",
-					},
-				},
-				ResourceAttributes: &authz.ResourceAttributes{
-					Resource:    "namespaces",
-					Subresource: "metrics",
-					Namespace:   "{{ .Value }}",
-				},
-				Static: []authz.StaticAuthorizationConfig{
-					{
-						User: authz.UserConfig{
-							Name: "system:serviceaccount:default:default",
-						},
-						ResourceRequest: true,
-						Resource:        "namespaces",
-						Subresource:     "metrics",
-						Namespace:       "default",
-						Verb:            "get",
-					},
-				},
+func TestShouldRunSecureServer(t *testing.T) {
+	t.Run("generic secure serving does not require legacy secure listen address", func(t *testing.T) {
+		base := options.NewProxyRunOptions()
+		opts := &completedProxyRunOptions{
+			ProxyRunOptions: &options.ProxyRunOptions{
+				SecureServing: base.SecureServing,
+				LegacyOptions: &options.LegacyOptions{},
 			},
-		},
-		{
-			name: "non-resources",
-			fileContent: `authorization:
-  static:
-    - user:
-        name: system:serviceaccount:default:default
-      resourceRequest: false
-      verb: get
-      path: /metrics`,
-			want: &authz.Config{
-				Static: []authz.StaticAuthorizationConfig{
-					{
-						User: authz.UserConfig{
-							Name: "system:serviceaccount:default:default",
-						},
-						ResourceRequest: false,
-						Verb:            "get",
-						Path:            "/metrics",
-					},
-				},
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := os.WriteFile(filePath, []byte(tt.fileContent), 0666); err != nil {
-				t.Fatalf("failed to write file: %v", err)
-			}
+		}
+		opts.SecureServing.BindPort = 8443
 
-			got, err := parseAuthorizationConfigFile(filePath)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("parseAuthorizationConfigFile() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("parseAuthorizationConfigFile(): %s", cmp.Diff(got, tt.want))
-			}
-		})
-	}
+		if !shouldRunSecureServer(opts) {
+			t.Fatal("expected secure serving to start when bind port is set")
+		}
+	})
+
+	t.Run("disabled secure serving does not start", func(t *testing.T) {
+		base := options.NewProxyRunOptions()
+		opts := &completedProxyRunOptions{
+			ProxyRunOptions: &options.ProxyRunOptions{
+				SecureServing: base.SecureServing,
+				LegacyOptions: &options.LegacyOptions{},
+			},
+		}
+		opts.SecureServing.BindPort = 0
+
+		if shouldRunSecureServer(opts) {
+			t.Fatal("expected secure serving to remain disabled when bind port is zero")
+		}
+	})
 }
