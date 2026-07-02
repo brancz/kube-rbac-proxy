@@ -22,6 +22,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -322,6 +323,7 @@ func Run(cfg *completedProxyRunOptions) error {
 			srv := &http.Server{
 				Handler:   mux,
 				TLSConfig: &tls.Config{},
+				ErrorLog:  log.New(&tlsHandshakeErrorFilter{}, "", 0),
 			}
 
 			if cfg.tls.CertFile == "" && cfg.tls.KeyFile == "" {
@@ -412,6 +414,7 @@ func Run(cfg *completedProxyRunOptions) error {
 				proxyEndpointsSrv := &http.Server{
 					Handler:   proxyEndpointsMux,
 					TLSConfig: srv.TLSConfig.Clone(),
+					ErrorLog:  log.New(&tlsHandshakeErrorFilter{}, "", 0),
 				}
 
 				if cfg.http2Disable {
