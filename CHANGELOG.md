@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.22.1 / 2026-07-08
+
+- [ENHANCEMENT] Bump dependencies
+- [BUGFIX] Update Go to 1.26.5 (fixes 10 reachable stdlib vulnerabilities, incl. GO-2026-4980/GO-2026-4982 html/template XSS, GO-2026-4976 ReverseProxy query forwarding, GO-2026-4918 HTTP/2 infinite loop, GO-2026-4971, GO-2026-4977, GO-2026-4986, GO-2026-5037, GO-2026-5038, GO-2026-5039)
+- [BUGFIX] Update golang.org/x/net to v0.56.0 (fixes GO-2026-5026 IDNA Punycode validation)
+
 ## 0.22.0 / 2026-04-27
 
 - [ENHANCEMENT] Bump dependencies
