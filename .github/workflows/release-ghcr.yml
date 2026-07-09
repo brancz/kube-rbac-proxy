@@ -10,7 +10,7 @@ permissions: {}
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  go-version: 1.26.2
+  go-version: 1.26.5
 
 defaults:
   run:

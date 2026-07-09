@@ -38,7 +38,7 @@ import (
 	"github.com/oklog/run"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
+	"golang.org/x/net/http2/h2c" //nolint:staticcheck // deprecated in x/net >= v0.55.0, migration to http.Server.Protocols tracked in #446
 
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authorization/union"
@@ -461,7 +461,7 @@ func Run(cfg *completedProxyRunOptions) error {
 			if cfg.http2Disable {
 				srv.Handler = mux
 			} else {
-				srv.Handler = h2c.NewHandler(mux, cfg.http2Options)
+				srv.Handler = h2c.NewHandler(mux, cfg.http2Options) //nolint:staticcheck // see h2c import comment, #446
 			}
 
 			l, err := net.Listen("tcp", cfg.insecureListenAddress)
