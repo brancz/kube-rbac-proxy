@@ -17,6 +17,7 @@ limitations under the License.
 package app
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -61,4 +62,18 @@ func initTransport(upstreamCAPool *x509.CertPool, upstreamClientCertPath, upstre
 	}
 
 	return transport, nil
+}
+
+func initUnixTransport(socketPath string) http.RoundTripper {
+	return &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext(ctx, "unix", socketPath)
+		},
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
 }

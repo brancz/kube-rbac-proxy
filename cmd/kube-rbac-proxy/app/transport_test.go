@@ -158,6 +158,51 @@ func TestInitTransportWithClientCertAuth(t *testing.T) {
 	}
 }
 
+func TestInitUnixTransport(t *testing.T) {
+	tmpDir := t.TempDir()
+	socketPath := filepath.Join(tmpDir, "test.sock")
+
+	// Start a server on the unix socket
+	l, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatalf("failed to listen on unix socket: %v", err)
+	}
+	defer l.Close()
+
+	srv := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("hello from unix socket"))
+		}),
+	}
+	go func() {
+		_ = srv.Serve(l)
+	}()
+	defer srv.Close()
+
+	transport := initUnixTransport(socketPath)
+
+	// The host in the URL is irrelevant; the transport dials the socket directly
+	req, err := http.NewRequest(http.MethodGet, "http://unix/test", nil)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+
+	resp, err := transport.RoundTrip(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
+
+	if string(body) != "hello from unix socket" {
+		t.Errorf("unexpected response body: %s", body)
+	}
+}
+
 func generateClientCert(t *testing.T) ([]byte, []byte, *x509.CertPool, error) {
 	t.Helper()
 

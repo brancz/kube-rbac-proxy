@@ -19,6 +19,7 @@ package options
 import (
 	"fmt"
 	"path"
+	"strings"
 	"time"
 
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -195,10 +196,43 @@ For more information, please go to https://github.com/brancz/kube-rbac-proxy/iss
 		}
 	}
 
+	if strings.HasPrefix(o.Upstream, "unix://") {
+		socketPath, _ := ParseUnixUpstream(o.Upstream)
+		if !path.IsAbs(socketPath) || socketPath == "" {
+			errs = append(errs, fmt.Errorf("unix upstream socket path must be absolute, got %q", socketPath))
+		}
+		if o.UpstreamForceH2C {
+			errs = append(errs, fmt.Errorf("--upstream-force-h2c cannot be used with unix:// upstream"))
+		}
+		if o.UpstreamCAFile != "" {
+			errs = append(errs, fmt.Errorf("--upstream-ca-file cannot be used with unix:// upstream"))
+		}
+		if o.TLS.UpstreamClientCertFile != "" || o.TLS.UpstreamClientKeyFile != "" {
+			errs = append(errs, fmt.Errorf("--upstream-client-cert-file and --upstream-client-key-file cannot be used with unix:// upstream"))
+		}
+	}
+
 	// Removed upstream flags shouldn't be use
 	if err := o.validateDisabledFlags(); err != nil {
 		errs = append(errs, err)
 	}
 
 	return utilerrors.NewAggregate(errs)
+}
+
+// ParseUnixUpstream parses a unix:// upstream string into socket path and HTTP path.
+// Format: unix://<socket-path> or unix://<socket-path>:<http-path>
+func ParseUnixUpstream(upstream string) (socketPath, httpPath string) {
+	raw := strings.TrimPrefix(upstream, "unix://")
+	if idx := strings.LastIndex(raw, ":"); idx != -1 {
+		socketPath = raw[:idx]
+		httpPath = raw[idx+1:]
+	} else {
+		socketPath = raw
+		httpPath = "/"
+	}
+	if httpPath == "" {
+		httpPath = "/"
+	}
+	return socketPath, httpPath
 }
