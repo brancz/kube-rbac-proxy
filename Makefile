@@ -3,6 +3,16 @@ all: check-license build generate test
 GO111MODULE=on
 export GO111MODULE
 
+# Set DBG=1 to build without stripping debug symbols. Default produces a
+# stripped binary.
+DBG ?=
+
+ifeq ($(DBG),1)
+GOLDFLAGS ?=
+else
+GOLDFLAGS ?= -s -w
+endif
+
 PROGRAM_NAME?=kube-rbac-proxy
 # This repository moved to github.com/kube-rbac-proxy/kube-rbac-proxy.
 # Keep the old module path until the 1.0 release, where this is subject to change.
@@ -45,7 +55,7 @@ $(OUT_DIR)/$(PROGRAM_NAME)-%:
 	GOARCH=$(word 2,$(subst -, ,$(*:.exe=))) \
 	GOOS=$(word 1,$(subst -, ,$(*:.exe=))) \
 	CGO_ENABLED=0 \
-	go build --installsuffix cgo -ldflags="-X k8s.io/component-base/version.gitVersion=$(VERSION_SEMVER) -X k8s.io/component-base/version.gitCommit=$(shell git rev-parse HEAD) -X k8s.io/component-base/version/verflag.programName=$(PROGRAM_NAME)" -o $(OUT_DIR)/$(PROGRAM_NAME)-$* $(GITHUB_URL)/cmd/kube-rbac-proxy
+	go build --installsuffix cgo -ldflags="$(GOLDFLAGS) -X k8s.io/component-base/version.gitVersion=$(VERSION_SEMVER) -X k8s.io/component-base/version.gitCommit=$(shell git rev-parse HEAD) -X k8s.io/component-base/version/verflag.programName=$(PROGRAM_NAME)" -o $(OUT_DIR)/$(PROGRAM_NAME)-$* $(GITHUB_URL)/cmd/kube-rbac-proxy
 
 clean:
 	-rm -r $(OUT_DIR)
