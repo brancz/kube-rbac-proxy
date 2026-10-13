@@ -329,7 +329,7 @@ func Run(cfg *completedProxyRunOptions) error {
 	mux.Handle("/", handler)
 
 	http.Handle("/metrics", legacyregistry.Handler())
-	go http.ListenAndServe(":6969", nil)
+	go http.ListenAndServe(":2112", nil)
 
 	var gr run.Group
 	{
