@@ -135,7 +135,7 @@ type completedProxyRunOptions struct {
 	upstreamCABundle *x509.CertPool
 
 	http2Disable   bool
-	newHTTP2Server func() *http2.Server
+	newHTTP2Server func() *http2.Server //nolint:staticcheck // see h2c import comment, #446
 
 	auth *proxy.Config
 	tls  *options.TLSConfig
@@ -204,6 +204,7 @@ func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
 	}
 
 	completed.http2Disable = o.HTTP2Disable
+	//nolint:staticcheck // see h2c import comment, #446
 	completed.newHTTP2Server = func() *http2.Server {
 		return &http2.Server{
 			IdleTimeout:                  90 * time.Second,
@@ -276,6 +277,7 @@ func Run(cfg *completedProxyRunOptions) error {
 		// Force http/2 for connections to the upstream i.e. do not start with HTTP1.1 UPGRADE req to
 		// initialize http/2 session.
 		// See https://github.com/golang/go/issues/14141#issuecomment-219212895 for more context
+		//nolint:staticcheck // see h2c import comment, #446
 		proxy.Transport = &http2.Transport{
 			// Allow http schema. This doesn't automatically disable TLS
 			AllowHTTP: true,
@@ -396,7 +398,7 @@ func Run(cfg *completedProxyRunOptions) error {
 				// https://github.com/kubernetes/kubernetes/blob/de054fbf9422d778568946de21a48c7330a6c1b7/staging/src/k8s.io/apiserver/pkg/server/secure_serving.go#L55-L59
 				srv.TLSConfig.NextProtos = []string{"http/1.1"}
 			} else {
-				if err := http2.ConfigureServer(srv, cfg.newHTTP2Server()); err != nil {
+				if err := http2.ConfigureServer(srv, cfg.newHTTP2Server()); err != nil { //nolint:staticcheck // see h2c import comment, #446
 					return fmt.Errorf("failed to configure http2 server: %w", err)
 				}
 			}
@@ -438,7 +440,7 @@ func Run(cfg *completedProxyRunOptions) error {
 					// https://github.com/kubernetes/kubernetes/blob/de054fbf9422d778568946de21a48c7330a6c1b7/staging/src/k8s.io/apiserver/pkg/server/secure_serving.go#L55-L59
 					proxyEndpointsSrv.TLSConfig.NextProtos = []string{"http/1.1"}
 				} else {
-					if err := http2.ConfigureServer(proxyEndpointsSrv, cfg.newHTTP2Server()); err != nil {
+					if err := http2.ConfigureServer(proxyEndpointsSrv, cfg.newHTTP2Server()); err != nil { //nolint:staticcheck // see h2c import comment, #446
 						return fmt.Errorf("failed to configure http2 server: %w", err)
 					}
 				}
