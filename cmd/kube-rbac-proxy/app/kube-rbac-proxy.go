@@ -204,10 +204,11 @@ func Complete(o *options.ProxyRunOptions) (*completedProxyRunOptions, error) {
 	completed.http2Disable = o.HTTP2Disable
 	completed.http2Config = func() *http.HTTP2Config {
 		return &http.HTTP2Config{
-			MaxConcurrentStreams:           int(o.HTTP2MaxConcurrentStreams),
-			MaxReadFrameSize:               int(o.HTTP2MaxSize),
-			MaxReceiveBufferPerStream:      int(o.HTTP2MaxSize),
-			MaxReceiveBufferPerConnection:  int(o.HTTP2MaxSize) * int(o.HTTP2MaxConcurrentStreams),
+			MaxConcurrentStreams:          int(o.HTTP2MaxConcurrentStreams),
+			MaxReadFrameSize:              int(o.HTTP2MaxSize),
+			MaxReceiveBufferPerStream:     int(o.HTTP2MaxSize),
+			MaxReceiveBufferPerConnection: int(o.HTTP2MaxSize) * int(o.HTTP2MaxConcurrentStreams),
+			SendPingTimeout:               90 * time.Second,
 		}
 	}
 
@@ -320,9 +321,8 @@ func Run(cfg *completedProxyRunOptions) error {
 	{
 		if cfg.secureListenAddress != "" {
 			srv := &http.Server{
-				Handler:     mux,
-				TLSConfig:   &tls.Config{},
-				IdleTimeout: 90 * time.Second,
+				Handler:   mux,
+				TLSConfig: &tls.Config{},
 			}
 
 			if cfg.tls.CertFile == "" && cfg.tls.KeyFile == "" {
