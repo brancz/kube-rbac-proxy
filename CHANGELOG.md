@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.23.1 / 2026-10-23
+
+- [ENHANCEMENT] Bump dependencies
+- [BUGFIX] Update Go to 1.27.3 (fixes 12 reachable stdlib vulnerabilities: GO-2026-6809 crypto/x509 distrust of compromised intermediate certificates, GO-2026-6617 net/http HTTP/2 server crash due to HPACK encoder race, GO-2026-6613 net/http HTTP/1 server desynchronization after 2xx CONNECT response, GO-2026-6612 net/http HTTP/2 double flow control refund, GO-2026-6611 net/http HTTP/2 excessive CPU from repeated initial window changes, GO-2026-6610 net/http HTTP/2 transport accepting malformed framing headers, GO-2026-6608 net/textproto MIME header memory limit bypass, GO-2026-6607 crypto/tls malformed ECH outer extension references, GO-2026-6605 net/http HTTP/1 client desynchronization after CONNECT rejection, GO-2026-6603 net/http HTTP/2 server memory exhaustion via Trailer headers, GO-2026-6600 and GO-2026-6599 html/template context tracking)
+- [BUGFIX] Update golang.org/x/net to v0.61.0 (fixes GO-2026-6603, GO-2026-6610, GO-2026-6611, GO-2026-6612, GO-2026-6617)
+
 ## 0.23.0 / 2026-09-23
 
 - [FEATURE] Add `--tls-curve-preferences` to restrict the TLS key exchange mechanisms (curves) the server accepts; values are numeric Go `tls.CurveID`s
